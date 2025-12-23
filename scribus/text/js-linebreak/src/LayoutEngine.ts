@@ -69,176 +69,135 @@ export class LayoutEngine {
      * Layout text within given width and optional height constraints.
      */
     layout(text: string, width: number, maxHeight?: number): LayoutResult {
-        const lines: LineSpec[] = [];
-        let overflow = false;
-
-        // Shape text into clusters
         const clusters = this.shaper.shape(text);
-
-        if (clusters.length === 0) {
-            return { lines, overflow: false, lastCharIndex: 0 };
-        }
-
-        // Add hyphenation if enabled
-        if (this.paragraphStyle.hyphenate) {
-            this.shaper.addHyphenation(clusters);
-        }
-
-        // Initialize line control
-        const lineControl = new LineControl(width, 0, this.paragraphStyle);
-
-        // Calculate line height
-        const lineHeight = this.charStyle.fontSize * this.paragraphStyle.lineSpacing;
-
-        // Start first line
-        let isFirstLine = true;
-        lineControl.startLine(0, isFirstLine);
-        lineControl.yPos = clusters[0].ascent; // Start at first line baseline
-
-        let lastBreakIndex = -1;
-        let consecutiveHyphens = 0;
-
-        // Main layout loop
-        for (let i = 0; i < clusters.length; i++) {
-            const cluster = clusters[i];
-            const isNewline = cluster.text === '\n';
-
-            // Handle explicit line breaks
-            if (isNewline) {
-                if (!lineControl.isEmpty) {
-                    lineControl.breakLine(i - 1 >= 0 ? i - 1 : 0);
-                    this.finalizeAndAddLine(lineControl, lines, isFirstLine);
-                    isFirstLine = false;
-                }
-
-                // Start new line
-                lineControl.nextLine(lineHeight);
-                lineControl.startLine(i + 1, false);
-
-                // Check height overflow
-                if (maxHeight && lineControl.yPos > maxHeight) {
-                    overflow = true;
-                    return { lines, overflow, lastCharIndex: i };
-                }
-
-                continue;
-            }
-
-            // Check for break opportunities BEFORE adding cluster
-            const canBreak = hasFlag(cluster, LayoutFlags.LineBoundary);
-            const canHyphenate = hasFlag(cluster, LayoutFlags.HyphenationPossible);
-            const hyphWidth = canHyphenate ? this.getHyphenWidth() : 0;
-
-            // Calculate what xPos would be after adding this cluster
-            const projectedXPos = lineControl.xPos + cluster.width;
-
-            // Check if adding this cluster would exceed line width
-            if (!lineControl.isEmpty && lineControl.breakIndex >= 0) {
-                const effectiveRight = lineControl.colRight - lineControl.style.rightMargin;
-                const wouldOverflow = projectedXPos - lineControl.maxShrink >= effectiveRight;
-
-                if (wouldOverflow) {
-                    // Use the remembered break point
-                    const breakCluster = clusters[lineControl.breakIndex];
-
-                    // Check hyphenation
-                    if (hasFlag(breakCluster, LayoutFlags.HyphenationPossible) &&
-                        consecutiveHyphens < this.paragraphStyle.hyphenConsecutiveLimit) {
-                        setFlag(breakCluster, LayoutFlags.SoftHyphenVisible);
-                        consecutiveHyphens++;
-                    } else if (hasFlag(breakCluster, LayoutFlags.LineBoundary)) {
-                        consecutiveHyphens = 0;
-                    }
-
-                    // Suppress trailing spaces (use relative index within clusters array)
-                    const relativeBreakIndex = lineControl.breakIndex - lineControl.lineData.firstCluster;
-                    this.suppressTrailingSpaces(lineControl.clusters, relativeBreakIndex);
-
-                    // Finalize line
-                    this.finalizeAndAddLine(lineControl, lines, isFirstLine);
-                    isFirstLine = false;
-
-                    // Start new line after the break
-                    lineControl.nextLine(lineHeight);
-                    lineControl.startLine(lineControl.breakIndex + 1, false);
-
-                    // Check height overflow
-                    if (maxHeight && lineControl.yPos > maxHeight) {
-                        overflow = true;
-                        return { lines, overflow, lastCharIndex: lineControl.breakIndex };
-                    }
-
-                    // Re-process from the cluster after the break
-                    // Decrement i so the loop will process clusters from breakIndex+1
-                    i = lineControl.lineData.firstCluster - 1;
-                    continue;
-                }
-            }
-
-            // Add cluster to line (after overflow check)
-            lineControl.addCluster(cluster);
-            lineControl.xPos = projectedXPos;
-
-            // Remember break opportunities for future use
-            // Both word breaks and hyphenation breaks are considered and compete via badness
-            if (canBreak) {
-                lineControl.rememberBreak(i, lineControl.xPos, false);  // Word break (no penalty)
-            }
-            if (canHyphenate) {
-                lineControl.rememberBreak(i, lineControl.xPos + hyphWidth, true);  // Hyphenation (with penalty)
-            }
-
-            // Handle forced break when line is overflowing with no break point
-            if (lineControl.isEndOfLine(0) && lineControl.breakIndex < 0) {
-                // No break point found - force break at current position
-                lineControl.breakLine(i);
-                this.finalizeAndAddLine(lineControl, lines, isFirstLine);
-                isFirstLine = false;
-
-                lineControl.nextLine(lineHeight);
-                lineControl.startLine(i + 1, false);
-
-                // Check height overflow
-                if (maxHeight && lineControl.yPos > maxHeight) {
-                    overflow = true;
-                    return { lines, overflow, lastCharIndex: i };
-                }
-            }
-        }
-
-        // Handle remaining text (last line)
-        if (!lineControl.isEmpty) {
-            lineControl.breakLine(clusters.length - 1);
-
-            // Don't justify the last line of a paragraph
-            const savedAlignment = lineControl.style.alignment;
-            if (lineControl.style.alignment === Alignment.Justified) {
-                lineControl.style.alignment = Alignment.Left;
-            }
-
-            this.finalizeAndAddLine(lineControl, lines, isFirstLine);
-            lineControl.style.alignment = savedAlignment;
-        }
+        const { lines, overflow, lastClusterIndex } = this.layoutSegment(clusters, 0, width, 0, maxHeight || 1000000, true);
 
         return {
             lines,
             overflow,
-            lastCharIndex: clusters.length - 1,
+            lastCharIndex: lastClusterIndex,
         };
     }
 
     /**
-     * Finalize and add a line to the result
+     * Internal core layout logic for a single segment (column or frame).
      */
-    private finalizeAndAddLine(
-        lineControl: LineControl,
-        lines: LineSpec[],
-        isFirstLine: boolean
-    ): void {
+    private layoutSegment(
+        clusters: GlyphCluster[],
+        startClusterIndex: number,
+        width: number,
+        xOffset: number,
+        maxHeight: number,
+        isFirstInDocument: boolean
+    ): { lines: LineSpec[], overflow: boolean, lastClusterIndex: number } {
+        const lines: LineSpec[] = [];
+        const lineHeight = this.charStyle.fontSize * this.paragraphStyle.lineSpacing;
+        const lineControl = new LineControl(width, xOffset, this.paragraphStyle);
+
+        let currentClusterIndex = startClusterIndex;
+        let isFirstLine = isFirstInDocument;
+        let consecutiveHyphens = 0;
+
+        // Initialize y position
+        lineControl.yPos = clusters[startClusterIndex]?.ascent || this.charStyle.fontSize * 0.8;
+        lineControl.startLine(currentClusterIndex, isFirstLine);
+
+        while (currentClusterIndex < clusters.length) {
+            const cluster = clusters[currentClusterIndex];
+            const isNewline = cluster.text === '\n';
+
+            if (isNewline) {
+                if (!lineControl.isEmpty) {
+                    lineControl.breakLine(currentClusterIndex - 1);
+                    this.finalizeLine(lineControl, lines);
+                    isFirstLine = false;
+                }
+
+                lineControl.nextLine(lineHeight);
+                if (lineControl.yPos + lineHeight > maxHeight) {
+                    return { lines, overflow: true, lastClusterIndex: currentClusterIndex + 1 };
+                }
+
+                currentClusterIndex++;
+                lineControl.startLine(currentClusterIndex, false);
+                continue;
+            }
+
+            const canBreak = hasFlag(cluster, LayoutFlags.LineBoundary);
+            const canHyphenate = hasFlag(cluster, LayoutFlags.HyphenationPossible);
+            const hyphWidth = canHyphenate ? this.getHyphenWidth() : 0;
+            const projectedXPos = lineControl.xPos + cluster.width;
+            const effectiveRight = lineControl.colRight - lineControl.style.rightMargin;
+            const wouldOverflow = projectedXPos - lineControl.maxShrink >= effectiveRight;
+
+            // Handle soft break
+            if (!lineControl.isEmpty && lineControl.breakIndex >= 0 && wouldOverflow) {
+                this.finalizeLine(lineControl, lines);
+                isFirstLine = false;
+
+                const nextLineStart = lineControl.breakIndex + 1;
+                lineControl.nextLine(lineHeight);
+
+                if (lineControl.yPos + lineHeight > maxHeight) {
+                    return { lines, overflow: true, lastClusterIndex: nextLineStart };
+                }
+
+                lineControl.startLine(nextLineStart, false);
+                // Rewind to the cluster after the break
+                currentClusterIndex = nextLineStart;
+                continue;
+            }
+
+            // Normal path: add cluster
+            lineControl.addCluster(cluster);
+            lineControl.xPos = projectedXPos;
+
+            if (canBreak) {
+                lineControl.rememberBreak(currentClusterIndex, lineControl.xPos, false);
+            }
+            if (canHyphenate) {
+                lineControl.rememberBreak(currentClusterIndex, lineControl.xPos + hyphWidth, true);
+            }
+
+            // Forced break (no break opportunity found but line is full)
+            if (lineControl.isEndOfLine(0) && lineControl.breakIndex < 0) {
+                lineControl.breakLine(currentClusterIndex);
+                this.finalizeLine(lineControl, lines);
+                isFirstLine = false;
+
+                const nextLineStart = currentClusterIndex + 1;
+                lineControl.nextLine(lineHeight);
+
+                if (lineControl.yPos + lineHeight > maxHeight) {
+                    return { lines, overflow: true, lastClusterIndex: nextLineStart };
+                }
+
+                lineControl.startLine(nextLineStart, false);
+                currentClusterIndex = nextLineStart;
+                continue;
+            }
+
+            currentClusterIndex++;
+        }
+
+        // Final line
+        if (!lineControl.isEmpty) {
+            lineControl.breakLine(clusters.length - 1);
+            const savedAlignment = lineControl.style.alignment;
+            if (lineControl.style.alignment === Alignment.Justified) {
+                lineControl.style.alignment = Alignment.Left;
+            }
+            this.finalizeLine(lineControl, lines);
+            lineControl.style.alignment = savedAlignment;
+        }
+
+        return { lines, overflow: false, lastClusterIndex: clusters.length };
+    }
+
+    private finalizeLine(lineControl: LineControl, lines: LineSpec[]): void {
         const endX = lineControl.colRight - lineControl.style.rightMargin;
         lineControl.finishLine(endX);
 
-        // Apply justification or alignment
         if (lineControl.style.alignment === Alignment.Justified) {
             lineControl.justifyLine();
         } else {
@@ -275,11 +234,6 @@ export class LayoutEngine {
 
     /**
      * Layout text into multiple columns with text flowing between them.
-     * @param text - The text to layout
-     * @param columnCount - Number of columns
-     * @param totalWidth - Total width available for all columns
-     * @param columnHeight - Height of each column
-     * @param columnGap - Gap between columns
      */
     layoutColumns(
         text: string,
@@ -289,18 +243,11 @@ export class LayoutEngine {
         columnGap: number = 20
     ): MultiColumnResult {
         const columns: ColumnSpec[] = [];
-        let overflow = false;
-        let lastCharIndex = 0;
-
-        // Calculate column width
         const totalGaps = (columnCount - 1) * columnGap;
         const columnWidth = (totalWidth - totalGaps) / columnCount;
 
-        // Shape text into clusters once
         const clusters = this.shaper.shape(text);
-
         if (clusters.length === 0) {
-            // Return empty columns
             for (let c = 0; c < columnCount; c++) {
                 columns.push({
                     x: c * (columnWidth + columnGap),
@@ -313,154 +260,35 @@ export class LayoutEngine {
             return { columns, overflow: false, lastCharIndex: 0 };
         }
 
-        // Add hyphenation if enabled
         if (this.paragraphStyle.hyphenate) {
             this.shaper.addHyphenation(clusters);
         }
 
-        const lineHeight = this.charStyle.fontSize * this.paragraphStyle.lineSpacing;
         let currentClusterIndex = 0;
-        let isFirstLine = true;
-
-        // Layout each column
         for (let colIndex = 0; colIndex < columnCount && currentClusterIndex < clusters.length; colIndex++) {
             const colX = colIndex * (columnWidth + columnGap);
-            const columnLines: LineSpec[] = [];
-
-            // Initialize line control for this column
-            const lineControl = new LineControl(columnWidth, colX, this.paragraphStyle);
-            lineControl.yPos = clusters[currentClusterIndex]?.ascent || lineHeight;
-            lineControl.startLine(currentClusterIndex, isFirstLine);
-
-            let consecutiveHyphens = 0;
-
-            // Fill this column with lines
-            while (currentClusterIndex < clusters.length) {
-                const cluster = clusters[currentClusterIndex];
-                const isNewline = cluster.text === '\n';
-
-                // Handle explicit line breaks
-                if (isNewline) {
-                    if (!lineControl.isEmpty) {
-                        lineControl.breakLine(currentClusterIndex - 1);
-                        this.finalizeColumnLine(lineControl, columnLines, colIndex);
-                        isFirstLine = false;
-                    }
-
-                    lineControl.nextLine(lineHeight);
-
-                    // Check if we've exceeded column height
-                    if (lineControl.yPos + lineHeight > columnHeight) {
-                        currentClusterIndex++;
-                        break; // Move to next column
-                    }
-
-                    currentClusterIndex++;
-                    lineControl.startLine(currentClusterIndex, false);
-                    continue;
-                }
-
-                // Check for break opportunities BEFORE adding cluster
-                const canBreak = hasFlag(cluster, LayoutFlags.LineBoundary);
-                const canHyphenate = hasFlag(cluster, LayoutFlags.HyphenationPossible);
-                const hyphWidth = canHyphenate ? this.getHyphenWidth() : 0;
-
-                const projectedXPos = lineControl.xPos + cluster.width;
-                const effectiveRight = lineControl.colRight - lineControl.style.rightMargin;
-                const wouldOverflow = projectedXPos - lineControl.maxShrink >= effectiveRight;
-
-                // Check if we need to break line
-                if (!lineControl.isEmpty && lineControl.breakIndex >= 0 && wouldOverflow) {
-                    const breakCluster = clusters[lineControl.breakIndex];
-
-                    if (hasFlag(breakCluster, LayoutFlags.HyphenationPossible) &&
-                        consecutiveHyphens < this.paragraphStyle.hyphenConsecutiveLimit) {
-                        setFlag(breakCluster, LayoutFlags.SoftHyphenVisible);
-                        consecutiveHyphens++;
-                    } else if (hasFlag(breakCluster, LayoutFlags.LineBoundary)) {
-                        consecutiveHyphens = 0;
-                    }
-
-                    const relativeBreakIndex = lineControl.breakIndex - lineControl.lineData.firstCluster;
-                    this.suppressTrailingSpaces(lineControl.clusters, relativeBreakIndex);
-
-                    this.finalizeColumnLine(lineControl, columnLines, colIndex);
-                    isFirstLine = false;
-
-                    lineControl.nextLine(lineHeight);
-
-                    // Check if we've exceeded column height
-                    if (lineControl.yPos + lineHeight > columnHeight) {
-                        currentClusterIndex = lineControl.breakIndex + 1;
-                        break; // Move to next column
-                    }
-
-                    lineControl.startLine(lineControl.breakIndex + 1, false);
-                    currentClusterIndex = lineControl.breakIndex + 1;
-                    continue;
-                }
-
-                // Add cluster to line
-                lineControl.addCluster(cluster);
-                lineControl.xPos = projectedXPos;
-
-                // Remember break opportunities
-                if (canBreak) {
-                    lineControl.rememberBreak(currentClusterIndex, lineControl.xPos, false);
-                }
-                if (canHyphenate) {
-                    lineControl.rememberBreak(currentClusterIndex, lineControl.xPos + hyphWidth, true);
-                }
-
-                // Handle forced break when overflowing with no break point
-                if (lineControl.isEndOfLine(0) && lineControl.breakIndex < 0) {
-                    lineControl.breakLine(currentClusterIndex);
-                    this.finalizeColumnLine(lineControl, columnLines, colIndex);
-                    isFirstLine = false;
-
-                    lineControl.nextLine(lineHeight);
-
-                    if (lineControl.yPos + lineHeight > columnHeight) {
-                        currentClusterIndex++;
-                        break;
-                    }
-
-                    currentClusterIndex++;
-                    lineControl.startLine(currentClusterIndex, false);
-                    continue;
-                }
-
-                currentClusterIndex++;
-            }
-
-            // Handle remaining text in this column (last line)
-            if (!lineControl.isEmpty && currentClusterIndex <= clusters.length) {
-                lineControl.breakLine(currentClusterIndex - 1);
-
-                const savedAlignment = lineControl.style.alignment;
-                if (lineControl.style.alignment === Alignment.Justified) {
-                    lineControl.style.alignment = Alignment.Left;
-                }
-
-                this.finalizeColumnLine(lineControl, columnLines, colIndex);
-                lineControl.style.alignment = savedAlignment;
-            }
+            const { lines, overflow: colOverflow, lastClusterIndex } = this.layoutSegment(
+                clusters,
+                currentClusterIndex,
+                columnWidth,
+                colX,
+                columnHeight,
+                currentClusterIndex === 0
+            );
 
             columns.push({
                 x: colX,
                 y: 0,
                 width: columnWidth,
                 height: columnHeight,
-                lines: columnLines,
+                lines: lines,
             });
 
-            lastCharIndex = currentClusterIndex - 1;
+            currentClusterIndex = lastClusterIndex;
         }
 
-        // Check if there's overflow (text didn't fit in all columns)
-        overflow = currentClusterIndex < clusters.length;
+        const overflow = currentClusterIndex < clusters.length;
 
-        // Add empty columns if we ran out of text
         for (let c = columns.length; c < columnCount; c++) {
             columns.push({
                 x: c * (columnWidth + columnGap),
@@ -471,28 +299,6 @@ export class LayoutEngine {
             });
         }
 
-        return { columns, overflow, lastCharIndex };
-    }
-
-    /**
-     * Finalize and add a line to a column
-     */
-    private finalizeColumnLine(
-        lineControl: LineControl,
-        lines: LineSpec[],
-        columnIndex: number
-    ): void {
-        const endX = lineControl.colRight - lineControl.style.rightMargin;
-        lineControl.finishLine(endX);
-
-        if (lineControl.style.alignment === Alignment.Justified) {
-            lineControl.justifyLine();
-        } else {
-            lineControl.alignLine();
-        }
-
-        const lineSpec = lineControl.createLineSpec();
-        lineSpec.column = columnIndex;
-        lines.push(lineSpec);
+        return { columns, overflow, lastCharIndex: currentClusterIndex - 1 };
     }
 }

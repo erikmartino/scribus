@@ -169,6 +169,21 @@ Typography is the art and technique of arranging type to make written language l
       </div>
 
       <div class="control-group">
+        <label>Columns: <span id="columnCountValue" class="value-display">2</span></label>
+        <input type="range" id="columnCount" min="1" max="4" value="2">
+      </div>
+
+      <div class="control-group">
+        <label>Col Height: <span id="columnHeightValue" class="value-display">500</span>px</label>
+        <input type="range" id="columnHeight" min="100" max="800" value="500">
+      </div>
+
+      <div class="control-group">
+        <label>Col Gap: <span id="columnGapValue" class="value-display">20</span>px</label>
+        <input type="range" id="columnGap" min="0" max="100" value="20">
+      </div>
+
+      <div class="control-group">
         <label>Alignment</label>
         <select id="alignment">
           <option value="left">Left</option>
@@ -228,6 +243,9 @@ Typography is the art and technique of arranging type to make written language l
     const widthEl = document.getElementById('width');
     const fontSizeEl = document.getElementById('fontSize');
     const lineSpacingEl = document.getElementById('lineSpacing');
+    const columnCountEl = document.getElementById('columnCount');
+    const columnHeightEl = document.getElementById('columnHeight');
+    const columnGapEl = document.getElementById('columnGap');
     const alignmentEl = document.getElementById('alignment');
     const fontFamilyEl = document.getElementById('fontFamily');
     const hyphenateEl = document.getElementById('hyphenate');
@@ -239,6 +257,9 @@ Typography is the art and technique of arranging type to make written language l
     const widthValue = document.getElementById('widthValue');
     const fontSizeValue = document.getElementById('fontSizeValue');
     const lineSpacingValue = document.getElementById('lineSpacingValue');
+    const columnCountValue = document.getElementById('columnCountValue');
+    const columnHeightValue = document.getElementById('columnHeightValue');
+    const columnGapValue = document.getElementById('columnGapValue');
     const hyphenPenaltyValue = document.getElementById('hyphenPenaltyValue');
 
     function render() {
@@ -246,6 +267,9 @@ Typography is the art and technique of arranging type to make written language l
       const width = parseInt(widthEl.value);
       const fontSize = parseInt(fontSizeEl.value);
       const lineSpacing = parseFloat(lineSpacingEl.value);
+      const columnCount = parseInt(columnCountEl.value);
+      const columnHeight = parseInt(columnHeightEl.value);
+      const columnGap = parseInt(columnGapEl.value);
       const alignment = alignmentEl.value;
       const fontFamily = fontFamilyEl.value;
       const hyphenate = hyphenateEl.checked;
@@ -257,6 +281,9 @@ Typography is the art and technique of arranging type to make written language l
       widthValue.textContent = width;
       fontSizeValue.textContent = fontSize;
       lineSpacingValue.textContent = lineSpacing.toFixed(1);
+      columnCountValue.textContent = columnCount;
+      columnHeightValue.textContent = columnHeight;
+      columnGapValue.textContent = columnGap;
       hyphenPenaltyValue.textContent = hyphenPenalty;
 
       // Create layout engine
@@ -285,8 +312,12 @@ Typography is the art and technique of arranging type to make written language l
 
       // Layout text
       const startTime = performance.now();
-      const result = engine.layout(text, width);
+      const result = engine.layoutColumns(text, columnCount, width, columnHeight, columnGap);
       const layoutTime = performance.now() - startTime;
+
+      // Update canvas size to fit columns
+      canvas.width = Math.max(800, width);
+      canvas.height = columnHeight + 40;
 
       // Clear canvas
       ctx.fillStyle = '#ffffff';
@@ -301,64 +332,76 @@ Typography is the art and technique of arranging type to make written language l
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Draw each line
+      // Draw each column and its lines
       ctx.fillStyle = '#333333';
       ctx.font = `${fontSize}px ${fontFamily}`;
       ctx.textBaseline = 'alphabetic';
 
-      for (const line of result.lines) {
-        let x = line.x;
-        const y = line.y;
+      let totalLines = 0;
 
-        // Draw baseline
+      for (const column of result.columns) {
+        // Draw column boundary if showBaselines
         if (showBaselines) {
-          ctx.strokeStyle = '#ffcccc';
-          ctx.beginPath();
-          ctx.moveTo(line.x, y);
-          ctx.lineTo(line.x + line.width, y);
-          ctx.stroke();
+          ctx.strokeStyle = '#f0f0f0';
+          ctx.strokeRect(column.x, 0, column.width, columnHeight);
         }
 
-        // Draw each cluster
-        for (const cluster of line.clusters) {
-          const clusterWidth = cluster.width + cluster.extraWidth;
+        for (const line of column.lines) {
+          totalLines++;
+          let x = line.x;
+          const y = line.y;
 
-          // Draw break point marker
-          if (showBreaks && hasFlag(cluster, LayoutFlags.LineBoundary)) {
-            ctx.fillStyle = '#4CAF50';
-            ctx.fillRect(x + clusterWidth - 2, y - fontSize, 2, fontSize);
+          // Draw baseline
+          if (showBaselines) {
+            ctx.strokeStyle = '#ffcccc';
+            ctx.beginPath();
+            ctx.moveTo(line.x, y);
+            ctx.lineTo(line.x + line.width, y);
+            ctx.stroke();
           }
 
-          // Draw hyphenation point marker
-          if (showBreaks && hasFlag(cluster, LayoutFlags.HyphenationPossible)) {
-            ctx.fillStyle = '#2196F3';
-            ctx.fillRect(x + clusterWidth - 2, y - fontSize, 2, fontSize);
+          // Draw each cluster
+          for (const cluster of line.clusters) {
+            const clusterWidth = cluster.width + cluster.extraWidth;
+
+            // Draw break point marker
+            if (showBreaks && hasFlag(cluster, LayoutFlags.LineBoundary)) {
+              ctx.fillStyle = '#4CAF50';
+              ctx.fillRect(x + clusterWidth - 2, y - fontSize, 2, fontSize);
+            }
+
+            // Draw hyphenation point marker
+            if (showBreaks && hasFlag(cluster, LayoutFlags.HyphenationPossible)) {
+              ctx.fillStyle = '#2196F3';
+              ctx.fillRect(x + clusterWidth - 2, y - fontSize, 2, fontSize);
+            }
+
+            // Draw the text
+            ctx.fillStyle = '#333333';
+
+            if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
+              ctx.fillText(cluster.text + '-', x, y);
+            } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+              ctx.fillText(cluster.text, x, y);
+            }
+
+            x += clusterWidth;
           }
-
-          // Draw the text
-          ctx.fillStyle = '#333333';
-
-          if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
-            ctx.fillText(cluster.text + '-', x, y);
-          } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
-            ctx.fillText(cluster.text, x, y);
-          }
-
-          x += clusterWidth;
         }
-      }
+
+      } // End of columns loop
 
       // Update stats
       stats.innerHTML = `
-        Lines: ${result.lines.length} | 
+        Lines: ${totalLines} | 
         Layout time: ${layoutTime.toFixed(2)}ms |
         Overflow: ${result.overflow ? 'Yes' : 'No'}
       `;
     }
 
     // Event listeners
-    [textEl, widthEl, fontSizeEl, lineSpacingEl, alignmentEl, fontFamilyEl,
-      hyphenateEl, hyphenPenaltyEl, showBreaksEl, showBaselinesEl].forEach(el => {
+    [textEl, widthEl, fontSizeEl, lineSpacingEl, columnCountEl, columnHeightEl, columnGapEl,
+      alignmentEl, fontFamilyEl, hyphenateEl, hyphenPenaltyEl, showBreaksEl, showBaselinesEl].forEach(el => {
         el.addEventListener('input', render);
         el.addEventListener('change', render);
       });

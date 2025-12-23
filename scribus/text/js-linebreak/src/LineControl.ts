@@ -48,7 +48,7 @@ export class LineControl {
     ) {
         this.colWidth = colWidth;
         this.colLeft = colLeft;
-        this.colRight = colLeft + colWidth - style.rightMargin;
+        this.colRight = colLeft + colWidth; // colRight is the absolute right edge
         this.style = style;
         this.xPos = colLeft + style.leftMargin;
         this.yPos = 0;
