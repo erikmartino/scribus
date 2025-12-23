@@ -64,6 +64,7 @@ export class LineControl {
             firstCluster: 0,
             lastCluster: 0,
             clusters: [],
+            column: 0,
         };
     }
 
@@ -89,6 +90,7 @@ export class LineControl {
             firstCluster: firstCluster,
             lastCluster: 0,
             clusters: [],
+            column: 0,
         };
 
         this.breakIndex = -1;

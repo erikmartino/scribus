@@ -57,6 +57,18 @@ export interface LineSpec {
     firstCluster: number;   // Index of first cluster
     lastCluster: number;    // Index of last cluster
     clusters: GlyphCluster[]; // Clusters in this line
+    column: number;         // Which column this line belongs to
+}
+
+/**
+ * Describes a column in multi-column layout
+ */
+export interface ColumnSpec {
+    x: number;              // X position of column
+    y: number;              // Y position of column
+    width: number;          // Column width
+    height: number;         // Column height
+    lines: LineSpec[];      // Lines in this column
 }
 
 /**
