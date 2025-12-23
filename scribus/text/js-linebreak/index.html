@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JS Line Breaking Engine Demo</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --primary: #e94560;
+      --secondary: #0f3460;
+      --text: #eaeaea;
+      --text-dim: #a0a0a0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(135deg, var(--primary), #ff6b6b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 2rem;
+    }
+
+    .controls {
+      background: var(--surface);
+      padding: 1.5rem;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--primary);
+    }
+
+    select {
+      width: 100%;
+      padding: 0.5rem;
+      border: none;
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .value-display {
+      font-size: 0.9rem;
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .canvas-container {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      overflow: hidden;
+    }
+
+    canvas {
+      background: white;
+      border-radius: 8px;
+      display: block;
+    }
+
+    .stats {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .checkbox-group input {
+      accent-color: var(--primary);
+      width: 16px;
+      height: 16px;
+    }
+
+    .checkbox-group label {
+      text-transform: none;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="controls">
+      <h1>Line Breaking Engine</h1>
+      
+      <div class="control-group">
+        <label>Text</label>
+        <textarea id="text">The quick brown fox jumps over the lazy dog. This is a demonstration of the line-breaking algorithm based on the Scribus implementation.
+
+Typography is the art and technique of arranging type to make written language legible, readable, and appealing when displayed. The arrangement of type involves selecting typefaces, point sizes, line lengths, line-spacing, and letter-spacing.</textarea>
+      </div>
+
+      <div class="control-group">
+        <label>Width: <span id="widthValue" class="value-display">400</span>px</label>
+        <input type="range" id="width" min="100" max="800" value="400">
+      </div>
+
+      <div class="control-group">
+        <label>Font Size: <span id="fontSizeValue" class="value-display">16</span>px</label>
+        <input type="range" id="fontSize" min="10" max="32" value="16">
+      </div>
+
+      <div class="control-group">
+        <label>Line Spacing: <span id="lineSpacingValue" class="value-display">1.4</span></label>
+        <input type="range" id="lineSpacing" min="1" max="2.5" step="0.1" value="1.4">
+      </div>
+
+      <div class="control-group">
+        <label>Alignment</label>
+        <select id="alignment">
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+          <option value="center">Center</option>
+          <option value="justified">Justified</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Font Family</label>
+        <select id="fontFamily">
+          <option value="Georgia, serif">Georgia (Serif)</option>
+          <option value="Times New Roman, serif">Times New Roman</option>
+          <option value="Inter, sans-serif">Inter (Sans)</option>
+          <option value="Arial, sans-serif">Arial</option>
+          <option value="monospace">Monospace</option>
+        </select>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="hyphenate" checked>
+        <label for="hyphenate">Enable Hyphenation</label>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="showBreaks">
+        <label for="showBreaks">Show Break Points</label>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="showBaselines">
+        <label for="showBaselines">Show Baselines</label>
+      </div>
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="canvas" width="800" height="600"></canvas>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { LayoutEngine, Alignment, LayoutFlags, hasFlag } from './src/index.ts';
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const stats = document.getElementById('stats');
+
+    // Control elements
+    const textEl = document.getElementById('text');
+    const widthEl = document.getElementById('width');
+    const fontSizeEl = document.getElementById('fontSize');
+    const lineSpacingEl = document.getElementById('lineSpacing');
+    const alignmentEl = document.getElementById('alignment');
+    const fontFamilyEl = document.getElementById('fontFamily');
+    const hyphenateEl = document.getElementById('hyphenate');
+    const showBreaksEl = document.getElementById('showBreaks');
+    const showBaselinesEl = document.getElementById('showBaselines');
+
+    // Value displays
+    const widthValue = document.getElementById('widthValue');
+    const fontSizeValue = document.getElementById('fontSizeValue');
+    const lineSpacingValue = document.getElementById('lineSpacingValue');
+
+    function render() {
+      const text = textEl.value;
+      const width = parseInt(widthEl.value);
+      const fontSize = parseInt(fontSizeEl.value);
+      const lineSpacing = parseFloat(lineSpacingEl.value);
+      const alignment = alignmentEl.value;
+      const fontFamily = fontFamilyEl.value;
+      const hyphenate = hyphenateEl.checked;
+      const showBreaks = showBreaksEl.checked;
+      const showBaselines = showBaselinesEl.checked;
+
+      // Update value displays
+      widthValue.textContent = width;
+      fontSizeValue.textContent = fontSize;
+      lineSpacingValue.textContent = lineSpacing.toFixed(1);
+
+      // Create layout engine
+      const engine = new LayoutEngine(
+        {
+          alignment: alignment,
+          leftMargin: 20,
+          rightMargin: 20,
+          firstLineIndent: alignment === 'justified' ? 30 : 0,
+          lineSpacing: lineSpacing,
+          minWordSpacing: 0.8,
+          maxWordSpacing: 1.5,
+          hyphenate: hyphenate,
+          hyphenConsecutiveLimit: 3,
+        },
+        {
+          fontFamily: fontFamily,
+          fontSize: fontSize,
+          fontWeight: 'normal',
+          fontStyle: 'normal',
+          letterSpacing: 0,
+          wordSpacing: 0,
+        }
+      );
+
+      // Layout text
+      const startTime = performance.now();
+      const result = engine.layout(text, width);
+      const layoutTime = performance.now() - startTime;
+
+      // Clear canvas
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw width boundary
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(width, 0);
+      ctx.lineTo(width, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw each line
+      ctx.fillStyle = '#333333';
+      ctx.font = `${fontSize}px ${fontFamily}`;
+      ctx.textBaseline = 'alphabetic';
+
+      for (const line of result.lines) {
+        let x = line.x;
+        const y = line.y;
+
+        // Draw baseline
+        if (showBaselines) {
+          ctx.strokeStyle = '#ffcccc';
+          ctx.beginPath();
+          ctx.moveTo(line.x, y);
+          ctx.lineTo(line.x + line.width, y);
+          ctx.stroke();
+        }
+
+        // Draw each cluster
+        for (const cluster of line.clusters) {
+          const clusterWidth = cluster.width + cluster.extraWidth;
+
+          // Draw break point marker
+          if (showBreaks && hasFlag(cluster, LayoutFlags.LineBoundary)) {
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(x + clusterWidth - 2, y - fontSize, 2, fontSize);
+          }
+
+          // Draw hyphenation point marker
+          if (showBreaks && hasFlag(cluster, LayoutFlags.HyphenationPossible)) {
+            ctx.fillStyle = '#2196F3';
+            ctx.fillRect(x + clusterWidth - 2, y - fontSize, 2, fontSize);
+          }
+
+          // Draw the text
+          ctx.fillStyle = '#333333';
+          
+          if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
+            ctx.fillText(cluster.text + '-', x, y);
+          } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+            ctx.fillText(cluster.text, x, y);
+          }
+
+          x += clusterWidth;
+        }
+      }
+
+      // Update stats
+      stats.innerHTML = `
+        Lines: ${result.lines.length} | 
+        Layout time: ${layoutTime.toFixed(2)}ms |
+        Overflow: ${result.overflow ? 'Yes' : 'No'}
+      `;
+    }
+
+    // Event listeners
+    [textEl, widthEl, fontSizeEl, lineSpacingEl, alignmentEl, fontFamilyEl, 
+     hyphenateEl, showBreaksEl, showBaselinesEl].forEach(el => {
+      el.addEventListener('input', render);
+      el.addEventListener('change', render);
+    });
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
