@@ -169,11 +169,13 @@ export class LayoutEngine {
             lineControl.addCluster(cluster);
             lineControl.xPos = projectedXPos;
 
-            // Remember break opportunity for future use
+            // Remember break opportunities for future use
+            // Both word breaks and hyphenation breaks are considered and compete via badness
             if (canBreak) {
-                lineControl.rememberBreak(i, lineControl.xPos);
-            } else if (canHyphenate) {
-                lineControl.rememberBreak(i, lineControl.xPos + hyphWidth);
+                lineControl.rememberBreak(i, lineControl.xPos, false);  // Word break (no penalty)
+            }
+            if (canHyphenate) {
+                lineControl.rememberBreak(i, lineControl.xPos + hyphWidth, true);  // Hyphenation (with penalty)
             }
 
             // Handle forced break when line is overflowing with no break point

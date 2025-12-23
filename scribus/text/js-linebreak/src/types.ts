@@ -82,6 +82,7 @@ export interface ParagraphStyle {
     maxWordSpacing: number;     // Max space width ratio
     hyphenate: boolean;
     hyphenConsecutiveLimit: number; // Max consecutive hyphenated lines
+    hyphenPenalty: number;      // 0-100, higher = prefer word breaks over hyphens
 }
 
 /**
@@ -109,6 +110,7 @@ export const defaultParagraphStyle: ParagraphStyle = {
     maxWordSpacing: 1.5,
     hyphenate: true,
     hyphenConsecutiveLimit: 3,
+    hyphenPenalty: 50,  // Moderate preference for word breaks over hyphens
 };
 
 /**

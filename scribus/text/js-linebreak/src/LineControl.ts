@@ -27,6 +27,8 @@ export class LineControl {
     // Break tracking
     breakIndex = -1;
     breakXPos = 0;
+    breakPenalty = 0;           // Penalty applied to current break (for hyphenation)
+    breakIsHyphenation = false; // Whether current break is a hyphenation
 
     // Position tracking
     xPos = 0;
@@ -91,6 +93,8 @@ export class LineControl {
 
         this.breakIndex = -1;
         this.breakXPos = 0;
+        this.breakPenalty = 0;
+        this.breakIsHyphenation = false;
         this.maxShrink = 0;
         this.maxStretch = 0;
     }
@@ -115,24 +119,37 @@ export class LineControl {
 
     /**
      * Called when a possible break is passed.
-     * Records the break opportunity, preferring breaks closer to the right margin.
+     * Records the break opportunity, preferring breaks closer to the right margin
+     * but penalizing hyphenation breaks to prefer word breaks when available.
+     * @param isHyphenation - If true, applies hyphenation penalty to disfavor this break
      */
-    rememberBreak(index: number, xPos: number): void {
+    rememberBreak(index: number, xPos: number, isHyphenation: boolean = false): void {
         const effectiveRight = this.colRight - this.style.rightMargin;
 
-        if (xPos > effectiveRight) {
-            // Already past edge - compare with existing break
-            if (this.breakIndex >= 0) {
-                const oldLooseness = Math.abs(effectiveRight - this.breakXPos);
-                const newLooseness = xPos - effectiveRight;
-                if (newLooseness >= oldLooseness) {
-                    return; // Keep old break
-                }
+        // Apply hyphenation penalty: higher penalty = more "looseness" added
+        // This makes hyphenation breaks less desirable compared to word breaks
+        // Penalty of 100 means add 100 units of "looseness" (pixels)
+        // This means hyphenation must be 100px closer to edge than a word break to win
+        const penalty = isHyphenation ? (this.style.hyphenPenalty / 100) * 100 : 0;
+
+        // If we already have a break, compare quality
+        if (this.breakIndex >= 0) {
+            // Calculate "badness" for each break
+            // Lower badness = better break
+            // Badness = distance from ideal right edge + penalty
+            const oldBadness = Math.abs(effectiveRight - this.breakXPos) + this.breakPenalty;
+            const newBadness = Math.abs(effectiveRight - xPos) + penalty;
+
+            // Keep the old break if it's better (lower badness)
+            if (oldBadness <= newBadness) {
+                return;
             }
         }
 
         this.breakXPos = xPos;
         this.breakIndex = index;
+        this.breakPenalty = penalty;
+        this.breakIsHyphenation = isHyphenation;
     }
 
     /**

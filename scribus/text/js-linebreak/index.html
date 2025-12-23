@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -138,14 +139,16 @@
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <div class="controls">
       <h1>Line Breaking Engine</h1>
-      
+
       <div class="control-group">
         <label>Text</label>
-        <textarea id="text">The quick brown fox jumps over the lazy dog. This is a demonstration of the line-breaking algorithm based on the Scribus implementation.
+        <textarea
+          id="text">The quick brown fox jumps over the lazy dog. This is a demonstration of the line-breaking algorithm based on the Scribus implementation.
 
 Typography is the art and technique of arranging type to make written language legible, readable, and appealing when displayed. The arrangement of type involves selecting typefaces, point sizes, line lengths, line-spacing, and letter-spacing.</textarea>
       </div>
@@ -191,6 +194,11 @@ Typography is the art and technique of arranging type to make written language l
         <label for="hyphenate">Enable Hyphenation</label>
       </div>
 
+      <div class="control-group">
+        <label>Hyphen Penalty: <span id="hyphenPenaltyValue" class="value-display">50</span></label>
+        <input type="range" id="hyphenPenalty" min="0" max="100" value="50">
+      </div>
+
       <div class="checkbox-group">
         <input type="checkbox" id="showBreaks">
         <label for="showBreaks">Show Break Points</label>
@@ -223,6 +231,7 @@ Typography is the art and technique of arranging type to make written language l
     const alignmentEl = document.getElementById('alignment');
     const fontFamilyEl = document.getElementById('fontFamily');
     const hyphenateEl = document.getElementById('hyphenate');
+    const hyphenPenaltyEl = document.getElementById('hyphenPenalty');
     const showBreaksEl = document.getElementById('showBreaks');
     const showBaselinesEl = document.getElementById('showBaselines');
 
@@ -230,6 +239,7 @@ Typography is the art and technique of arranging type to make written language l
     const widthValue = document.getElementById('widthValue');
     const fontSizeValue = document.getElementById('fontSizeValue');
     const lineSpacingValue = document.getElementById('lineSpacingValue');
+    const hyphenPenaltyValue = document.getElementById('hyphenPenaltyValue');
 
     function render() {
       const text = textEl.value;
@@ -239,6 +249,7 @@ Typography is the art and technique of arranging type to make written language l
       const alignment = alignmentEl.value;
       const fontFamily = fontFamilyEl.value;
       const hyphenate = hyphenateEl.checked;
+      const hyphenPenalty = parseInt(hyphenPenaltyEl.value);
       const showBreaks = showBreaksEl.checked;
       const showBaselines = showBaselinesEl.checked;
 
@@ -246,6 +257,7 @@ Typography is the art and technique of arranging type to make written language l
       widthValue.textContent = width;
       fontSizeValue.textContent = fontSize;
       lineSpacingValue.textContent = lineSpacing.toFixed(1);
+      hyphenPenaltyValue.textContent = hyphenPenalty;
 
       // Create layout engine
       const engine = new LayoutEngine(
@@ -259,6 +271,7 @@ Typography is the art and technique of arranging type to make written language l
           maxWordSpacing: 1.5,
           hyphenate: hyphenate,
           hyphenConsecutiveLimit: 3,
+          hyphenPenalty: hyphenPenalty,
         },
         {
           fontFamily: fontFamily,
@@ -324,7 +337,7 @@ Typography is the art and technique of arranging type to make written language l
 
           // Draw the text
           ctx.fillStyle = '#333333';
-          
+
           if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
             ctx.fillText(cluster.text + '-', x, y);
           } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
@@ -344,14 +357,15 @@ Typography is the art and technique of arranging type to make written language l
     }
 
     // Event listeners
-    [textEl, widthEl, fontSizeEl, lineSpacingEl, alignmentEl, fontFamilyEl, 
-     hyphenateEl, showBreaksEl, showBaselinesEl].forEach(el => {
-      el.addEventListener('input', render);
-      el.addEventListener('change', render);
-    });
+    [textEl, widthEl, fontSizeEl, lineSpacingEl, alignmentEl, fontFamilyEl,
+      hyphenateEl, hyphenPenaltyEl, showBreaksEl, showBaselinesEl].forEach(el => {
+        el.addEventListener('input', render);
+        el.addEventListener('change', render);
+      });
 
     // Initial render
     render();
   </script>
 </body>
+
 </html>
