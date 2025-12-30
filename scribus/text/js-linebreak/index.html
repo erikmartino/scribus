@@ -210,8 +210,16 @@ Typography is the art and technique of arranging type to make written language l
       </div>
 
       <div class="control-group">
-        <label>Hyphen Penalty: <span id="hyphenPenaltyValue" class="value-display">50</span></label>
-        <input type="range" id="hyphenPenalty" min="0" max="100" value="50">
+        <label>
+          Hyphen Penalty (0-100):
+          <input type="number" id="hyphenPenalty" value="50" min="0" max="100">
+          <span id="hyphenPenaltyValue">50</span>
+        </label>
+        <label>
+          Max Glyph Ext (1.0-2.0):
+          <input type="number" id="maxGlyphExt" value="1.0" min="1.0" max="2.0" step="0.05">
+          <span id="maxGlyphExtValue">1.0</span>
+        </label>
       </div>
 
       <div class="checkbox-group">
@@ -250,6 +258,7 @@ Typography is the art and technique of arranging type to make written language l
     const fontFamilyEl = document.getElementById('fontFamily');
     const hyphenateEl = document.getElementById('hyphenate');
     const hyphenPenaltyEl = document.getElementById('hyphenPenalty');
+    const maxGlyphExtEl = document.getElementById('maxGlyphExt');
     const showBreaksEl = document.getElementById('showBreaks');
     const showBaselinesEl = document.getElementById('showBaselines');
 
@@ -261,6 +270,7 @@ Typography is the art and technique of arranging type to make written language l
     const columnHeightValue = document.getElementById('columnHeightValue');
     const columnGapValue = document.getElementById('columnGapValue');
     const hyphenPenaltyValue = document.getElementById('hyphenPenaltyValue');
+    const maxGlyphExtValue = document.getElementById('maxGlyphExtValue');
 
     function render() {
       const text = textEl.value;
@@ -274,6 +284,7 @@ Typography is the art and technique of arranging type to make written language l
       const fontFamily = fontFamilyEl.value;
       const hyphenate = hyphenateEl.checked;
       const hyphenPenalty = parseInt(hyphenPenaltyEl.value);
+      const maxGlyphExt = parseFloat(maxGlyphExtEl.value);
       const showBreaks = showBreaksEl.checked;
       const showBaselines = showBaselinesEl.checked;
 
@@ -285,6 +296,7 @@ Typography is the art and technique of arranging type to make written language l
       columnHeightValue.textContent = columnHeight;
       columnGapValue.textContent = columnGap;
       hyphenPenaltyValue.textContent = hyphenPenalty;
+      maxGlyphExtValue.textContent = maxGlyphExt.toFixed(2);
 
       // Create layout engine
       const engine = new LayoutEngine(
@@ -299,6 +311,8 @@ Typography is the art and technique of arranging type to make written language l
           hyphenate: hyphenate,
           hyphenConsecutiveLimit: 3,
           hyphenPenalty: hyphenPenalty,
+          minGlyphExtension: 1.0,
+          maxGlyphExtension: maxGlyphExt,
         },
         {
           fontFamily: fontFamily,
@@ -386,7 +400,17 @@ Typography is the art and technique of arranging type to make written language l
               ctx.fillText(cluster.text + '-', x, y);
               x += clusterWidth;
             } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
-              ctx.fillText(cluster.text, x, y);
+              // Check for scaling
+              const scaleH = cluster.glyphs[0]?.scaleH || 1.0;
+              if (Math.abs(scaleH - 1.0) > 0.001) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scaleH, 1);
+                ctx.fillText(cluster.text, 0, 0);
+                ctx.restore();
+              } else {
+                ctx.fillText(cluster.text, x, y);
+              }
               x += clusterWidth;
             }
             // If suppressed, we don't increment x, effectively 'collapsing' the space.
@@ -406,7 +430,7 @@ Typography is the art and technique of arranging type to make written language l
 
     // Event listeners
     [textEl, widthEl, fontSizeEl, lineSpacingEl, columnCountEl, columnHeightEl, columnGapEl,
-      alignmentEl, fontFamilyEl, hyphenateEl, hyphenPenaltyEl, showBreaksEl, showBaselinesEl].forEach(el => {
+      alignmentEl, fontFamilyEl, hyphenateEl, hyphenPenaltyEl, maxGlyphExtEl, showBreaksEl, showBaselinesEl].forEach(el => {
         el.addEventListener('input', render);
         el.addEventListener('change', render);
       });

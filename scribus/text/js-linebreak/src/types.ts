@@ -95,6 +95,8 @@ export interface ParagraphStyle {
     hyphenate: boolean;
     hyphenConsecutiveLimit: number; // Max consecutive hyphenated lines
     hyphenPenalty: number;      // 0-100, higher = prefer word breaks over hyphens
+    minGlyphExtension: number;  // 0.0 - 1.0 (e.g. 0.95 for 5% shrink)
+    maxGlyphExtension: number;  // 1.0 - 2.0 (e.g. 1.05 for 5% stretch)
 }
 
 /**
@@ -123,6 +125,8 @@ export const defaultParagraphStyle: ParagraphStyle = {
     hyphenate: true,
     hyphenConsecutiveLimit: 3,
     hyphenPenalty: 50,  // Moderate preference for word breaks over hyphens
+    minGlyphExtension: 1.0,
+    maxGlyphExtension: 1.0,
 };
 
 /**

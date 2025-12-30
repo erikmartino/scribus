@@ -259,16 +259,13 @@ export class LineControl {
             return;
         }
 
-        // Match Scribus C++ implementation (pageitem_textframe.cpp)
-        // We recalculate widths here, explicitly excluding suppressed spaces
         let glyphNatural = 0;
         let spaceNatural = 0;
-        let spaceCount = 0; // equivalent to spaceInsertion/spaceNatural checking context usually, but here just count
+        let spaceCount = 0;
 
         for (const cluster of this.lineData.clusters) {
             if (!hasFlag(cluster, LayoutFlags.ExpandingSpace)) {
                 glyphNatural += cluster.width;
-                // If this cluster has a visible soft hyphen, include its width
                 if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
                     glyphNatural += hyphenWidth;
                 }
@@ -279,29 +276,125 @@ export class LineControl {
         }
 
         const lineWidth = this.getAvailableWidth();
-        // C++ logic often uses extensions, simplified here for "First, try expanding spaces"
-        // In simple justification (no glyph scaling), we just look at extra space.
+        let extraSpace = lineWidth - (glyphNatural + spaceNatural);
 
-        const totalNatural = glyphNatural + spaceNatural;
-        const extraSpace = lineWidth - totalNatural;
-
-        if (extraSpace <= 0 || spaceCount === 0) {
+        if (extraSpace === 0) {
             return;
         }
 
-        // Calculate space extension
-        const spaceExtension = extraSpace / spaceCount;
+        let glyphExtension = 0;
+        let spaceExtension = 0;
 
-        // Apply extension to each space
-        for (const cluster of this.lineData.clusters) {
-            if (hasFlag(cluster, LayoutFlags.ExpandingSpace) &&
-                !hasFlag(cluster, LayoutFlags.SuppressSpace)) {
-                cluster.extraWidth = spaceExtension;
+        // Strategy 1: Try to fit by scaling glyphs (if enabled)
+        // Check if we can stretch/shrink glyphs to fit
+        const minGlyphScale = this.style.minGlyphExtension;
+        const maxGlyphScale = this.style.maxGlyphExtension;
+
+        // If extraSpace > 0, we need to stretch. Check if max stretch covers it.
+        // If extraSpace < 0, we need to shrink. Check if min shrink covers it.
+        // Note: extraSpace = Target - Natural.
+        // Target = Natural + extraSpace.
+        // ExtendedWidth = glyphNatural * scale + spaceNatural.
+
+        if (extraSpace > 0) {
+            // Need to stretch
+            const maxGlyphWidth = glyphNatural * maxGlyphScale;
+            const maxTotalWidth = maxGlyphWidth + spaceNatural;
+
+            if (lineWidth <= maxTotalWidth && glyphNatural > 0 && maxGlyphScale > 1.0) {
+                // We can fit by only stretching glyphs (or partially)
+                // lineWidth = glyphNatural * (1 + ext) + spaceNatural
+                // lineWidth - spaceNatural = glyphNatural * (1 + ext)
+                // (lineWidth - spaceNatural) / glyphNatural = 1 + ext
+                // ext = ((lineWidth - spaceNatural) / glyphNatural) - 1
+                glyphExtension = ((lineWidth - spaceNatural) / glyphNatural) - 1;
+                spaceExtension = 0;
+            } else {
+                // Max out glyph stretch, rest goes to spaces
+                if (maxGlyphScale > 1.0) {
+                    glyphExtension = maxGlyphScale - 1;
+                }
+
+                // Remaining space for spaces
+                const currentWidth = (glyphNatural * (1 + glyphExtension)) + spaceNatural;
+                const remainingSpace = lineWidth - currentWidth;
+
+                if (spaceCount > 0) {
+                    spaceExtension = remainingSpace / spaceCount; // Additive for spaces in our model
+                    // Scribus does multiplicative for spaces too usually but here we use additive extraWidth for spaces
+                    // The C++ code uses: spaceExtension = (lineData.width - glyphNatural * (1 + glyphExtension)) / spaceNatural - 1;
+                    // which implies it scales space width.
+                    // But our `extraWidth` is additive. 
+                    // Let's stick to additive for spaces for now as it's cleaner for "width + extra", 
+                    // unless we want to change space scaling to be multiplicative too.
+                    // Actually, let's keep spaceExtension as additive pixel value per space for consistency with previous code
+                    // Wait, previous code was: cluster.extraWidth = spaceExtension; where spaceExtension = extraSpace / spaceCount.
+                    // So yes, additive.
+                }
+            }
+        } else {
+            // Need to shrink (extraSpace < 0)
+            const minGlyphWidth = glyphNatural * minGlyphScale;
+            const minTotalWidth = minGlyphWidth + spaceNatural;
+
+            if (lineWidth >= minTotalWidth && glyphNatural > 0 && minGlyphScale < 1.0) {
+                // We can fit by shrinking glyphs
+                glyphExtension = ((lineWidth - spaceNatural) / glyphNatural) - 1;
+                spaceExtension = 0;
+            } else {
+                // Max out shrink?
+                // Usually we don't shrink spaces negatively in basic justification, 
+                // but if we are overflowing we might want to shrink glyphs as much as allowed.
+                if (minGlyphScale < 1.0) {
+                    glyphExtension = minGlyphScale - 1;
+                }
+                // If still overflowing, we just overflow? Or shrink spaces?
+                // Standard Justify usually only expands. But "Force Justify" or narrow columns might need shrink.
+                // For now, let's just apply the max shrink.
             }
         }
 
-        // Update natural width to reflect the filled line
-        this.lineData.naturalWidth = lineWidth;
+        // Apply extensions
+        const glyphScale = 1 + glyphExtension;
+
+        // Recalculate naturalWidth to be the final width
+        let finalWidth = 0;
+
+        for (const cluster of this.lineData.clusters) {
+            if (!hasFlag(cluster, LayoutFlags.ExpandingSpace)) {
+                // Apply glyph scaling
+                // We update the cluster's width effectively? 
+                // Or just set a scale property? 
+                // Scribus sets scaleH.
+                // We need to support scaleH in GlyphCluster/GlyphLayout.
+                // Taking simple approach: modify the glyphs in the cluster.
+
+                if (glyphScale !== 1.0) {
+                    for (const glyph of cluster.glyphs) {
+                        glyph.scaleH *= glyphScale;
+                        glyph.xadvance *= glyphScale;
+                    }
+                    cluster.width *= glyphScale;
+                }
+                finalWidth += cluster.width;
+
+                if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
+                    // Hyphen width should also be scaled? Usually yes if it's a glyph.
+                    // But we passed fixed hyphenWidth. Let's assume it scales too.
+                    finalWidth += hyphenWidth * glyphScale;
+                }
+
+            } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+                // Apply space extension
+                cluster.extraWidth += spaceExtension;
+                finalWidth += cluster.width + cluster.extraWidth;
+            } else {
+                // Suppressed space
+                // finalWidth += 0;
+            }
+        }
+
+        this.lineData.naturalWidth = finalWidth;
     }
 
     /**
