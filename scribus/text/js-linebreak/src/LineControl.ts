@@ -252,8 +252,9 @@ export class LineControl {
 
     /**
      * Justify the current line by distributing extra space
+     * @param hyphenWidth - Width of the soft hyphen if present (defaults to 0)
      */
-    justifyLine(): void {
+    justifyLine(hyphenWidth: number = 0): void {
         if (this.lineData.width <= 0 || this.clusters.length === 0) {
             return;
         }
@@ -267,6 +268,10 @@ export class LineControl {
         for (const cluster of this.lineData.clusters) {
             if (!hasFlag(cluster, LayoutFlags.ExpandingSpace)) {
                 glyphNatural += cluster.width;
+                // If this cluster has a visible soft hyphen, include its width
+                if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
+                    glyphNatural += hyphenWidth;
+                }
             } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
                 spaceNatural += cluster.width;
                 spaceCount++;

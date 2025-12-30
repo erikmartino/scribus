@@ -213,7 +213,7 @@ export class LayoutEngine {
         }
 
         if (lineControl.style.alignment === Alignment.Justified) {
-            lineControl.justifyLine();
+            lineControl.justifyLine(this.getHyphenWidth());
         } else {
             lineControl.alignLine();
         }
