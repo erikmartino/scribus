@@ -220,7 +220,8 @@ export class LineControl {
      */
     finishLine(endX: number): void {
         this.lineData.lastCluster = this.breakIndex;
-        // this.lineData.naturalWidth = this.breakXPos - this.lineData.x;
+        // In C++, naturalWidth is calculated from breakXPos which includes all widths up to break
+        this.lineData.naturalWidth = this.breakXPos - this.lineData.x;
         this.lineData.width = endX - this.lineData.x;
 
         // Calculate how many clusters to include (bounded by actual array length)
@@ -229,25 +230,6 @@ export class LineControl {
             this.clusters.length
         );
         this.lineData.clusters = this.clusters.slice(0, Math.max(0, clusterCount));
-
-        // Recalculate natural width excluding suppressed spaces
-        this.lineData.naturalWidth = 0;
-        for (const cluster of this.lineData.clusters) {
-            if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
-                this.lineData.naturalWidth += cluster.width;
-            } else {
-                // For suppressed spaces, we don't add their width to naturalWidth
-            }
-            // Add extraWidth if it's not suppressed? 
-            // Usually suppressed spaces have width but no extraWidth yet (justification hasn't happened).
-            // But we should track naturalWidth as sum of visible widths.
-        }
-
-        // Wait, breakXPos included all widths up to the break.
-        // If we simply subtract suppressed widths from breakXPos - startX?
-        // But breakXPos acts as if spaces are there.
-        // Let's rely on summing implementation which is safer.
-        // Also need to account for implicit breaks or anything? No, clusters array is fine.
 
         this.maxShrink = 0;
         this.maxStretch = 0;
@@ -276,28 +258,30 @@ export class LineControl {
             return;
         }
 
-        const lineWidth = this.getAvailableWidth();
-        const naturalWidth = this.lineData.naturalWidth;
-        const extraSpace = lineWidth - naturalWidth;
-
-        if (extraSpace <= 0) {
-            return; // Line is already full or overfull
-        }
-
-        // Count expanding spaces
-        let spaceCount = 0;
-        let spaceWidth = 0;
+        // Match Scribus C++ implementation (pageitem_textframe.cpp)
+        // We recalculate widths here, explicitly excluding suppressed spaces
+        let glyphNatural = 0;
+        let spaceNatural = 0;
+        let spaceCount = 0; // equivalent to spaceInsertion/spaceNatural checking context usually, but here just count
 
         for (const cluster of this.lineData.clusters) {
-            if (hasFlag(cluster, LayoutFlags.ExpandingSpace) &&
-                !hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+            if (!hasFlag(cluster, LayoutFlags.ExpandingSpace)) {
+                glyphNatural += cluster.width;
+            } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+                spaceNatural += cluster.width;
                 spaceCount++;
-                spaceWidth += cluster.width;
             }
         }
 
-        if (spaceCount === 0) {
-            return; // No spaces to expand
+        const lineWidth = this.getAvailableWidth();
+        // C++ logic often uses extensions, simplified here for "First, try expanding spaces"
+        // In simple justification (no glyph scaling), we just look at extra space.
+
+        const totalNatural = glyphNatural + spaceNatural;
+        const extraSpace = lineWidth - totalNatural;
+
+        if (extraSpace <= 0 || spaceCount === 0) {
+            return;
         }
 
         // Calculate space extension
@@ -311,7 +295,7 @@ export class LineControl {
             }
         }
 
-        // Update natural width
+        // Update natural width to reflect the filled line
         this.lineData.naturalWidth = lineWidth;
     }
 
