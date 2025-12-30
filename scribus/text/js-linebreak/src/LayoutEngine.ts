@@ -131,7 +131,10 @@ export class LayoutEngine {
             const wouldOverflow = projectedXPos - lineControl.maxShrink >= effectiveRight;
 
             // Handle soft break
-            if (!lineControl.isEmpty && lineControl.breakIndex >= 0 && wouldOverflow) {
+            // Allow expanding spaces (whitespace) to overflow/hang
+            const isExpandingSpace = hasFlag(cluster, LayoutFlags.ExpandingSpace);
+
+            if (!lineControl.isEmpty && lineControl.breakIndex >= 0 && wouldOverflow && !isExpandingSpace) {
                 this.finalizeLine(lineControl, lines);
                 isFirstLine = false;
 
@@ -195,15 +198,18 @@ export class LayoutEngine {
     }
 
     private finalizeLine(lineControl: LineControl, lines: LineSpec[]): void {
+        const breakClusterIndex = lineControl.breakIndex - lineControl.lineData.firstCluster;
+        this.suppressTrailingSpaces(lineControl.clusters, breakClusterIndex);
         const endX = lineControl.colRight - lineControl.style.rightMargin;
         lineControl.finishLine(endX);
 
         // Set SoftHyphenVisible flag if we broke at a hyphenation point
         if (lineControl.breakIsHyphenation && lineControl.breakIndex >= 0) {
-            const breakClusterIndex = lineControl.breakIndex - lineControl.lineData.firstCluster;
             if (breakClusterIndex >= 0 && breakClusterIndex < lineControl.lineData.clusters.length) {
                 setFlag(lineControl.lineData.clusters[breakClusterIndex], LayoutFlags.SoftHyphenVisible);
             }
+            // Add hyphen width to naturalWidth so justification knows true content width
+            lineControl.lineData.naturalWidth += this.getHyphenWidth();
         }
 
         if (lineControl.style.alignment === Alignment.Justified) {
@@ -310,3 +316,4 @@ export class LayoutEngine {
         return { columns, overflow, lastCharIndex: currentClusterIndex - 1 };
     }
 }
+

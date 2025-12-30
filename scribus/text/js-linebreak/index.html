@@ -315,6 +315,9 @@ Typography is the art and technique of arranging type to make written language l
       const result = engine.layoutColumns(text, columnCount, width, columnHeight, columnGap);
       const layoutTime = performance.now() - startTime;
 
+      // Expose result for E2E testing
+      window.layoutResult = result;
+
       // Update canvas size to fit columns
       canvas.width = Math.max(800, width);
       canvas.height = columnHeight + 40;
@@ -381,11 +384,13 @@ Typography is the art and technique of arranging type to make written language l
 
             if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
               ctx.fillText(cluster.text + '-', x, y);
+              x += clusterWidth;
             } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
               ctx.fillText(cluster.text, x, y);
+              x += clusterWidth;
             }
-
-            x += clusterWidth;
+            // If suppressed, we don't increment x, effectively 'collapsing' the space.
+            // But we might still want to draw debug markers at the current x?
           }
         }
 

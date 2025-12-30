@@ -135,16 +135,44 @@ export class LineControl {
         const penalty = isHyphenation ? (this.style.hyphenPenalty / 100) * 100 : 0;
 
         // If we already have a break, compare quality
-        if (this.breakIndex >= 0) {
-            // Calculate "badness" for each break
-            // Lower badness = better break
-            // Badness = distance from ideal right edge + penalty
-            const oldBadness = Math.abs(effectiveRight - this.breakXPos) + this.breakPenalty;
-            const newBadness = Math.abs(effectiveRight - xPos) + penalty;
+        // Check if this is an expanding space (hanging)
+        let isHangingSpace = false;
+        if (this.lineData.clusters.length > 0) {
+            // Accessing global index is hard, but we can check the recently added cluster
+            // which is the last one in this.clusters
+            // Wait, 'index' passed here is global. 
+            // Logic in LayoutEngine calls this immediately after adding.
+            // So this.clusters[this.clusters.length - 1] is the current cluster?
+            // No, LayoutEngine adds THEN calls rememberBreak.
+            // So yes, key is last cluster.
+            const lastCluster = this.clusters[this.clusters.length - 1];
+            if (lastCluster && hasFlag(lastCluster, LayoutFlags.ExpandingSpace)) {
+                isHangingSpace = true;
+            }
+        }
 
-            // Keep the old break if it's better (lower badness)
-            if (oldBadness <= newBadness) {
-                return;
+        // If we already have a break
+        if (this.breakIndex >= 0) {
+            // Special handling for hanging leading/trailing spaces:
+            // If the new break is a space, and we are at or past the margin (hanging),
+            // and the previous break was also a space (or not), we generally want to extend the hang
+            // to capture as many spaces as possible.
+            // Or simpler: If we are hanging (xPos > effectiveRight) and this is a space, ALWAYS update.
+            // This ensures we eat all trailing spaces.
+
+            if (isHangingSpace && xPos >= effectiveRight) {
+                // Always take it
+            } else {
+                // Calculate "badness" for each break
+                // Lower badness = better break
+                // Badness = distance from ideal right edge + penalty
+                const oldBadness = Math.abs(effectiveRight - this.breakXPos) + this.breakPenalty;
+                const newBadness = Math.abs(effectiveRight - xPos) + penalty;
+
+                // Keep the old break if it's better (lower badness)
+                if (oldBadness <= newBadness) {
+                    return;
+                }
             }
         }
 
@@ -192,7 +220,7 @@ export class LineControl {
      */
     finishLine(endX: number): void {
         this.lineData.lastCluster = this.breakIndex;
-        this.lineData.naturalWidth = this.breakXPos - this.lineData.x;
+        // this.lineData.naturalWidth = this.breakXPos - this.lineData.x;
         this.lineData.width = endX - this.lineData.x;
 
         // Calculate how many clusters to include (bounded by actual array length)
@@ -201,6 +229,25 @@ export class LineControl {
             this.clusters.length
         );
         this.lineData.clusters = this.clusters.slice(0, Math.max(0, clusterCount));
+
+        // Recalculate natural width excluding suppressed spaces
+        this.lineData.naturalWidth = 0;
+        for (const cluster of this.lineData.clusters) {
+            if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+                this.lineData.naturalWidth += cluster.width;
+            } else {
+                // For suppressed spaces, we don't add their width to naturalWidth
+            }
+            // Add extraWidth if it's not suppressed? 
+            // Usually suppressed spaces have width but no extraWidth yet (justification hasn't happened).
+            // But we should track naturalWidth as sum of visible widths.
+        }
+
+        // Wait, breakXPos included all widths up to the break.
+        // If we simply subtract suppressed widths from breakXPos - startX?
+        // But breakXPos acts as if spaces are there.
+        // Let's rely on summing implementation which is safer.
+        // Also need to account for implicit breaks or anything? No, clusters array is fine.
 
         this.maxShrink = 0;
         this.maxStretch = 0;
