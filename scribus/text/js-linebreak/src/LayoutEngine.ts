@@ -198,6 +198,14 @@ export class LayoutEngine {
         const endX = lineControl.colRight - lineControl.style.rightMargin;
         lineControl.finishLine(endX);
 
+        // Set SoftHyphenVisible flag if we broke at a hyphenation point
+        if (lineControl.breakIsHyphenation && lineControl.breakIndex >= 0) {
+            const breakClusterIndex = lineControl.breakIndex - lineControl.lineData.firstCluster;
+            if (breakClusterIndex >= 0 && breakClusterIndex < lineControl.lineData.clusters.length) {
+                setFlag(lineControl.lineData.clusters[breakClusterIndex], LayoutFlags.SoftHyphenVisible);
+            }
+        }
+
         if (lineControl.style.alignment === Alignment.Justified) {
             lineControl.justifyLine();
         } else {
