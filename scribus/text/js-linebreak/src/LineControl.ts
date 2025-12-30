@@ -135,16 +135,44 @@ export class LineControl {
         const penalty = isHyphenation ? (this.style.hyphenPenalty / 100) * 100 : 0;
 
         // If we already have a break, compare quality
-        if (this.breakIndex >= 0) {
-            // Calculate "badness" for each break
-            // Lower badness = better break
-            // Badness = distance from ideal right edge + penalty
-            const oldBadness = Math.abs(effectiveRight - this.breakXPos) + this.breakPenalty;
-            const newBadness = Math.abs(effectiveRight - xPos) + penalty;
+        // Check if this is an expanding space (hanging)
+        let isHangingSpace = false;
+        if (this.lineData.clusters.length > 0) {
+            // Accessing global index is hard, but we can check the recently added cluster
+            // which is the last one in this.clusters
+            // Wait, 'index' passed here is global. 
+            // Logic in LayoutEngine calls this immediately after adding.
+            // So this.clusters[this.clusters.length - 1] is the current cluster?
+            // No, LayoutEngine adds THEN calls rememberBreak.
+            // So yes, key is last cluster.
+            const lastCluster = this.clusters[this.clusters.length - 1];
+            if (lastCluster && hasFlag(lastCluster, LayoutFlags.ExpandingSpace)) {
+                isHangingSpace = true;
+            }
+        }
 
-            // Keep the old break if it's better (lower badness)
-            if (oldBadness <= newBadness) {
-                return;
+        // If we already have a break
+        if (this.breakIndex >= 0) {
+            // Special handling for hanging leading/trailing spaces:
+            // If the new break is a space, and we are at or past the margin (hanging),
+            // and the previous break was also a space (or not), we generally want to extend the hang
+            // to capture as many spaces as possible.
+            // Or simpler: If we are hanging (xPos > effectiveRight) and this is a space, ALWAYS update.
+            // This ensures we eat all trailing spaces.
+
+            if (isHangingSpace && xPos >= effectiveRight) {
+                // Always take it
+            } else {
+                // Calculate "badness" for each break
+                // Lower badness = better break
+                // Badness = distance from ideal right edge + penalty
+                const oldBadness = Math.abs(effectiveRight - this.breakXPos) + this.breakPenalty;
+                const newBadness = Math.abs(effectiveRight - xPos) + penalty;
+
+                // Keep the old break if it's better (lower badness)
+                if (oldBadness <= newBadness) {
+                    return;
+                }
             }
         }
 
@@ -192,6 +220,7 @@ export class LineControl {
      */
     finishLine(endX: number): void {
         this.lineData.lastCluster = this.breakIndex;
+        // In C++, naturalWidth is calculated from breakXPos which includes all widths up to break
         this.lineData.naturalWidth = this.breakXPos - this.lineData.x;
         this.lineData.width = endX - this.lineData.x;
 
@@ -223,34 +252,41 @@ export class LineControl {
 
     /**
      * Justify the current line by distributing extra space
+     * @param hyphenWidth - Width of the soft hyphen if present (defaults to 0)
      */
-    justifyLine(): void {
+    justifyLine(hyphenWidth: number = 0): void {
         if (this.lineData.width <= 0 || this.clusters.length === 0) {
             return;
         }
 
-        const lineWidth = this.getAvailableWidth();
-        const naturalWidth = this.lineData.naturalWidth;
-        const extraSpace = lineWidth - naturalWidth;
-
-        if (extraSpace <= 0) {
-            return; // Line is already full or overfull
-        }
-
-        // Count expanding spaces
-        let spaceCount = 0;
-        let spaceWidth = 0;
+        // Match Scribus C++ implementation (pageitem_textframe.cpp)
+        // We recalculate widths here, explicitly excluding suppressed spaces
+        let glyphNatural = 0;
+        let spaceNatural = 0;
+        let spaceCount = 0; // equivalent to spaceInsertion/spaceNatural checking context usually, but here just count
 
         for (const cluster of this.lineData.clusters) {
-            if (hasFlag(cluster, LayoutFlags.ExpandingSpace) &&
-                !hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+            if (!hasFlag(cluster, LayoutFlags.ExpandingSpace)) {
+                glyphNatural += cluster.width;
+                // If this cluster has a visible soft hyphen, include its width
+                if (hasFlag(cluster, LayoutFlags.SoftHyphenVisible)) {
+                    glyphNatural += hyphenWidth;
+                }
+            } else if (!hasFlag(cluster, LayoutFlags.SuppressSpace)) {
+                spaceNatural += cluster.width;
                 spaceCount++;
-                spaceWidth += cluster.width;
             }
         }
 
-        if (spaceCount === 0) {
-            return; // No spaces to expand
+        const lineWidth = this.getAvailableWidth();
+        // C++ logic often uses extensions, simplified here for "First, try expanding spaces"
+        // In simple justification (no glyph scaling), we just look at extra space.
+
+        const totalNatural = glyphNatural + spaceNatural;
+        const extraSpace = lineWidth - totalNatural;
+
+        if (extraSpace <= 0 || spaceCount === 0) {
+            return;
         }
 
         // Calculate space extension
@@ -264,7 +300,7 @@ export class LineControl {
             }
         }
 
-        // Update natural width
+        // Update natural width to reflect the filled line
         this.lineData.naturalWidth = lineWidth;
     }
 

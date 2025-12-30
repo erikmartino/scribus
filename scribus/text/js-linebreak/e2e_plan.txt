@@ -1,0 +1,30 @@
+
+// This script is meant to be run by the browser_subagent.
+// It navigates to the demo app, sets justified alignment, and captures a screenshot/inspects canvas.
+
+// Since the demo uses a canvas, we can't easily inspect DOM elements for text position.
+// However, the `render` function in `index.html` exposes `result` if we can access it, 
+// OR we can visually inspect via screenshot, OR we can inject code to validate.
+
+// The easiest way to validate programmatically is to inject a script that accesses the `LayoutEngine` 
+// (or the global scope if exposed) or simply re-runs the logic in the browser context and asserts.
+// But the user asked to "do tests in an e2e test on the demo application".
+// This implies they want to see the app running.
+
+// Our browser_subagent can "see" via screenshots, but programmatic verification is better.
+// The `index.html` is a module, so variables aren't global.
+// But we can interact with the inputs.
+
+// Plan:
+// 1. Open the page
+// 2. Set Alignment to "Justified"
+// 3. Set text to something known "A B A B..."
+// 4. Click/Trigger render
+// 5. Inspect the canvas? No, that's hard. 
+// 6. We can check `stats` element which shows "Overflow: Yes/No".
+// 7. But we need to verify ALIGNMENT.
+//    - Visually: screenshot.
+//    - Logic: We can modify `index.html` temporarily to expose the `result` object to window, 
+//      then the browser agent can read `window.layoutResult` and verify the `lines` widths.
+
+// Let's modify index.html to expose result.
