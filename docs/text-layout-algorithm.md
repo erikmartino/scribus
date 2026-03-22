@@ -50,13 +50,7 @@ Each run is then passed to HarfBuzz for shaping, producing `GlyphCluster` arrays
 
 ## Phase 3: Shaping
 
-A `GlyphCluster` represents one or more glyphs that map to one or more input characters. Each cluster stores:
-
-- A pointer to its `CharStyle`
-- Layout flags (`DropCap`, `HyphenationPossible`, `StartOfLine`, `SuppressSpace`, etc.)
-- A list of individual glyphs with advances
-- Horizontal and vertical scale factors
-- X/Y offsets and extra width (for justification)
+The shaping phase produces `GlyphCluster` objects — the fundamental unit connecting input characters to output glyphs. See [glyph-cluster.md](glyph-cluster.md) for a detailed description with field reference and examples.
 
 Shaped results are cached per-paragraph in `ShapedTextCache` (inside `StoryText`). Only edited paragraphs are re-shaped, which is critical for performance in long documents.
 
