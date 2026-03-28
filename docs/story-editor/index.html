@@ -203,20 +203,20 @@
   <div class="controls">
     <label>Box width: <input type="range" id="box-width" min="420" max="1120" value="1040"> <span
         id="box-width-val">1040</span>px</label>
-    <label>Font size: <input type="range" id="font-size" min="12" max="48" value="22"> <span
+    <label>Font size: <input type="range" id="font-size" min="12" max="96" value="22"> <span
         id="font-size-val">22</span>px</label>
     <label>Line height: <input type="range" id="line-height" min="100" max="200" value="140"> <span
         id="line-height-val">140</span>%</label>
-    <label>Current paragraph font size (px):
-      <input type="number" id="para-font-size" min="8" max="96" step="1" value="22">
+    <label>Paragraph: <span id="current-para">1</span></label>
+    <label>Font:
+      <select id="font-family">
+        <option value="">EB Garamond (Default)</option>
+        <option value="Merriweather">Merriweather</option>
+        <option value="Roboto">Roboto</option>
+        <option value="Lora">Lora</option>
+        <option value="Open Sans">Open Sans</option>
+      </select>
     </label>
-    <label>Current paragraph:
-      <span id="current-para">1</span>
-    </label>
-    <div class="button-row">
-      <button type="button" id="apply-para-font">Apply to paragraph</button>
-      <button type="button" id="clear-para-font">Reset paragraph</button>
-    </div>
     <div class="button-row">
       <button type="button" id="toggle-bold"><strong>B</strong></button>
       <button type="button" id="toggle-italic"><em>I</em></button>
@@ -420,14 +420,12 @@
       const container = document.getElementById('svg-container');
       const boxWidthInput = document.getElementById('box-width');
       const fontSizeInput = document.getElementById('font-size');
+      const fontFamilySelect = document.getElementById('font-family');
       const lineHeightInput = document.getElementById('line-height');
-      const paraFontSizeInput = document.getElementById('para-font-size');
       const currentParaEl = document.getElementById('current-para');
-      const applyParaFontBtn = document.getElementById('apply-para-font');
-      const clearParaFontBtn = document.getElementById('clear-para-font');
       const toggleBoldBtn = document.getElementById('toggle-bold');
       const toggleItalicBtn = document.getElementById('toggle-italic');
-      const defaultFontSize = +fontSizeInput.value;
+      const defaultFontSize = 22;
       const editor = new EditorState(extractParagraphs(sampleEl));
       const paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
       const hasBeforeInput = 'onbeforeinput' in document;
@@ -570,22 +568,30 @@
 
       async function update() {
         const boxWidth = +boxWidthInput.value;
-        const fontSize = +fontSizeInput.value;
         const lineHeightPct = +lineHeightInput.value;
 
         document.getElementById('box-width-val').textContent = boxWidth;
-        document.getElementById('font-size-val').textContent = fontSize;
         document.getElementById('line-height-val').textContent = lineHeightPct;
 
         const nextParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
         reconcileParagraphStyles(paragraphStyles, prevParagraphTexts, nextParagraphTexts);
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length, fontSize);
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length, defaultFontSize);
         prevParagraphTexts = nextParagraphTexts;
         const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', fontSize);
+        const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', defaultFontSize);
+        
+        document.getElementById('font-size-val').textContent = String(Math.round(currentStyle.fontSize));
+        if (fontSizeInput.value !== String(Math.round(currentStyle.fontSize))) {
+          fontSizeInput.value = String(Math.round(currentStyle.fontSize));
+        }
+        
+        const fam = currentStyle.fontFamily || "";
+        if (fontFamilySelect.value !== fam) {
+           fontFamilySelect.value = fam;
+        }
+
         const typingStyle = editor.getTypingStyle();
         currentParaEl.textContent = String(currentParaIndex + 1);
-        paraFontSizeInput.value = String(Math.round(currentStyle.fontSize));
         toggleBoldBtn.classList.toggle('is-active', !!typingStyle.bold);
         toggleItalicBtn.classList.toggle('is-active', !!typingStyle.italic);
 
@@ -600,28 +606,28 @@
           { x: box1Width + box2Width + gap * 2, y: 66, width: box3Width, height: 540 },
         ];
 
-        const paragraphLayoutStyles = buildParagraphLayoutStyles(fontSize, paragraphStyles);
+        const paragraphLayoutStyles = buildParagraphLayoutStyles(defaultFontSize, paragraphStyles);
 
         const { svg, lineMap } = await engine.renderToContainer(
           container,
           editor.story,
           boxes,
-          fontSize,
+          defaultFontSize,
           lineHeightPct,
           paragraphLayoutStyles,
         );
         // NOTE: Demo keeps implementation simple and does full re-layout/re-render on each edit.
         // Production editor should add paragraph-level shaping/layout cache and incremental updates.
         svg.setAttribute('style', 'user-select:none');
-        renderSelection(svg, lineMap, editor.selection, fontSize);
+        renderSelection(svg, lineMap, editor.selection, defaultFontSize);
 
         if (cursor) {
           cursor.setStory(editor.story);
-          cursor.updateLayout(svg, lineMap, fontSize);
+          cursor.updateLayout(svg, lineMap, defaultFontSize);
           cursor.moveTo(editor.cursor);
           cursor.setVisible(!editor.hasSelection());
         } else {
-          cursor = new TextCursor(svg, editor.story, lineMap, fontSize);
+          cursor = new TextCursor(svg, editor.story, lineMap, defaultFontSize);
           cursor.moveTo(editor.cursor);
           cursor.setVisible(!editor.hasSelection());
         }
@@ -844,21 +850,21 @@
       });
 
       boxWidthInput.addEventListener('input', async () => await update());
-      fontSizeInput.addEventListener('input', async () => await update());
       lineHeightInput.addEventListener('input', async () => await update());
-      applyParaFontBtn.addEventListener('click', async () => {
-        const px = Number(paraFontSizeInput.value);
-        if (!Number.isFinite(px) || px <= 0) return;
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length, +fontSizeInput.value);
+
+      fontSizeInput.addEventListener('input', async () => {
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length, defaultFontSize);
         const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const base = paragraphStyles[pi] || defaultParagraphStyle('normal', +fontSizeInput.value);
-        paragraphStyles[pi] = { ...base, fontSize: px };
+        const base = paragraphStyles[pi] || defaultParagraphStyle('normal', defaultFontSize);
+        paragraphStyles[pi] = { ...base, fontSize: +fontSizeInput.value };
         await update();
       });
-      clearParaFontBtn.addEventListener('click', async () => {
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length, +fontSizeInput.value);
+
+      fontFamilySelect.addEventListener('change', async () => {
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length, defaultFontSize);
         const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        paragraphStyles[pi] = defaultParagraphStyle('normal', +fontSizeInput.value);
+        const base = paragraphStyles[pi] || defaultParagraphStyle('normal', defaultFontSize);
+        paragraphStyles[pi] = { ...base, fontFamily: fontFamilySelect.value };
         await update();
       });
 
