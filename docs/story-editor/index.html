@@ -301,7 +301,7 @@
       const fontSizeInput = document.getElementById('font-size');
       const lineHeightInput = document.getElementById('line-height');
       const editor = new EditorState(extractParagraphs(sampleEl));
-      const hasBeforeInput = container.isContentEditable && ('onbeforeinput' in container);
+      const hasBeforeInput = 'onbeforeinput' in document;
 
       let cursor = null;
       let selecting = false;
@@ -423,6 +423,8 @@
         ];
 
         const { svg, lineMap } = engine.renderToContainer(container, editor.story, boxes, fontSize, lineHeightPct);
+        // NOTE: Demo keeps implementation simple and does full re-layout/re-render on each edit.
+        // Production editor should add paragraph-level shaping/layout cache and incremental updates.
         svg.setAttribute('style', 'user-select:none');
         renderSelection(svg, lineMap, editor.selection, fontSize);
 
@@ -557,11 +559,32 @@
           return;
         }
 
-        if ((e.metaKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) ||
-            (e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.altKey)) {
+        if (e.metaKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
           e.preventDefault();
           const side = e.key === 'ArrowLeft' ? 'start' : 'end';
-          const target = paragraphBoundaryForCursor(editor.story, editor.cursor, side);
+          const target = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, side);
+          if (target) {
+            editor.moveCursor(target, e.shiftKey);
+            cursor.moveTo(editor.cursor);
+            update();
+          }
+          return;
+        }
+
+        if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
+          e.preventDefault();
+          const target = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, 'start');
+          if (target) {
+            editor.moveCursor(target, e.shiftKey);
+            cursor.moveTo(editor.cursor);
+            update();
+          }
+          return;
+        }
+
+        if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'e' || e.key === 'E')) {
+          e.preventDefault();
+          const target = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, 'end');
           if (target) {
             editor.moveCursor(target, e.shiftKey);
             cursor.moveTo(editor.cursor);
@@ -636,6 +659,9 @@
       boxWidthInput.addEventListener('input', update);
       fontSizeInput.addEventListener('input', update);
       lineHeightInput.addEventListener('input', update);
+      window.addEventListener('beforeunload', () => {
+        if (cursor) cursor.destroy();
+      });
 
       update();
     }

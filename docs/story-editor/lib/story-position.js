@@ -188,7 +188,7 @@ export function pointToPos(svgX, svgY, lineMap) {
   // Group lines by box
   const boxGroups = new Map();
   for (const line of lineMap) {
-    const key = `${line.colX},${line.boxY}`;
+    const key = `${line.colX},${line.boxY},${line.boxWidth},${line.boxHeight}`;
     if (!boxGroups.has(key)) boxGroups.set(key, []);
     boxGroups.get(key).push(line);
   }

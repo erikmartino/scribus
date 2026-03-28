@@ -53,6 +53,10 @@ export class SvgRenderer {
     this._padding = padding;
   }
 
+  get padding() {
+    return this._padding;
+  }
+
   /**
    * Render lines into arbitrarily placed boxes.
    *
@@ -74,8 +78,8 @@ export class SvgRenderer {
     }
 
     const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('width', maxX);
-    svg.setAttribute('height', maxY);
+    svg.setAttribute('width', String(maxX));
+    svg.setAttribute('height', String(maxY));
     svg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
 
     // Draw box backgrounds

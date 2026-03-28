@@ -131,6 +131,11 @@ export function buildPositions(entry, baseX) {
         : group.endCl;
       const charSlices = resolveGlyphPositions(g, nextCl, text, hyphToOrig);
 
+      if (charSlices.length === 0) {
+        wx += g.ax;
+        continue;
+      }
+
       for (const { origPos, width } of charSlices) {
         addPos(origPos, wx);
         wx += width;
@@ -149,8 +154,6 @@ export function buildPositions(entry, baseX) {
 
   if (isLastInPara) {
     addPos(origLen, endX);
-  } else if (entry.endChar < text.length && text[entry.endChar] === ' ') {
-    addPos(hyphToOrig[entry.endChar], endX);
   } else {
     addPos(hyphToOrig[entry.endChar], endX);
   }

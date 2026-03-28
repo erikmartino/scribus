@@ -26,7 +26,7 @@ function paragraphText(paragraphRuns) {
 }
 
 function isWordChar(ch) {
-  return /[A-Za-z0-9_]/.test(ch);
+  return /[\p{L}\p{N}_]/u.test(ch);
 }
 
 function findWordRange(text, offset) {
@@ -355,6 +355,7 @@ export class EditorState {
    */
   applyOperation(op, payload = {}) {
     if (op === 'insertText') {
+      // Typing over a selection is a direct replace operation and can return early.
       if (this._replaceSelectionIfAny(payload.text ?? '')) return true;
     } else if (op === 'deleteBackward' || op === 'deleteForward' || op === 'insertParagraphBreak') {
       if (this._replaceSelectionIfAny('')) return true;

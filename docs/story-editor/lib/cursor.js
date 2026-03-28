@@ -95,10 +95,13 @@ export class TextCursor {
 
   /** @param {MouseEvent} event */
   handleClick(event) {
-    const pt = this._svg.createSVGPoint();
-    pt.x = event.clientX;
-    pt.y = event.clientY;
-    const svgPt = pt.matrixTransform(this._svg.getScreenCTM().inverse());
+    const ctm = this._svg.getScreenCTM();
+    if (!ctm) return;
+    const PointCtor = typeof DOMPoint === 'function'
+      ? DOMPoint
+      : (typeof window !== 'undefined' && typeof window.DOMPoint === 'function' ? window.DOMPoint : null);
+    if (!PointCtor) return;
+    const svgPt = new PointCtor(event.clientX, event.clientY).matrixTransform(ctm.inverse());
 
     const pos = pointToPos(svgPt.x, svgPt.y, this._lineMap);
     this._stickyX = null;

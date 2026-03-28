@@ -55,14 +55,18 @@ export function normalizeStory(story) {
   return normalized;
 }
 
-export function clampPos(story, pos) {
-  const s = normalizeStory(story);
+function clampPosNormalized(story, pos) {
   const p = Number.isInteger(pos?.paraIndex) ? pos.paraIndex : 0;
-  const paraIndex = Math.max(0, Math.min(s.length - 1, p));
-  const maxOffset = paraTextLength(s, paraIndex);
+  const paraIndex = Math.max(0, Math.min(story.length - 1, p));
+  const maxOffset = paraTextLength(story, paraIndex);
   const c = Number.isInteger(pos?.charOffset) ? pos.charOffset : 0;
   const charOffset = Math.max(0, Math.min(maxOffset, c));
   return { paraIndex, charOffset };
+}
+
+export function clampPos(story, pos) {
+  const s = normalizeStory(story);
+  return clampPosNormalized(s, pos);
 }
 
 /**
@@ -145,7 +149,7 @@ function runAtOffset(paragraphRuns, charOffset, bias) {
 
 export function getStyleAtPos(story, pos, bias = 'left') {
   const s = normalizeStory(story);
-  const p = clampPos(s, pos);
+  const p = clampPosNormalized(s, pos);
   const para = s[p.paraIndex];
   const run = runAtOffset(para, p.charOffset, bias);
   return run ? cloneStyle(run.style) : cloneStyle(DEFAULT_STYLE);
@@ -154,24 +158,25 @@ export function getStyleAtPos(story, pos, bias = 'left') {
 export function resolveTypingStyle(story, pos, typingStyle) {
   if (typingStyle) return cloneStyle(typingStyle);
   const s = normalizeStory(story);
-  const p = clampPos(s, pos);
+  const p = clampPosNormalized(s, pos);
   if (p.charOffset === 0) {
     return getStyleAtPos(s, p, 'right');
   }
   return getStyleAtPos(s, p, 'left');
 }
 
-function mergePair(story, paraIndex) {
+function mergePairNormalized(story, paraIndex) {
   if (paraIndex < 0 || paraIndex >= story.length - 1) return story;
   const merged = normalizeParagraph([...story[paraIndex], ...story[paraIndex + 1]]);
   const out = story.slice(0, paraIndex);
   out.push(merged);
   out.push(...story.slice(paraIndex + 2));
-  return normalizeStory(out);
+  return out;
 }
 
 export function mergeParagraphs(story, paraIndex) {
-  return mergePair(normalizeStory(story), paraIndex);
+  const s = normalizeStory(story);
+  return mergePairNormalized(s, paraIndex);
 }
 
 /**
@@ -183,8 +188,8 @@ export function mergeParagraphs(story, paraIndex) {
  */
 export function deleteRange(story, a, b) {
   const s = normalizeStory(story);
-  const pa = clampPos(s, a);
-  const pb = clampPos(s, b);
+  const pa = clampPosNormalized(s, a);
+  const pb = clampPosNormalized(s, b);
   const ordered = orderPositions(pa, pb);
   const start = ordered.start;
   const end = ordered.end;
@@ -245,8 +250,8 @@ export function replaceRange(story, start, end, text, opts = {}) {
  */
 export function textInRange(story, a, b) {
   const s = normalizeStory(story);
-  const pa = clampPos(s, a);
-  const pb = clampPos(s, b);
+  const pa = clampPosNormalized(s, a);
+  const pb = clampPosNormalized(s, b);
   const { start, end } = orderPositions(pa, pb);
 
   if (comparePositions(start, end) === 0) return '';
@@ -266,29 +271,46 @@ export function textInRange(story, a, b) {
 
 export function insertText(story, pos, text, opts = {}) {
   const s = normalizeStory(story);
-  const p = clampPos(s, pos);
+  const p = clampPosNormalized(s, pos);
   const toInsert = String(text ?? '');
   if (toInsert.length === 0) {
     return { story: s, cursor: p };
   }
 
   if (toInsert.includes('\n')) {
-    let curStory = s;
-    let cur = p;
     const parts = toInsert.split('\n');
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i].length > 0) {
-        const inserted = insertText(curStory, cur, parts[i], opts);
-        curStory = inserted.story;
-        cur = inserted.cursor;
-      }
-      if (i < parts.length - 1) {
-        const br = insertParagraphBreak(curStory, cur);
-        curStory = br.story;
-        cur = br.cursor;
-      }
+    const style = resolveTypingStyle(s, p, opts.typingStyle);
+    const para = s[p.paraIndex];
+    const split = splitRunAtCharOffset(para, p.charOffset);
+
+    const replacementParas = [];
+    replacementParas.push(normalizeParagraph([
+      ...split.leftRuns,
+      { text: parts[0], style },
+    ]));
+
+    for (let i = 1; i < parts.length - 1; i++) {
+      replacementParas.push(normalizeParagraph([{ text: parts[i], style }]));
     }
-    return { story: curStory, cursor: cur };
+
+    replacementParas.push(normalizeParagraph([
+      { text: parts[parts.length - 1], style },
+      ...split.rightRuns,
+    ]));
+
+    const nextStory = [
+      ...s.slice(0, p.paraIndex),
+      ...replacementParas,
+      ...s.slice(p.paraIndex + 1),
+    ];
+
+    return {
+      story: nextStory,
+      cursor: {
+        paraIndex: p.paraIndex + parts.length - 1,
+        charOffset: parts[parts.length - 1].length,
+      },
+    };
   }
 
   const style = resolveTypingStyle(s, p, opts.typingStyle);
@@ -310,7 +332,7 @@ export function insertText(story, pos, text, opts = {}) {
 
 export function insertParagraphBreak(story, pos) {
   const s = normalizeStory(story);
-  const p = clampPos(s, pos);
+  const p = clampPosNormalized(s, pos);
   const para = s[p.paraIndex];
   const split = splitRunAtCharOffset(para, p.charOffset);
 
@@ -332,7 +354,7 @@ export function insertParagraphBreak(story, pos) {
 
 export function deleteBackward(story, pos) {
   const s = normalizeStory(story);
-  const p = clampPos(s, pos);
+  const p = clampPosNormalized(s, pos);
 
   if (p.paraIndex === 0 && p.charOffset === 0) {
     return { story: s, cursor: p };
@@ -341,7 +363,7 @@ export function deleteBackward(story, pos) {
   if (p.charOffset === 0) {
     const prevLen = paraTextLength(s, p.paraIndex - 1);
     return {
-      story: mergePair(s, p.paraIndex - 1),
+      story: mergePairNormalized(s, p.paraIndex - 1),
       cursor: { paraIndex: p.paraIndex - 1, charOffset: prevLen },
     };
   }
@@ -361,7 +383,7 @@ export function deleteBackward(story, pos) {
 
 export function deleteForward(story, pos) {
   const s = normalizeStory(story);
-  const p = clampPos(s, pos);
+  const p = clampPosNormalized(s, pos);
   const len = paraTextLength(s, p.paraIndex);
 
   if (p.paraIndex === s.length - 1 && p.charOffset === len) {
@@ -370,7 +392,7 @@ export function deleteForward(story, pos) {
 
   if (p.charOffset === len) {
     return {
-      story: mergePair(s, p.paraIndex),
+      story: mergePairNormalized(s, p.paraIndex),
       cursor: p,
     };
   }

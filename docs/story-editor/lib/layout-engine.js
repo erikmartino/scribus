@@ -149,7 +149,7 @@ export class LayoutEngine {
    * @returns {{ box: Box, lines: LineEntry[] }[]}
    */
   flowIntoBoxes(shapedParas, boxes, fontSize, lineHeightPct) {
-    const padding = this._svgRenderer._padding;
+    const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 16;
     const lineHeight = fontSize * (lineHeightPct / 100);
     const paraSpacing = lineHeight * 0.5;
     const hyphenAdvance = this._measureHyphen(fontSize);

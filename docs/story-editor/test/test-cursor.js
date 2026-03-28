@@ -42,10 +42,20 @@ function makeSvg() {
 describe('TextCursor', () => {
   it('handleClick maps click to story position and resets stickyX', () => {
     const originalDocument = globalThis.document;
+    const originalDOMPoint = globalThis.DOMPoint;
     globalThis.document = {
       createElementNS(_ns, tag) {
         return makeNode(tag);
       },
+    };
+    globalThis.DOMPoint = class {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+      }
+      matrixTransform() {
+        return { x: this.x, y: this.y };
+      }
     };
 
     const svg = makeSvg();
@@ -72,6 +82,7 @@ describe('TextCursor', () => {
     } finally {
       cursor.destroy();
       globalThis.document = originalDocument;
+      globalThis.DOMPoint = originalDOMPoint;
     }
   });
 

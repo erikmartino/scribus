@@ -28,10 +28,19 @@ export function cloneStyle(style) {
  * @returns {boolean}
  */
 export function styleEq(a, b) {
-  const sa = cloneStyle(a);
-  const sb = cloneStyle(b);
-  const keys = new Set([...Object.keys(sa), ...Object.keys(sb)]);
-  for (const key of keys) {
+  const sa = a || {};
+  const sb = b || {};
+  if (!!sa.bold !== !!sb.bold) return false;
+  if (!!sa.italic !== !!sb.italic) return false;
+
+  const keysA = Object.keys(sa);
+  for (const key of keysA) {
+    if (key === 'bold' || key === 'italic') continue;
+    if (sa[key] !== sb[key]) return false;
+  }
+  const keysB = Object.keys(sb);
+  for (const key of keysB) {
+    if (key === 'bold' || key === 'italic') continue;
     if (sa[key] !== sb[key]) return false;
   }
   return true;
