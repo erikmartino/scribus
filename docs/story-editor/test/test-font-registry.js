@@ -34,23 +34,23 @@ describe('FontRegistry.loadFont', () => {
   });
 
   it('registers variants and applies bold variation only for bold variants', async () => {
-    const buffer = new Uint8Array([1, 2, 3]).buffer;
+    const buffer = new Uint8Array([1, 2, 3]);
     globalThis.fetch = async () => ({
       ok: true,
-      arrayBuffer: async () => buffer,
+      arrayBuffer: async () => buffer.buffer,
     });
 
     const registry = new FontRegistry(makeHb());
-    const out = await registry.loadFont('https://example.com/font.ttf', [
-      { key: 'regular', bold: false },
-      { key: 'bold', bold: true },
+    const out = await registry.loadFont('Roboto', 'https://example.com/font.ttf', [
+      { variant: 'regular', bold: false },
+      { variant: 'bold', bold: true },
     ]);
 
-    assert.equal(out, buffer);
-    assert.ok(registry.getFont('regular'));
-    assert.ok(registry.getFont('bold'));
-    assert.deepEqual(registry.getFont('regular').hbFont.setVariationsCalls, []);
-    assert.deepEqual(registry.getFont('bold').hbFont.setVariationsCalls, [{ wght: 700 }]);
+    assert.deepEqual(out, buffer);
+    assert.ok(registry.getFont('Roboto', 'regular'));
+    assert.ok(registry.getFont('Roboto', 'bold'));
+    assert.deepEqual(registry.getFont('Roboto', 'regular').hbFont.setVariationsCalls, []);
+    assert.deepEqual(registry.getFont('Roboto', 'bold').hbFont.setVariationsCalls, [{ wght: 700 }]);
   });
 
   it('throws descriptive error when fetch response is not ok', async () => {
@@ -58,13 +58,13 @@ describe('FontRegistry.loadFont', () => {
     const registry = new FontRegistry(makeHb());
 
     await assert.rejects(
-      () => registry.loadFont('https://example.com/missing.ttf', [{ key: 'regular', bold: false }]),
+      () => registry.loadFont('Roboto', 'https://example.com/missing.ttf', [{ variant: 'regular', bold: false }]),
       /Font fetch failed: 404 https:\/\/example\.com\/missing\.ttf/,
     );
   });
 });
 
-describe('FontRegistry.registerFontFaces', () => {
+describe('FontRegistry.registerFontFace', () => {
   let originalFontFace;
   let originalDocument;
 
@@ -78,7 +78,7 @@ describe('FontRegistry.registerFontFaces', () => {
     globalThis.document = originalDocument;
   });
 
-  it('loads each face and registers it on document.fonts', async () => {
+  it('loads face and registers it on document.fonts', async () => {
     const loaded = [];
     const added = [];
 
@@ -103,20 +103,14 @@ describe('FontRegistry.registerFontFaces', () => {
     };
 
     const registry = new FontRegistry(makeHb());
-    const entries = [
-      { buffer: new Uint8Array([1]).buffer, style: 'normal', weight: 'normal' },
-      { buffer: new Uint8Array([2]).buffer, style: 'italic', weight: 'bold' },
-    ];
+    const buffer = new Uint8Array([1]);
 
-    await registry.registerFontFaces(entries, 'Test Family');
+    await registry.registerFontFace('Test Family', buffer, 'normal', 'normal');
 
-    assert.equal(loaded.length, 2);
+    assert.equal(loaded.length, 1);
     assert.deepEqual(loaded[0], { family: 'Test Family', options: { style: 'normal', weight: 'normal' } });
-    assert.deepEqual(loaded[1], { family: 'Test Family', options: { style: 'italic', weight: 'bold' } });
 
-    assert.equal(added.length, 2);
-    assert.equal(registry._fontFaces.length, 2);
-    assert.equal(registry._fontFaces[0], added[0]);
-    assert.equal(registry._fontFaces[1], added[1]);
+    assert.equal(added.length, 1);
+    assert.ok(registry._fontFaces.has('Test Family:normal:normal'));
   });
 });

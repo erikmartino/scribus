@@ -18,6 +18,7 @@ import {
   deleteForward,
   insertParagraphBreak,
   mergeParagraphs,
+  applyStyleRange,
 } from '../lib/story-ops.js';
 import { styleEq } from '../lib/style.js';
 
@@ -25,13 +26,13 @@ function run(text, style) {
   return { text, style };
 }
 
-const N = { bold: false, italic: false };
-const B = { bold: true, italic: false };
-const I = { bold: false, italic: true };
+const N = { bold: false, italic: false, fontFamily: '' };
+const B = { bold: true, italic: false, fontFamily: '' };
+const I = { bold: false, italic: true, fontFamily: '' };
 
 describe('styleEq', () => {
   it('compares bold/italic only', () => {
-    assert.equal(styleEq(N, { bold: false, italic: false }), true);
+    assert.equal(styleEq(N, { bold: false, italic: false, fontFamily: '' }), true);
     assert.equal(styleEq(N, B), false);
     assert.equal(styleEq(I, B), false);
   });
@@ -277,5 +278,24 @@ describe('range operations', () => {
     const story = [[run('abc', N)], [run('DEF', B)], [run('ghi', I)]];
     const txt = textInRange(story, { paraIndex: 0, charOffset: 1 }, { paraIndex: 2, charOffset: 2 });
     assert.equal(txt, 'bc\nDEF\ngh');
+  });
+
+  it('applyStyleRange patches style across mixed run boundaries', () => {
+    const story = [[run('ab', N), run('CD', B), run('ef', I)]];
+    const out = applyStyleRange(
+      story,
+      { paraIndex: 0, charOffset: 1 },
+      { paraIndex: 0, charOffset: 5 },
+      { italic: true },
+    );
+
+    assert.equal(out.length, 1);
+    assert.deepEqual(out[0].map((r) => r.text), ['a', 'b', 'CD', 'ef']);
+    assert.deepEqual(out[0].map((r) => r.style), [
+      N,
+      { bold: false, italic: true, fontFamily: '' },
+      { bold: true, italic: true, fontFamily: '' },
+      I,
+    ]);
   });
 });

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Font Manager Demo</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; max-width: 800px; margin: 0 auto; }
+        .controls { margin-bottom: 20px; display: flex; gap: 10px; }
+        #font-select { padding: 5px; flex-grow: 1; }
+        #preview { 
+            margin-top: 20px; 
+            padding: 40px; 
+            border: 2px dashed #ccc; 
+            font-size: 48px; 
+            text-align: center;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .status { font-size: 0.9em; color: #666; margin-top: 5px; }
+        .info { background: #f0f0f0; padding: 10px; border-radius: 4px; font-size: 0.85em; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Google Font Manager Demo</h1>
+    <p>This demo fetches the font catalog, downloads a <strong>TTF binary</strong> on-demand (ignoring WOFF/WOFF2), and applies it via the <code>FontFace</code> API.</p>
+
+    <div class="controls">
+        <select id="font-select">
+            <option value="">Loading fonts...</option>
+        </select>
+        <button id="load-btn" disabled>Load & Apply</button>
+    </div>
+
+    <div id="status" class="status">Ready.</div>
+
+    <div id="preview">
+        Sphinx of black quartz, judge my vow.
+    </div>
+
+    <div class="info">
+        <strong>HarfBuzz Compatibility:</strong> The <code>GoogleFontManager</code> returns a <code>Uint8Array</code>. In this demo, we use that binary to create a browser <code>FontFace</code>, but in the full editor, this same binary is passed to the HarfBuzz shaper.
+    </div>
+
+    <script type="module">
+        import { GoogleFontManager } from './google-font-manager.js';
+
+        const manager = new GoogleFontManager();
+        const select = document.getElementById('font-select');
+        const btn = document.getElementById('load-btn');
+        const preview = document.getElementById('preview');
+        const status = document.getElementById('status');
+
+        async function init() {
+            try {
+                status.textContent = 'Fetching catalog...';
+                const families = await manager.getFamilies();
+                
+                select.innerHTML = '<option value="">-- Select a Font --</option>';
+                // Sort for the demo dropdown
+                families.sort((a, b) => a.family.localeCompare(b.family))
+                    .forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f.id;
+                        opt.textContent = f.family;
+                        select.appendChild(opt);
+                    });
+                
+                status.textContent = `Catalog loaded (${families.length} fonts).`;
+                btn.disabled = false;
+            } catch (err) {
+                status.textContent = 'Error: ' + err.message;
+            }
+        }
+
+        btn.onclick = async () => {
+            const familyId = select.value;
+            if (!familyId) return;
+
+            const familyName = select.options[select.selectedIndex].text;
+            status.textContent = `Downloading TTF for ${familyName}...`;
+            btn.disabled = true;
+
+            try {
+                // Request the regular variant binary
+                const binary = await manager.resolveFont(familyId, 'regular');
+                
+                if (!binary) {
+                    throw new Error('No TTF/OTF found for this font.');
+                }
+
+                status.textContent = `Binary received (${binary.byteLength} bytes). Registering...`;
+
+                // Use the binary to create a FontFace for CSS preview
+                const fontFace = new FontFace(familyName, binary);
+                const loadedFace = await fontFace.load();
+                document.fonts.add(loadedFace);
+
+                // Apply to preview
+                preview.style.fontFamily = `"${familyName}"`;
+                status.textContent = `Applied ${familyName}!`;
+            } catch (err) {
+                status.textContent = 'Error: ' + err.message;
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        init();
+    </script>
+</body>
+</html>

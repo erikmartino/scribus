@@ -2,6 +2,7 @@
 
 import { FontRegistry } from './font-registry.js';
 import { Shaper } from './shaper.js';
+import { GoogleFontManager } from '../../font-manager/google-font-manager.js';
 import { Hyphenator } from './hyphenator.js';
 import { breakLines } from './line-breaker.js';
 import { justifyLine } from './justifier.js';
@@ -26,6 +27,7 @@ export { buildPositions } from './positions.js';
  * @property {number}   paraIndex  — index into the story
  * @property {number[]} hyphToOrig — mapping from hyphenated-text index to original-text index
  * @property {number}   origLen    — length of the original (un-hyphenated) paragraph text
+ * @property {number}   fontSize   — paragraph-level font size used for shaping
  */
 
 export class LayoutEngine {
@@ -77,26 +79,29 @@ export class LayoutEngine {
     const hb = hbjsFactory(instance);
 
     // Load fonts and hyphenation in parallel
-    const fontRegistry = new FontRegistry(hb);
+    const fontManager = new GoogleFontManager();
+    const fontRegistry = new FontRegistry(hb, fontManager);
+    fontRegistry.setDefaultFamily(fontFamily);
+
     const [regularBuf, italicBuf, hyphenModule] = await Promise.all([
-      fontRegistry.loadFont(fontUrl, [
-        { key: 'regular', bold: false },
-        { key: 'bold', bold: true },
+      fontRegistry.loadFont(fontFamily, fontUrl, [
+        { variant: 'regular', bold: false },
+        { variant: 'bold', bold: true },
       ]),
-      fontRegistry.loadFont(fontItalicUrl, [
-        { key: 'italic', bold: false },
-        { key: 'bolditalic', bold: true },
+      fontRegistry.loadFont(fontFamily, fontItalicUrl, [
+        { variant: 'italic', bold: false },
+        { variant: 'bolditalic', bold: true },
       ]),
       import(hyphenUrl),
     ]);
 
     // Register @font-face variants
-    await fontRegistry.registerFontFaces([
-      { buffer: regularBuf, style: 'normal', weight: 'normal' },
-      { buffer: regularBuf, style: 'normal', weight: 'bold' },
-      { buffer: italicBuf,  style: 'italic', weight: 'normal' },
-      { buffer: italicBuf,  style: 'italic', weight: 'bold' },
-    ], fontFamily);
+    await Promise.all([
+      fontRegistry.registerFontFace(fontFamily, regularBuf, 'normal', 'normal'),
+      fontRegistry.registerFontFace(fontFamily, regularBuf, 'bold', 'normal'),
+      fontRegistry.registerFontFace(fontFamily, italicBuf, 'normal', 'italic'),
+      fontRegistry.registerFontFace(fontFamily, italicBuf, 'bold', 'italic'),
+    ]);
 
     const shaper = new Shaper(hb, fontRegistry);
     const hyphenator = new Hyphenator(hyphenModule.default.hyphenateSync);
@@ -115,24 +120,28 @@ export class LayoutEngine {
    *
    * @param {Story} runsParagraphs
    * @param {number} fontSize
+   * @param {{ fontSize: number, fontFamily?: string }[]} [paragraphStyles]
    * @returns {ShapedPara[]}
    */
-  shapeParagraphs(runsParagraphs, fontSize) {
+  shapeParagraphs(runsParagraphs, fontSize, paragraphStyles = []) {
     this._pruneShapeCache(runsParagraphs.length);
 
     const shaped = [];
     for (let pi = 0; pi < runsParagraphs.length; pi++) {
       const runs = runsParagraphs[pi];
+      const styleFontSize = paragraphStyles[pi]?.fontSize;
+      const paraFontSize = Number.isFinite(styleFontSize) ? Number(styleFontSize) : fontSize;
       const fingerprint = this._fingerprintRuns(runs);
       const cached = this._shapeCache.get(pi);
 
-      if (cached && cached.fontSize === fontSize && cached.fingerprint === fingerprint) {
+      if (cached && cached.fontSize === paraFontSize && cached.fingerprint === fingerprint) {
         shaped.push(cached.shapedPara);
         continue;
       }
 
       const hRuns = this._hyphenator.hyphenateRuns(runs);
-      const { text, glyphs } = this._shaper.shapeParagraph(hRuns, fontSize);
+      const defaultFamily = paragraphStyles[pi]?.fontFamily || this._svgRenderer._fontFamily;
+      const { text, glyphs } = this._shaper.shapeParagraph(hRuns, paraFontSize, defaultFamily);
 
       // Build mapping from hyphenated text positions to original text positions.
       // Soft hyphens (\u00AD) are inserted by the hyphenator and don't exist in the story.
@@ -150,8 +159,8 @@ export class LayoutEngine {
       // One past end
       const origLen = origText.length;
 
-      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen };
-      this._shapeCache.set(pi, { fontSize, fingerprint, shapedPara });
+      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen, fontSize: paraFontSize };
+      this._shapeCache.set(pi, { fontSize: paraFontSize, fingerprint, shapedPara });
       shaped.push(shapedPara);
     }
     return shaped;
@@ -168,16 +177,17 @@ export class LayoutEngine {
    */
   flowIntoBoxes(shapedParas, boxes, fontSize, lineHeightPct) {
     const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 16;
-    const lineHeight = fontSize * (lineHeightPct / 100);
-    const paraSpacing = lineHeight * 0.5;
-    const hyphenAdvance = this._measureHyphen(fontSize);
     const bottomReserve = this._reserveBottom ? fontSize : 0;
 
     const boxResults = boxes.map(box => ({ box, lines: [] }));
     let boxIdx = 0;
     let usedHeight = 0;
 
-    for (const { text, glyphs, paraIndex, hyphToOrig, origLen } of shapedParas) {
+    for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize } of shapedParas) {
+      const effectiveFontSize = paraFontSize;
+      const lineHeight = effectiveFontSize * (lineHeightPct / 100);
+      const paraSpacing = lineHeight * 0.5;
+      const hyphenAdvance = this._measureHyphen(effectiveFontSize);
       if (glyphs.length === 0) {
         while (boxIdx < boxes.length) {
           const extraSpace = (boxResults[boxIdx].lines.length > 0 &&
@@ -204,6 +214,9 @@ export class LayoutEngine {
             origLen,
             hyphenated: false,
             hyphenAdvance,
+            fontSize: effectiveFontSize,
+            lineHeight,
+            paraSpacing,
           });
           usedHeight += needed;
           break;
@@ -251,6 +264,9 @@ export class LayoutEngine {
             origLen,
             hyphenated: line.hyphenated,
             hyphenAdvance,
+            fontSize: effectiveFontSize,
+            lineHeight,
+            paraSpacing,
           });
 
           usedHeight += needed;
@@ -265,6 +281,65 @@ export class LayoutEngine {
   }
 
   /**
+   * Ensure all fonts used in the story are loaded.
+   * @param {Story} paragraphs
+   * @param {import('./paragraph-style.js').ParagraphStyle[]} [paragraphStyles]
+   */
+  async ensureFonts(paragraphs, paragraphStyles = []) {
+    const families = new Set();
+    const defaultFamily = this._svgRenderer._fontFamily;
+    if (defaultFamily) families.add(defaultFamily);
+
+    for (const para of paragraphs) {
+      for (const run of para) {
+        if (run.style.fontFamily) families.add(run.style.fontFamily);
+      }
+    }
+    for (const style of paragraphStyles) {
+      if (style.fontFamily) families.add(style.fontFamily);
+    }
+
+    const loads = [];
+    for (const family of families) {
+      if (!this._fontRegistry.getFont(family, 'regular')) {
+        loads.push(this._loadFamily(family));
+      }
+    }
+    await Promise.all(loads);
+  }
+
+  /**
+   * @param {string} family
+   */
+  async _loadFamily(family) {
+    if (!family || !this._fontRegistry._fontManager) return;
+
+    // We try to load regular, bold, italic, and bold-italic variants
+    const variants = [
+      { id: 'regular', weight: 'normal', style: 'normal' },
+      { id: 'bold', weight: 'bold', style: 'normal', variant: '700' },
+      { id: 'italic', weight: 'normal', style: 'italic' },
+      { id: 'bolditalic', weight: 'bold', style: 'italic', variant: '700italic' },
+    ];
+
+    const tasks = variants.map(async (v) => {
+      if (this._fontRegistry.getFont(family, v.id)) return;
+
+      try {
+        const binary = await this._fontRegistry._fontManager.resolveFont(family, v.variant || v.id);
+        if (binary) {
+          this._fontRegistry.registerFontBinaries(family, binary, [{ variant: v.id, bold: v.weight === 'bold' }]);
+          await this._fontRegistry.registerFontFace(family, binary, v.weight, v.style);
+        }
+      } catch (e) {
+        console.warn(`Failed to load font ${family} ${v.id}:`, e);
+      }
+    });
+
+    await Promise.all(tasks);
+  }
+
+  /**
    * Full pipeline: shape, flow into boxes, render to SVG.
    *
    * @param {Element} container
@@ -272,16 +347,19 @@ export class LayoutEngine {
    * @param {Box[]} boxes
    * @param {number} fontSize
    * @param {number} lineHeightPct
-   * @returns {{ svg: SVGSVGElement, lineMap: LineMapEntry[] }}
+   * @param {{ fontSize: number, fontFamily?: string }[]} [paragraphStyles]
+   * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[] }>}
    */
-  renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct) {
-    const shaped = this.shapeParagraphs(paragraphs, fontSize);
+  async renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
+    await this.ensureFonts(paragraphs, paragraphStyles);
+    const shaped = this.shapeParagraphs(paragraphs, fontSize, paragraphStyles);
     const boxResults = this.flowIntoBoxes(shaped, boxes, fontSize, lineHeightPct);
     const { svg, lineMap } = this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
     container.innerHTML = '';
     container.appendChild(svg);
     return { svg, lineMap };
   }
+
 
   /**
    * Measure the advance width of a hyphen in the default style.
@@ -313,4 +391,17 @@ export class LayoutEngine {
       }
     }
   }
+}
+
+/**
+ * @param {number} baseFontSize
+ * @param {import('./paragraph-style.js').ParagraphStyle[]} paragraphStyles
+ * @returns {{ fontSize: number, fontFamily?: string }[]}
+ */
+export function buildParagraphLayoutStyles(baseFontSize, paragraphStyles) {
+  void baseFontSize;
+  return paragraphStyles.map((style) => ({
+    fontSize: style.fontSize,
+    fontFamily: style.fontFamily,
+  }));
 }

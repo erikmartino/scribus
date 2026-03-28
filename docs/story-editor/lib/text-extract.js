@@ -3,8 +3,8 @@
 import { cloneStyle } from './style.js';
 
 /**
- * @typedef {import('./style.js').Style} Style
- * @typedef {{ text: string, style: Style }} Run
+ * @typedef {import('./style.js').CharacterStyle} CharacterStyle
+ * @typedef {{ text: string, style: CharacterStyle }} Run
  * @typedef {Run[][]} Story
  */
 

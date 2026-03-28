@@ -269,6 +269,48 @@ export function textInRange(story, a, b) {
   return parts.join('\n');
 }
 
+/**
+ * Apply a partial character-style patch to all runs touching [start, end).
+ * @param {Story} story
+ * @param {StoryPos} a
+ * @param {StoryPos} b
+ * @param {Partial<Style>} stylePatch
+ * @returns {Story}
+ */
+export function applyStyleRange(story, a, b, stylePatch) {
+  const s = normalizeStory(story);
+  const pa = clampPosNormalized(s, a);
+  const pb = clampPosNormalized(s, b);
+  const { start, end } = orderPositions(pa, pb);
+  if (comparePositions(start, end) === 0) return s;
+
+  const patch = { ...(stylePatch || {}) };
+  const nextStory = s.slice();
+
+  for (let pi = start.paraIndex; pi <= end.paraIndex; pi++) {
+    const para = nextStory[pi];
+    const paraLen = paraTextLength(nextStory, pi);
+    const from = pi === start.paraIndex ? start.charOffset : 0;
+    const to = pi === end.paraIndex ? end.charOffset : paraLen;
+    if (to <= from) continue;
+
+    const firstSplit = splitRunAtCharOffset(para, from);
+    const secondSplit = splitRunAtCharOffset(firstSplit.rightRuns, to - from);
+    const styledMid = secondSplit.leftRuns.map((run) => ({
+      text: run.text,
+      style: cloneStyle({ ...run.style, ...patch }),
+    }));
+
+    nextStory[pi] = normalizeParagraph([
+      ...firstSplit.leftRuns,
+      ...styledMid,
+      ...secondSplit.rightRuns,
+    ]);
+  }
+
+  return normalizeStory(nextStory);
+}
+
 export function insertText(story, pos, text, opts = {}) {
   const s = normalizeStory(story);
   const p = clampPosNormalized(s, pos);

@@ -35,12 +35,18 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 /**
  * Apply SVG attributes for a character style.
  * @param {import('./style.js').Style} style
+ * @param {string} [defaultFamily]
  * @returns {Record<string, string>}
  */
-function svgAttrsForStyle(style) {
+function svgAttrsForStyle(style, defaultFamily = '') {
   const attrs = {};
   if (style.bold) attrs['font-weight'] = 'bold';
   if (style.italic) attrs['font-style'] = 'italic';
+  if (style.fontFamily) {
+    attrs['font-family'] = `'${style.fontFamily}', serif`;
+  } else if (defaultFamily) {
+    attrs['font-family'] = `'${defaultFamily}', serif`;
+  }
   return attrs;
 }
 
@@ -67,8 +73,8 @@ export class SvgRenderer {
    * @returns {{ svg: SVGSVGElement, lineMap: LineMapEntry[] }}
    */
   render(boxResults, fontSize, lineHeightPct) {
-    const lineHeight = fontSize * (lineHeightPct / 100);
-    const paraSpacing = lineHeight * 0.5;
+    const defaultLineHeight = fontSize * (lineHeightPct / 100);
+    const defaultParaSpacing = defaultLineHeight * 0.5;
 
     // Compute SVG bounds from boxes
     let maxX = 0, maxY = 0;
@@ -104,13 +110,15 @@ export class SvgRenderer {
 
       for (let i = 0; i < lines.length; i++) {
         const entry = lines[i];
+        const entryFontSize = entry.fontSize ?? fontSize;
+        const lineHeight = entry.lineHeight || defaultLineHeight;
+        const paraSpacing = entry.paraSpacing || defaultParaSpacing;
         const { words, isLastInPara } = entry;
         if (i > 0 && lines[i - 1].isLastInPara) y += paraSpacing;
 
         const textEl = document.createElementNS(SVG_NS, 'text');
         textEl.setAttribute('y', y.toFixed(1));
-        textEl.setAttribute('font-family', `'${this._fontFamily}', serif`);
-        textEl.setAttribute('font-size', fontSize);
+        textEl.setAttribute('font-size', entryFontSize);
         textEl.setAttribute('fill', '#222');
         textEl.setAttribute('style', 'user-select:none;pointer-events:none');
 
@@ -119,7 +127,7 @@ export class SvgRenderer {
             const frag = word.fragments[fi];
             const tspan = document.createElementNS(SVG_NS, 'tspan');
             if (fi === 0) tspan.setAttribute('x', (box.x + this._padding + word.x).toFixed(2));
-            const attrs = svgAttrsForStyle(frag.style);
+            const attrs = svgAttrsForStyle(frag.style, this._fontFamily);
             for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
             tspan.textContent = frag.text;
             textEl.appendChild(tspan);
@@ -140,6 +148,7 @@ export class SvgRenderer {
           boxWidth: box.width,
           boxHeight: box.height,
           y,
+          fontSize: entryFontSize,
         });
 
         y += lineHeight;

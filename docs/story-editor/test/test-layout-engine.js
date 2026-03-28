@@ -1,8 +1,12 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { LayoutEngine } from '../lib/layout-engine.js';
+import {
+  defaultParagraphStyle,
+  buildParagraphLayoutStyles,
+} from '../lib/paragraph-style-render.js';
 
-const STYLE = { bold: false, italic: false };
+const STYLE = { bold: false, italic: false, fontFamily: '' };
 
 describe('LayoutEngine.shapeParagraphs', () => {
   it('builds hyphToOrig and origLen correctly with soft hyphens', () => {
@@ -21,7 +25,7 @@ describe('LayoutEngine.shapeParagraphs', () => {
       },
     };
 
-    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
     const shaped = engine.shapeParagraphs([
       [{ text: 'abcd', style: STYLE }],
       [{ text: 'xy', style: STYLE }],
@@ -53,7 +57,7 @@ describe('LayoutEngine.shapeParagraphs', () => {
       },
     };
 
-    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
     const story = [[{ text: 'cached', style: STYLE }]];
 
     const first = engine.shapeParagraphs(story, 12);
@@ -79,7 +83,7 @@ describe('LayoutEngine.shapeParagraphs', () => {
       },
     };
 
-    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
     const original = [[{ text: 'one', style: STYLE }]];
     const updated = [[{ text: 'two', style: STYLE }]];
 
@@ -90,6 +94,38 @@ describe('LayoutEngine.shapeParagraphs', () => {
     assert.notEqual(second[0], first[0]);
     assert.equal(second[0].text, 'two');
   });
+
+  it('applies per-paragraph font sizes from paragraph styles', () => {
+    const calls = [];
+    const shaper = {
+      shapeParagraph(runs, fontSize) {
+        calls.push(fontSize);
+        const text = runs.map((r) => r.text).join('');
+        return { text, glyphs: [{ cl: 0, ax: 10, style: STYLE }] };
+      },
+    };
+    const hyphenator = {
+      hyphenateRuns(runs) {
+        return runs;
+      },
+    };
+
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
+    const story = [
+      [{ text: 'lead', style: STYLE }],
+      [{ text: 'body', style: STYLE }],
+    ];
+    const styles = [
+      defaultParagraphStyle('lead', 20),
+      defaultParagraphStyle('normal', 20),
+    ];
+    const layoutStyles = buildParagraphLayoutStyles(20, styles);
+
+    const shaped = engine.shapeParagraphs(story, 20, layoutStyles);
+    assert.deepEqual(calls, [28, 20]);
+    assert.equal(shaped[0].fontSize, 28);
+    assert.equal(shaped[1].fontSize, 20);
+  });
 });
 
 describe('LayoutEngine.flowIntoBoxes', () => {
@@ -99,7 +135,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         return [{ ax: 5 }];
       },
     };
-    const engine = new LayoutEngine({}, {}, shaper, {}, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, {}, { _padding: 0 });
 
     const text = 'ab cd ef';
     const glyphs = [
@@ -119,6 +155,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
       paraIndex: 0,
       hyphToOrig: [0, 1, 2, 3, 4, 5, 6, 7],
       origLen: 8,
+      fontSize: 10,
     }];
 
     const boxes = [
@@ -153,7 +190,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         return [{ ax: 5 }];
       },
     };
-    const engine = new LayoutEngine({}, {}, shaper, {}, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, {}, { _padding: 0 });
 
     const shapedParas = [
       {
@@ -162,6 +199,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         paraIndex: 0,
         hyphToOrig: [],
         origLen: 0,
+        fontSize: 10,
       },
       {
         text: 'abc',
@@ -173,6 +211,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         paraIndex: 1,
         hyphToOrig: [0, 1, 2],
         origLen: 3,
+        fontSize: 10,
       },
     ];
 

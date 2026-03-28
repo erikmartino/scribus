@@ -41,6 +41,11 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
    - List modified file paths.
    - List verification commands run (or why not run).
 
+6. Use CDNs for Dependencies.
+   - Always use CDN-hosted ESM versions of external libraries (e.g., via `https://cdn.jsdelivr.net/npm/.../+esm`).
+   - Do not add new dependencies to `package.json`.
+   - Maintain a "no build step" workflow for prototypes and demos.
+
 ## Preferred Workflow
 
 1. Read relevant files first.
@@ -51,9 +56,12 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
 
 ## Planning Requirement
 
+- When the user asks for implementation work, always create a plan file or update an existing relevant plan file before or during execution.
 - If an assistant provides an implementation plan, it must be written to a Markdown file in the repository (not only in chat).
 - Preferred location for cross-demo plans: `docs/notes/`.
 - Use clear, dateable names such as `spread-editor-movable-resizable-boxes-plan.md`.
+- Whenever work progresses on a planned task, update the corresponding plan file to reflect current status and remaining work.
+- If a plan has no remaining work, remove it and update any index/reference files that list active plans.
 
 ## Editing Guidance for `docs/story-editor`
 
