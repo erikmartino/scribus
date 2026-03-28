@@ -3,7 +3,9 @@
 /**
  * Shared style value type.
  * Keep this as the single source of truth for style shape.
- * @typedef {{ bold?: boolean, italic?: boolean, [key: string]: unknown }} Style
+ * Character-level style (inline style on a run).
+ * @typedef {{ bold?: boolean, italic?: boolean, [key: string]: unknown }} CharacterStyle
+ * @typedef {CharacterStyle} Style
  */
 
 /**
@@ -14,8 +16,8 @@ export const DEFAULT_STYLE = Object.freeze({ bold: false, italic: false });
 
 /**
  * Clone a style object with defaults applied.
- * @param {Style} [style]
- * @returns {Style}
+ * @param {CharacterStyle} [style]
+ * @returns {CharacterStyle}
  */
 export function cloneStyle(style) {
   return { ...DEFAULT_STYLE, ...(style || {}) };
@@ -23,8 +25,8 @@ export function cloneStyle(style) {
 
 /**
  * Shallow value equality for style objects.
- * @param {Style} a
- * @param {Style} b
+ * @param {CharacterStyle} a
+ * @param {CharacterStyle} b
  * @returns {boolean}
  */
 export function styleEq(a, b) {

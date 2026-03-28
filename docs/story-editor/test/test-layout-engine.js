@@ -119,6 +119,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
       paraIndex: 0,
       hyphToOrig: [0, 1, 2, 3, 4, 5, 6, 7],
       origLen: 8,
+      fontSize: 10,
     }];
 
     const boxes = [
@@ -162,6 +163,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         paraIndex: 0,
         hyphToOrig: [],
         origLen: 0,
+        fontSize: 10,
       },
       {
         text: 'abc',
@@ -173,6 +175,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         paraIndex: 1,
         hyphToOrig: [0, 1, 2],
         origLen: 3,
+        fontSize: 10,
       },
     ];
 

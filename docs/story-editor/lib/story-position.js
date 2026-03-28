@@ -126,18 +126,19 @@ export function moveRight(pos, story, lineMap) {
 export function positionToPoint(pos, lineMap, fontSize) {
   const line = lineMap[pos.lineIndex];
   if (!line) return null;
+  const lineFontSize = line.fontSize || fontSize;
 
   const positions = line.positions;
 
   for (let i = 0; i < positions.length; i++) {
     if (positions[i].charPos === pos.charOffset) {
-      return { x: positions[i].x, y: line.y - fontSize * 0.8, height: fontSize * 1.2 };
+      return { x: positions[i].x, y: line.y - lineFontSize * 0.8, height: lineFontSize * 1.2 };
     }
   }
 
   // Fallback: last position on line
   const last = positions[positions.length - 1];
-  return { x: last.x, y: line.y - fontSize * 0.8, height: fontSize * 1.2 };
+  return { x: last.x, y: line.y - lineFontSize * 0.8, height: lineFontSize * 1.2 };
 }
 
 /**

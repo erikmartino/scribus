@@ -79,6 +79,37 @@
       accent-color: #476f99;
     }
 
+    .controls input[type=number] {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #b9ad97;
+      border-radius: 6px;
+      padding: 4px 6px;
+      font: inherit;
+      background: #fffdf8;
+    }
+
+    .controls .button-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .controls button {
+      border: 1px solid #9caec2;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #f9fcff 0%, #e5eef7 100%);
+      color: #2f4660;
+      padding: 6px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .controls button:hover {
+      background: linear-gradient(180deg, #ffffff 0%, #dbe8f3 100%);
+    }
+
     #svg-container {
       background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 252, 246, 0.94) 100%),
@@ -169,6 +200,16 @@
         id="font-size-val">22</span>px</label>
     <label>Line height: <input type="range" id="line-height" min="100" max="200" value="140"> <span
         id="line-height-val">140</span>%</label>
+    <label>Current paragraph font size (px):
+      <input type="number" id="para-font-size" min="8" max="96" step="1" value="22">
+    </label>
+    <label>Current paragraph:
+      <span id="current-para">1</span>
+    </label>
+    <div class="button-row">
+      <button type="button" id="apply-para-font">Apply to paragraph</button>
+      <button type="button" id="clear-para-font">Reset paragraph</button>
+    </div>
   </div>
 
   <div id="svg-container" tabindex="0" contenteditable="true" spellcheck="false"></div>
@@ -331,80 +372,14 @@
     import { extractParagraphs } from './lib/text-extract.js';
     import { TextCursor } from './lib/cursor.js';
     import { EditorState } from './lib/editor-state.js';
-
-    const PARAGRAPH_STYLES = {
-      normal: { firstLineScale: 1 },
-      lead: { firstLineScale: 1.34 },
-    };
-
-    function extractParagraphStyleNames(container) {
-      const names = [];
-      for (const el of container.children) {
-        if (el.tagName.toLowerCase() !== 'p') continue;
-        names.push(el.getAttribute('data-pstyle') || 'normal');
-      }
-      return names;
-    }
-
-    function applyParagraphStylesToSvg(svg, lineMap, baseFontSize, paragraphStyleNames) {
-      const firstLineByPara = new Map();
-      for (const line of lineMap) {
-        if (!firstLineByPara.has(line.paraIndex)) {
-          firstLineByPara.set(line.paraIndex, line.lineIndex);
-        }
-      }
-
-      const textEls = svg.querySelectorAll('text');
-      const lineOffsets = new Array(lineMap.length).fill(0);
-
-      for (let paraIndex = 0; paraIndex < paragraphStyleNames.length; paraIndex++) {
-        const styleName = paragraphStyleNames[paraIndex] || 'normal';
-        const style = PARAGRAPH_STYLES[styleName] || PARAGRAPH_STYLES.normal;
-        const scale = style.firstLineScale || 1;
-        if (scale === 1) continue;
-
-        const lineIndex = firstLineByPara.get(paraIndex);
-        if (!Number.isInteger(lineIndex)) continue;
-        const textEl = textEls[lineIndex];
-        if (!textEl) continue;
-
-        const firstLine = lineMap[lineIndex];
-        const anchorX = firstLine.positions[0]?.x ?? firstLine.colX;
-        textEl.setAttribute('font-size', (baseFontSize * scale).toFixed(2));
-
-        const tspans = textEl.querySelectorAll('tspan[x]');
-        for (const tspan of tspans) {
-          const x = Number(tspan.getAttribute('x'));
-          if (!Number.isFinite(x)) continue;
-          const scaledX = anchorX + (x - anchorX) * scale;
-          tspan.setAttribute('x', scaledX.toFixed(2));
-        }
-
-        for (const pos of firstLine.positions) {
-          pos.x = anchorX + (pos.x - anchorX) * scale;
-        }
-
-        const delta = baseFontSize * (scale - 1);
-        const boxKey = `${firstLine.colX},${firstLine.boxY},${firstLine.boxWidth},${firstLine.boxHeight}`;
-
-        for (let li = lineIndex + 1; li < lineMap.length; li++) {
-          const line = lineMap[li];
-          const key = `${line.colX},${line.boxY},${line.boxWidth},${line.boxHeight}`;
-          if (key === boxKey) {
-            lineOffsets[li] += delta;
-          }
-        }
-      }
-
-      for (let i = 0; i < lineMap.length; i++) {
-        if (lineOffsets[i] === 0) continue;
-        const textEl = textEls[i];
-        if (!textEl) continue;
-        const nextY = lineMap[i].y + lineOffsets[i];
-        lineMap[i].y = nextY;
-        textEl.setAttribute('y', nextY.toFixed(1));
-      }
-    }
+    import {
+      extractParagraphStyleNames,
+      extractParagraphStyles,
+      ensureParagraphStylesLength,
+      applyParagraphStylesToSvg,
+      defaultParagraphStyle,
+      buildParagraphLayoutStyles,
+    } from './lib/paragraph-style-render.js';
 
     const statusEl = document.getElementById('status');
     function setStatus(msg, cls) {
@@ -437,8 +412,13 @@
       const boxWidthInput = document.getElementById('box-width');
       const fontSizeInput = document.getElementById('font-size');
       const lineHeightInput = document.getElementById('line-height');
+      const paraFontSizeInput = document.getElementById('para-font-size');
+      const currentParaEl = document.getElementById('current-para');
+      const applyParaFontBtn = document.getElementById('apply-para-font');
+      const clearParaFontBtn = document.getElementById('clear-para-font');
       const editor = new EditorState(extractParagraphs(sampleEl));
       const paragraphStyleNames = extractParagraphStyleNames(sampleEl);
+      const paragraphStyles = extractParagraphStyles(sampleEl);
       const hasBeforeInput = 'onbeforeinput' in document;
 
       let cursor = null;
@@ -485,11 +465,13 @@
           const x2 = xAtChar(line, to);
           if (x2 <= x1) continue;
 
+          const lineFontSize = line.fontSize || fontSize;
+
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           rect.setAttribute('x', x1.toFixed(2));
-          rect.setAttribute('y', (line.y - fontSize * 0.8).toFixed(2));
+          rect.setAttribute('y', (line.y - lineFontSize * 0.8).toFixed(2));
           rect.setAttribute('width', (x2 - x1).toFixed(2));
-          rect.setAttribute('height', (fontSize * 1.2).toFixed(2));
+          rect.setAttribute('height', (lineFontSize * 1.2).toFixed(2));
           rect.setAttribute('fill', 'rgba(74, 144, 217, 0.28)');
           svg.appendChild(rect);
         }
@@ -551,6 +533,12 @@
         document.getElementById('font-size-val').textContent = fontSize;
         document.getElementById('line-height-val').textContent = lineHeightPct;
 
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length);
+        const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
+        const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal');
+        currentParaEl.textContent = String(currentParaIndex + 1);
+        paraFontSizeInput.value = String(Math.round(currentStyle.fontSize || fontSize));
+
         // Three boxes: varied widths/heights to mimic uneven editorial regions
         const box1Width = boxWidth * 0.44;
         const box2Width = boxWidth * 0.33;
@@ -562,10 +550,19 @@
           { x: box1Width + box2Width + gap * 2, y: 66, width: box3Width, height: 540 },
         ];
 
-        const { svg, lineMap } = engine.renderToContainer(container, editor.story, boxes, fontSize, lineHeightPct);
+        const paragraphLayoutStyles = buildParagraphLayoutStyles(fontSize, paragraphStyles);
+
+        const { svg, lineMap } = engine.renderToContainer(
+          container,
+          editor.story,
+          boxes,
+          fontSize,
+          lineHeightPct,
+          paragraphLayoutStyles,
+        );
         // NOTE: Demo keeps implementation simple and does full re-layout/re-render on each edit.
         // Production editor should add paragraph-level shaping/layout cache and incremental updates.
-        applyParagraphStylesToSvg(svg, lineMap, fontSize, paragraphStyleNames);
+        applyParagraphStylesToSvg(svg, lineMap, fontSize, paragraphStyles);
         svg.setAttribute('style', 'user-select:none');
         renderSelection(svg, lineMap, editor.selection, fontSize);
 
@@ -800,6 +797,22 @@
       boxWidthInput.addEventListener('input', update);
       fontSizeInput.addEventListener('input', update);
       lineHeightInput.addEventListener('input', update);
+      applyParaFontBtn.addEventListener('click', () => {
+        const px = Number(paraFontSizeInput.value);
+        if (!Number.isFinite(px) || px <= 0) return;
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length);
+        const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
+        const base = paragraphStyles[pi] || defaultParagraphStyle('normal');
+        paragraphStyles[pi] = { ...base, fontSize: px };
+        update();
+      });
+      clearParaFontBtn.addEventListener('click', () => {
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length);
+        const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
+        const base = paragraphStyles[pi] || defaultParagraphStyle('normal');
+        paragraphStyles[pi] = { ...base, fontSize: null };
+        update();
+      });
       window.addEventListener('beforeunload', () => {
         if (cursor) cursor.destroy();
       });

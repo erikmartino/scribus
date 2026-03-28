@@ -33,3 +33,20 @@ Create a focused unit test around a pure paragraph-style math helper that:
 - scales first-line fragment x/width consistently,
 - verifies non-overlap (`prev.x + prev.width <= next.x`),
 - verifies per-line y offsets for following lines in the same box.
+
+## Progress update
+
+Completed:
+
+- Added paragraph style model in the demo with `lead` first-line scaling.
+- Added first paragraph with paragraph style metadata (`data-pstyle="lead"`).
+- Implemented line-level x scaling for styled lines to avoid word overlap.
+- Implemented line-map x updates to keep cursor/selection mapping aligned.
+- Implemented vertical offsets for subsequent lines in same box.
+- Added focused unit test file: `docs/story-editor/test/test-paragraph-style-math.js`.
+- Introduced explicit paragraph-style type helpers in `docs/story-editor/lib/paragraph-style.js`.
+- Clarified character style naming in `docs/story-editor/lib/style.js` (`CharacterStyle`) to separate concerns.
+
+Remaining work:
+
+- None for current scope (paragraph style model + current paragraph size apply/reflow) — complete.

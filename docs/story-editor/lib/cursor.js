@@ -148,8 +148,9 @@ export class TextCursor {
     this._pos = { paraIndex: result.paraIndex, charOffset: result.charOffset, lineIndex: result.lineIndex };
 
     // Use the resolved x from xToPos directly (preserves right-edge position)
-    const cursorY = targetLine.y - this._fontSize * 0.8;
-    const cursorH = this._fontSize * 1.2;
+    const lineFontSize = targetLine.fontSize || this._fontSize;
+    const cursorY = targetLine.y - lineFontSize * 0.8;
+    const cursorH = lineFontSize * 1.2;
     this._draw(result.x, cursorY, cursorH);
   }
 

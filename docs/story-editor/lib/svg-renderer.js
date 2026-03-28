@@ -67,8 +67,8 @@ export class SvgRenderer {
    * @returns {{ svg: SVGSVGElement, lineMap: LineMapEntry[] }}
    */
   render(boxResults, fontSize, lineHeightPct) {
-    const lineHeight = fontSize * (lineHeightPct / 100);
-    const paraSpacing = lineHeight * 0.5;
+    const defaultLineHeight = fontSize * (lineHeightPct / 100);
+    const defaultParaSpacing = defaultLineHeight * 0.5;
 
     // Compute SVG bounds from boxes
     let maxX = 0, maxY = 0;
@@ -104,13 +104,16 @@ export class SvgRenderer {
 
       for (let i = 0; i < lines.length; i++) {
         const entry = lines[i];
+        const entryFontSize = entry.fontSize || fontSize;
+        const lineHeight = entry.lineHeight || defaultLineHeight;
+        const paraSpacing = entry.paraSpacing || defaultParaSpacing;
         const { words, isLastInPara } = entry;
         if (i > 0 && lines[i - 1].isLastInPara) y += paraSpacing;
 
         const textEl = document.createElementNS(SVG_NS, 'text');
         textEl.setAttribute('y', y.toFixed(1));
         textEl.setAttribute('font-family', `'${this._fontFamily}', serif`);
-        textEl.setAttribute('font-size', fontSize);
+        textEl.setAttribute('font-size', entryFontSize);
         textEl.setAttribute('fill', '#222');
         textEl.setAttribute('style', 'user-select:none;pointer-events:none');
 
@@ -140,6 +143,7 @@ export class SvgRenderer {
           boxWidth: box.width,
           boxHeight: box.height,
           y,
+          fontSize: entryFontSize,
         });
 
         y += lineHeight;

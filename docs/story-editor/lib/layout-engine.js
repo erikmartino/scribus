@@ -26,6 +26,7 @@ export { buildPositions } from './positions.js';
  * @property {number}   paraIndex  — index into the story
  * @property {number[]} hyphToOrig — mapping from hyphenated-text index to original-text index
  * @property {number}   origLen    — length of the original (un-hyphenated) paragraph text
+ * @property {number}   fontSize   — paragraph-level font size used for shaping
  */
 
 export class LayoutEngine {
@@ -115,24 +116,26 @@ export class LayoutEngine {
    *
    * @param {Story} runsParagraphs
    * @param {number} fontSize
+   * @param {{ fontSize?: number }[]} [paragraphStyles]
    * @returns {ShapedPara[]}
    */
-  shapeParagraphs(runsParagraphs, fontSize) {
+  shapeParagraphs(runsParagraphs, fontSize, paragraphStyles = []) {
     this._pruneShapeCache(runsParagraphs.length);
 
     const shaped = [];
     for (let pi = 0; pi < runsParagraphs.length; pi++) {
       const runs = runsParagraphs[pi];
+      const paraFontSize = Number(paragraphStyles[pi]?.fontSize) || fontSize;
       const fingerprint = this._fingerprintRuns(runs);
       const cached = this._shapeCache.get(pi);
 
-      if (cached && cached.fontSize === fontSize && cached.fingerprint === fingerprint) {
+      if (cached && cached.fontSize === paraFontSize && cached.fingerprint === fingerprint) {
         shaped.push(cached.shapedPara);
         continue;
       }
 
       const hRuns = this._hyphenator.hyphenateRuns(runs);
-      const { text, glyphs } = this._shaper.shapeParagraph(hRuns, fontSize);
+      const { text, glyphs } = this._shaper.shapeParagraph(hRuns, paraFontSize);
 
       // Build mapping from hyphenated text positions to original text positions.
       // Soft hyphens (\u00AD) are inserted by the hyphenator and don't exist in the story.
@@ -150,8 +153,8 @@ export class LayoutEngine {
       // One past end
       const origLen = origText.length;
 
-      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen };
-      this._shapeCache.set(pi, { fontSize, fingerprint, shapedPara });
+      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen, fontSize: paraFontSize };
+      this._shapeCache.set(pi, { fontSize: paraFontSize, fingerprint, shapedPara });
       shaped.push(shapedPara);
     }
     return shaped;
@@ -168,16 +171,17 @@ export class LayoutEngine {
    */
   flowIntoBoxes(shapedParas, boxes, fontSize, lineHeightPct) {
     const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 16;
-    const lineHeight = fontSize * (lineHeightPct / 100);
-    const paraSpacing = lineHeight * 0.5;
-    const hyphenAdvance = this._measureHyphen(fontSize);
     const bottomReserve = this._reserveBottom ? fontSize : 0;
 
     const boxResults = boxes.map(box => ({ box, lines: [] }));
     let boxIdx = 0;
     let usedHeight = 0;
 
-    for (const { text, glyphs, paraIndex, hyphToOrig, origLen } of shapedParas) {
+    for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize } of shapedParas) {
+      const effectiveFontSize = paraFontSize || fontSize;
+      const lineHeight = effectiveFontSize * (lineHeightPct / 100);
+      const paraSpacing = lineHeight * 0.5;
+      const hyphenAdvance = this._measureHyphen(effectiveFontSize);
       if (glyphs.length === 0) {
         while (boxIdx < boxes.length) {
           const extraSpace = (boxResults[boxIdx].lines.length > 0 &&
@@ -204,6 +208,9 @@ export class LayoutEngine {
             origLen,
             hyphenated: false,
             hyphenAdvance,
+            fontSize: effectiveFontSize,
+            lineHeight,
+            paraSpacing,
           });
           usedHeight += needed;
           break;
@@ -251,6 +258,9 @@ export class LayoutEngine {
             origLen,
             hyphenated: line.hyphenated,
             hyphenAdvance,
+            fontSize: effectiveFontSize,
+            lineHeight,
+            paraSpacing,
           });
 
           usedHeight += needed;
@@ -272,10 +282,11 @@ export class LayoutEngine {
    * @param {Box[]} boxes
    * @param {number} fontSize
    * @param {number} lineHeightPct
+   * @param {{ fontSize?: number }[]} [paragraphStyles]
    * @returns {{ svg: SVGSVGElement, lineMap: LineMapEntry[] }}
    */
-  renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct) {
-    const shaped = this.shapeParagraphs(paragraphs, fontSize);
+  renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
+    const shaped = this.shapeParagraphs(paragraphs, fontSize, paragraphStyles);
     const boxResults = this.flowIntoBoxes(shaped, boxes, fontSize, lineHeightPct);
     const { svg, lineMap } = this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
     container.innerHTML = '';
