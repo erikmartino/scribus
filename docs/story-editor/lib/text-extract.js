@@ -1,7 +1,9 @@
 // text-extract.js — DOM tree -> style runs
 
+import { cloneStyle } from './style.js';
+
 /**
- * @typedef {{ bold: boolean, italic: boolean }} Style
+ * @typedef {import('./style.js').Style} Style
  * @typedef {{ text: string, style: Style }} Run
  * @typedef {Run[][]} Story
  */
@@ -11,12 +13,12 @@
  * Every text node inside a <p> must be inside one of these.
  */
 const STYLE_TAGS = {
-  'n':      { bold: false, italic: false },
-  'b':      { bold: true,  italic: false },
-  'strong': { bold: true,  italic: false },
-  'i':      { bold: false, italic: true },
-  'em':     { bold: false, italic: true },
-  'bi':     { bold: true,  italic: true },
+  'n':      {},
+  'b':      { bold: true },
+  'strong': { bold: true },
+  'i':      { italic: true },
+  'em':     { italic: true },
+  'bi':     { bold: true, italic: true },
 };
 
 /**
@@ -35,12 +37,12 @@ export function extractRuns(element) {
       // Only extract text when parent is a style tag.
       // Text nodes directly under <p> are inter-tag whitespace — ignore them.
       if (isStyleTag) {
-        const text = node.textContent;
-        if (text) {
+          const text = node.textContent;
+          if (text) {
           const style = STYLE_TAGS[element.tagName.toLowerCase()];
-          runs.push({ text, style: { ...style } });
+          runs.push({ text, style: cloneStyle(style) });
+          }
         }
-      }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const tag = node.tagName.toLowerCase();
       if (tag in STYLE_TAGS) {

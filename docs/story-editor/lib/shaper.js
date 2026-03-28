@@ -1,7 +1,7 @@
 // shaper.js — shape runs and paragraphs using HarfBuzz
 
 /**
- * @typedef {import('./text-extract.js').Style} Style
+ * @typedef {import('./style.js').Style} Style
  * @typedef {import('./text-extract.js').Run} Run
  */
 

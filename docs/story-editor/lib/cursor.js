@@ -1,7 +1,7 @@
 // cursor.js — SVG cursor view (blinking caret, click/keyboard handlers)
 
 import {
-  moveLeft, moveRight, positionToPoint, pointToPos, xToPos,
+  moveLeft, moveRight, positionToPoint, pointToPos, xToPos, resolveLineIndex,
 } from './story-position.js';
 
 /**
@@ -47,9 +47,30 @@ export class TextCursor {
    * @param {CursorPos} pos
    */
   moveTo(pos) {
-    this._pos = pos;
-    const pt = positionToPoint(pos, this._lineMap, this._fontSize);
+    const lineIndex = resolveLineIndex(pos, this._lineMap);
+    this._pos = { paraIndex: pos.paraIndex, charOffset: pos.charOffset, lineIndex };
+    const pt = positionToPoint(this._pos, this._lineMap, this._fontSize);
     if (pt) this._draw(pt.x, pt.y, pt.height);
+  }
+
+  /**
+   * @returns {CursorPos|null}
+   */
+  getPosition() {
+    if (!this._pos) return null;
+    return { ...this._pos };
+  }
+
+  /**
+   * Replace story reference used for keyboard navigation.
+   * @param {Story} story
+   */
+  setStory(story) {
+    this._story = story;
+  }
+
+  getLineMap() {
+    return this._lineMap;
   }
 
   /**
@@ -65,6 +86,11 @@ export class TextCursor {
     this._cursorEl.setAttribute('y2', (y + height).toFixed(2));
     this._visible = true;
     this._cursorEl.setAttribute('visibility', 'visible');
+  }
+
+  setVisible(visible) {
+    this._visible = !!visible;
+    this._cursorEl.setAttribute('visibility', this._visible ? 'visible' : 'hidden');
   }
 
   /** @param {MouseEvent} event */

@@ -34,7 +34,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
  * Apply SVG attributes for a character style.
- * @param {import('./text-extract.js').Style} style
+ * @param {import('./style.js').Style} style
  * @returns {Record<string, string>}
  */
 function svgAttrsForStyle(style) {
@@ -108,6 +108,7 @@ export class SvgRenderer {
         textEl.setAttribute('font-family', `'${this._fontFamily}', serif`);
         textEl.setAttribute('font-size', fontSize);
         textEl.setAttribute('fill', '#222');
+        textEl.setAttribute('style', 'user-select:none;pointer-events:none');
 
         for (const word of words) {
           for (let fi = 0; fi < word.fragments.length; fi++) {

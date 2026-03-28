@@ -159,6 +159,39 @@ export class LayoutEngine {
     let usedHeight = 0;
 
     for (const { text, glyphs, paraIndex, hyphToOrig, origLen } of shapedParas) {
+      if (glyphs.length === 0) {
+        while (boxIdx < boxes.length) {
+          const extraSpace = (boxResults[boxIdx].lines.length > 0 &&
+            boxResults[boxIdx].lines[boxResults[boxIdx].lines.length - 1].isLastInPara)
+            ? paraSpacing : 0;
+          const needed = extraSpace + lineHeight;
+          const available = boxes[boxIdx].height - padding * 2 - fontSize - usedHeight;
+
+          if (needed > available && boxResults[boxIdx].lines.length > 0) {
+            boxIdx++;
+            usedHeight = 0;
+            continue;
+          }
+
+          boxResults[boxIdx].lines.push({
+            words: [],
+            text,
+            isLastInPara: true,
+            paraIndex,
+            startChar: 0,
+            endChar: 0,
+            glyphs: [],
+            hyphToOrig,
+            origLen,
+            hyphenated: false,
+            hyphenAdvance,
+          });
+          usedHeight += needed;
+          break;
+        }
+        continue;
+      }
+
       // Remaining glyphs to place — re-broken when box width changes
       let remainingGlyphs = glyphs;
 

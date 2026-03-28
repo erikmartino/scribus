@@ -3,7 +3,7 @@
 import { SHY } from './line-breaker.js';
 
 /**
- * @typedef {import('./text-extract.js').Style} Style
+ * @typedef {import('./style.js').Style} Style
  * @typedef {import('./line-breaker.js').Line} Line
  */
 

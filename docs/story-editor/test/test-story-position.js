@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import {
   paraTextLength, moveLeft, moveRight,
-  positionToPoint, xToPos, pointToPos,
+  positionToPoint, xToPos, pointToPos, resolveLineIndex,
 } from '../lib/story-position.js';
 
 const story = [
@@ -144,5 +144,14 @@ describe('line boundary disambiguation', () => {
     const r = moveRight({ paraIndex: 0, charOffset: 3, lineIndex: 0 }, story, lineMap);
     assert.equal(r.charOffset, 4);
     assert.equal(r.lineIndex, 1); // prefers later line
+  });
+
+  it('resolveLineIndex prefers later line at shared boundary', () => {
+    const lineMap = [
+      makeLine(0, 0, [{ charPos: 0, x: 16 }, { charPos: 4, x: 56 }]),
+      makeLine(1, 0, [{ charPos: 4, x: 16 }, { charPos: 8, x: 56 }]),
+    ];
+    const lineIndex = resolveLineIndex({ paraIndex: 0, charOffset: 4 }, lineMap);
+    assert.equal(lineIndex, 1);
   });
 });

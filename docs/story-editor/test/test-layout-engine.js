@@ -91,4 +91,43 @@ describe('LayoutEngine.flowIntoBoxes', () => {
     assert.equal(l3.startChar, 6);
     assert.equal(l3.endChar, 8);
   });
+
+  it('emits line map entry for empty paragraphs', () => {
+    const shaper = {
+      shapeRun() {
+        return [{ ax: 5 }];
+      },
+    };
+    const engine = new LayoutEngine({}, {}, shaper, {}, { _padding: 0 });
+
+    const shapedParas = [
+      {
+        text: '',
+        glyphs: [],
+        paraIndex: 0,
+        hyphToOrig: [],
+        origLen: 0,
+      },
+      {
+        text: 'abc',
+        glyphs: [
+          { cl: 0, ax: 10, style: STYLE },
+          { cl: 1, ax: 10, style: STYLE },
+          { cl: 2, ax: 10, style: STYLE },
+        ],
+        paraIndex: 1,
+        hyphToOrig: [0, 1, 2],
+        origLen: 3,
+      },
+    ];
+
+    const boxes = [{ x: 0, y: 0, width: 80, height: 120 }];
+    const flowed = engine.flowIntoBoxes(shapedParas, boxes, 10, 120);
+
+    assert.equal(flowed[0].lines.length >= 2, true);
+    assert.equal(flowed[0].lines[0].paraIndex, 0);
+    assert.equal(flowed[0].lines[0].startChar, 0);
+    assert.equal(flowed[0].lines[0].endChar, 0);
+    assert.equal(flowed[0].lines[1].paraIndex, 1);
+  });
 });

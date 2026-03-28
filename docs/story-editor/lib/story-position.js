@@ -66,6 +66,16 @@ function findLine(paraIndex, charOffset, lineMap) {
 }
 
 /**
+ * Resolve the best line index for a story position.
+ * @param {{ paraIndex: number, charOffset: number }} pos
+ * @param {LineMapEntry[]} lineMap
+ * @returns {number}
+ */
+export function resolveLineIndex(pos, lineMap) {
+  return findLine(pos.paraIndex, pos.charOffset, lineMap);
+}
+
+/**
  * Move cursor one character to the left.
  * @param {CursorPos} pos
  * @param {Story} story

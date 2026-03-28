@@ -63,7 +63,7 @@ export class FontRegistry {
 
   /**
    * Derive the style key from a style object.
-   * @param {import('./text-extract.js').Style} style
+   * @param {import('./style.js').Style} style
    * @returns {"regular"|"bold"|"italic"|"bolditalic"}
    */
   fontKeyForStyle(style) {
