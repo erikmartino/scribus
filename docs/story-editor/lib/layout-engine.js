@@ -116,7 +116,7 @@ export class LayoutEngine {
    *
    * @param {Story} runsParagraphs
    * @param {number} fontSize
-   * @param {{ fontSize?: number }[]} [paragraphStyles]
+   * @param {{ fontSize: number }[]} [paragraphStyles]
    * @returns {ShapedPara[]}
    */
   shapeParagraphs(runsParagraphs, fontSize, paragraphStyles = []) {
@@ -125,7 +125,8 @@ export class LayoutEngine {
     const shaped = [];
     for (let pi = 0; pi < runsParagraphs.length; pi++) {
       const runs = runsParagraphs[pi];
-      const paraFontSize = Number(paragraphStyles[pi]?.fontSize) || fontSize;
+      const styleFontSize = paragraphStyles[pi]?.fontSize;
+      const paraFontSize = Number.isFinite(styleFontSize) ? Number(styleFontSize) : fontSize;
       const fingerprint = this._fingerprintRuns(runs);
       const cached = this._shapeCache.get(pi);
 
@@ -178,7 +179,7 @@ export class LayoutEngine {
     let usedHeight = 0;
 
     for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize } of shapedParas) {
-      const effectiveFontSize = paraFontSize || fontSize;
+      const effectiveFontSize = paraFontSize;
       const lineHeight = effectiveFontSize * (lineHeightPct / 100);
       const paraSpacing = lineHeight * 0.5;
       const hyphenAdvance = this._measureHyphen(effectiveFontSize);
@@ -282,7 +283,7 @@ export class LayoutEngine {
    * @param {Box[]} boxes
    * @param {number} fontSize
    * @param {number} lineHeightPct
-   * @param {{ fontSize?: number }[]} [paragraphStyles]
+   * @param {{ fontSize: number }[]} [paragraphStyles]
    * @returns {{ svg: SVGSVGElement, lineMap: LineMapEntry[] }}
    */
   renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {

@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { LayoutEngine } from '../lib/layout-engine.js';
+import {
+  defaultParagraphStyle,
+  buildParagraphLayoutStyles,
+} from '../lib/paragraph-style-render.js';
 
 const STYLE = { bold: false, italic: false };
 
@@ -89,6 +93,38 @@ describe('LayoutEngine.shapeParagraphs', () => {
     assert.equal(shapeCalls, 2);
     assert.notEqual(second[0], first[0]);
     assert.equal(second[0].text, 'two');
+  });
+
+  it('applies per-paragraph font sizes from paragraph styles', () => {
+    const calls = [];
+    const shaper = {
+      shapeParagraph(runs, fontSize) {
+        calls.push(fontSize);
+        const text = runs.map((r) => r.text).join('');
+        return { text, glyphs: [{ cl: 0, ax: 10, style: STYLE }] };
+      },
+    };
+    const hyphenator = {
+      hyphenateRuns(runs) {
+        return runs;
+      },
+    };
+
+    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const story = [
+      [{ text: 'lead', style: STYLE }],
+      [{ text: 'body', style: STYLE }],
+    ];
+    const styles = [
+      defaultParagraphStyle('lead', 20),
+      defaultParagraphStyle('normal', 20),
+    ];
+    const layoutStyles = buildParagraphLayoutStyles(20, styles);
+
+    const shaped = engine.shapeParagraphs(story, 20, layoutStyles);
+    assert.deepEqual(calls, [28, 20]);
+    assert.equal(shaped[0].fontSize, 28);
+    assert.equal(shaped[1].fontSize, 20);
   });
 });
 

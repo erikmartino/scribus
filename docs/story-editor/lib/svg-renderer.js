@@ -104,7 +104,7 @@ export class SvgRenderer {
 
       for (let i = 0; i < lines.length; i++) {
         const entry = lines[i];
-        const entryFontSize = entry.fontSize || fontSize;
+        const entryFontSize = entry.fontSize ?? fontSize;
         const lineHeight = entry.lineHeight || defaultLineHeight;
         const paraSpacing = entry.paraSpacing || defaultParaSpacing;
         const { words, isLastInPara } = entry;

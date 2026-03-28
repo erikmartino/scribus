@@ -126,7 +126,7 @@ export function moveRight(pos, story, lineMap) {
 export function positionToPoint(pos, lineMap, fontSize) {
   const line = lineMap[pos.lineIndex];
   if (!line) return null;
-  const lineFontSize = line.fontSize || fontSize;
+  const lineFontSize = line.fontSize ?? fontSize;
 
   const positions = line.positions;
 

@@ -3,15 +3,13 @@
 /**
  * Paragraph-level style (block style on a paragraph).
  * @typedef {{
- *   firstLineScale?: number,
- *   fontSize?: number|null,
+ *   fontSize: number,
  *   [key: string]: unknown,
  * }} ParagraphStyle
  */
 
 export const DEFAULT_PARAGRAPH_STYLE = Object.freeze({
-  firstLineScale: 1,
-  fontSize: null,
+  fontSize: 22,
 });
 
 /**

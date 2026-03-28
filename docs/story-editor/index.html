@@ -373,10 +373,8 @@
     import { TextCursor } from './lib/cursor.js';
     import { EditorState } from './lib/editor-state.js';
     import {
-      extractParagraphStyleNames,
       extractParagraphStyles,
       ensureParagraphStylesLength,
-      applyParagraphStylesToSvg,
       defaultParagraphStyle,
       buildParagraphLayoutStyles,
     } from './lib/paragraph-style-render.js';
@@ -416,10 +414,43 @@
       const currentParaEl = document.getElementById('current-para');
       const applyParaFontBtn = document.getElementById('apply-para-font');
       const clearParaFontBtn = document.getElementById('clear-para-font');
+      const defaultFontSize = +fontSizeInput.value;
       const editor = new EditorState(extractParagraphs(sampleEl));
-      const paragraphStyleNames = extractParagraphStyleNames(sampleEl);
-      const paragraphStyles = extractParagraphStyles(sampleEl);
+      const paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
       const hasBeforeInput = 'onbeforeinput' in document;
+      let prevParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
+
+      function reconcileParagraphStyles(paragraphStylesArr, previousTexts, nextTexts) {
+        if (previousTexts.length === nextTexts.length) return;
+
+        let prefix = 0;
+        while (
+          prefix < previousTexts.length &&
+          prefix < nextTexts.length &&
+          previousTexts[prefix] === nextTexts[prefix]
+        ) {
+          prefix++;
+        }
+
+        let suffix = 0;
+        while (
+          suffix < (previousTexts.length - prefix) &&
+          suffix < (nextTexts.length - prefix) &&
+          previousTexts[previousTexts.length - 1 - suffix] === nextTexts[nextTexts.length - 1 - suffix]
+        ) {
+          suffix++;
+        }
+
+        if (nextTexts.length === previousTexts.length + 1) {
+          const base = paragraphStylesArr[prefix]
+            ?? paragraphStylesArr[Math.max(0, prefix - 1)]
+            ?? defaultParagraphStyle('normal', defaultFontSize);
+          paragraphStylesArr.splice(prefix, 0, { ...base });
+        } else if (nextTexts.length + 1 === previousTexts.length) {
+          const removeAt = previousTexts.length - suffix - 1;
+          if (removeAt >= 0) paragraphStylesArr.splice(removeAt, 1);
+        }
+      }
 
       let cursor = null;
       let selecting = false;
@@ -465,7 +496,7 @@
           const x2 = xAtChar(line, to);
           if (x2 <= x1) continue;
 
-          const lineFontSize = line.fontSize || fontSize;
+          const lineFontSize = line.fontSize ?? fontSize;
 
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           rect.setAttribute('x', x1.toFixed(2));
@@ -533,11 +564,14 @@
         document.getElementById('font-size-val').textContent = fontSize;
         document.getElementById('line-height-val').textContent = lineHeightPct;
 
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length);
+        const nextParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
+        reconcileParagraphStyles(paragraphStyles, prevParagraphTexts, nextParagraphTexts);
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length, fontSize);
+        prevParagraphTexts = nextParagraphTexts;
         const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal');
+        const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', fontSize);
         currentParaEl.textContent = String(currentParaIndex + 1);
-        paraFontSizeInput.value = String(Math.round(currentStyle.fontSize || fontSize));
+        paraFontSizeInput.value = String(Math.round(currentStyle.fontSize));
 
         // Three boxes: varied widths/heights to mimic uneven editorial regions
         const box1Width = boxWidth * 0.44;
@@ -562,7 +596,6 @@
         );
         // NOTE: Demo keeps implementation simple and does full re-layout/re-render on each edit.
         // Production editor should add paragraph-level shaping/layout cache and incremental updates.
-        applyParagraphStylesToSvg(svg, lineMap, fontSize, paragraphStyles);
         svg.setAttribute('style', 'user-select:none');
         renderSelection(svg, lineMap, editor.selection, fontSize);
 
@@ -800,17 +833,16 @@
       applyParaFontBtn.addEventListener('click', () => {
         const px = Number(paraFontSizeInput.value);
         if (!Number.isFinite(px) || px <= 0) return;
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length);
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length, +fontSizeInput.value);
         const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const base = paragraphStyles[pi] || defaultParagraphStyle('normal');
+        const base = paragraphStyles[pi] || defaultParagraphStyle('normal', +fontSizeInput.value);
         paragraphStyles[pi] = { ...base, fontSize: px };
         update();
       });
       clearParaFontBtn.addEventListener('click', () => {
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length);
+        ensureParagraphStylesLength(paragraphStyles, editor.story.length, +fontSizeInput.value);
         const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const base = paragraphStyles[pi] || defaultParagraphStyle('normal');
-        paragraphStyles[pi] = { ...base, fontSize: null };
+        paragraphStyles[pi] = defaultParagraphStyle('normal', +fontSizeInput.value);
         update();
       });
       window.addEventListener('beforeunload', () => {
