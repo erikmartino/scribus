@@ -126,6 +126,34 @@ describe('LayoutEngine.shapeParagraphs', () => {
     assert.equal(shaped[0].fontSize, 28);
     assert.equal(shaped[1].fontSize, 20);
   });
+
+  it('invalidates cache when paragraph font family changes', () => {
+    let shapeCalls = 0;
+    const shaper = {
+      shapeParagraph(runs, fontSize, defaultFamily) {
+        shapeCalls++;
+        const text = runs.map((r) => r.text).join('');
+        return { text, glyphs: [{ cl: 0, ax: 10, style: { fontFamily: defaultFamily } }] };
+      },
+    };
+    const hyphenator = {
+      hyphenateRuns(runs) {
+        return runs;
+      },
+    };
+
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
+    const story = [[{ text: 'test', style: STYLE }]];
+    
+    const layoutStyles1 = [{ fontSize: 20, fontFamily: 'FontA' }];
+    const layoutStyles2 = [{ fontSize: 20, fontFamily: 'FontB' }];
+
+    const shaped1 = engine.shapeParagraphs(story, 20, layoutStyles1);
+    const shaped2 = engine.shapeParagraphs(story, 20, layoutStyles2);
+
+    assert.equal(shapeCalls, 2);
+    assert.notDeepEqual(shaped1[0].glyphs[0].style, shaped2[0].glyphs[0].style);
+  });
 });
 
 describe('LayoutEngine.flowIntoBoxes', () => {

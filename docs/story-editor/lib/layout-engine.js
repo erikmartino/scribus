@@ -133,14 +133,14 @@ export class LayoutEngine {
       const paraFontSize = Number.isFinite(styleFontSize) ? Number(styleFontSize) : fontSize;
       const fingerprint = this._fingerprintRuns(runs);
       const cached = this._shapeCache.get(pi);
+      const defaultFamily = paragraphStyles[pi]?.fontFamily || this._svgRenderer._fontFamily;
 
-      if (cached && cached.fontSize === paraFontSize && cached.fingerprint === fingerprint) {
+      if (cached && cached.fontSize === paraFontSize && cached.fontFamily === defaultFamily && cached.fingerprint === fingerprint) {
         shaped.push(cached.shapedPara);
         continue;
       }
 
       const hRuns = this._hyphenator.hyphenateRuns(runs);
-      const defaultFamily = paragraphStyles[pi]?.fontFamily || this._svgRenderer._fontFamily;
       const { text, glyphs } = this._shaper.shapeParagraph(hRuns, paraFontSize, defaultFamily);
 
       // Build mapping from hyphenated text positions to original text positions.
@@ -160,7 +160,7 @@ export class LayoutEngine {
       const origLen = origText.length;
 
       const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen, fontSize: paraFontSize };
-      this._shapeCache.set(pi, { fontSize: paraFontSize, fingerprint, shapedPara });
+      this._shapeCache.set(pi, { fontSize: paraFontSize, fontFamily: defaultFamily, fingerprint, shapedPara });
       shaped.push(shapedPara);
     }
     return shaped;
