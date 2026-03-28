@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TIFF to PDF Converter</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 1.5rem;
+      line-height: 1.5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.25rem;
+      color: #fff;
+    }
+
+    .description {
+      font-size: 0.85rem;
+      color: #999;
+      margin-bottom: 1.25rem;
+    }
+
+    .controls {
+      display: flex;
+      gap: 1em;
+      flex-wrap: wrap;
+      align-items: end;
+      margin-bottom: 1rem;
+    }
+
+    .controls label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    .controls input[type="text"] {
+      width: 28em;
+      padding: 0.4em 0.6em;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 0.85rem;
+    }
+
+    .controls input[type="file"] {
+      padding: 0.3em 0.5em;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 0.8rem;
+    }
+
+    .controls select {
+      padding: 0.4em 0.6em;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 0.85rem;
+    }
+
+    .controls button {
+      padding: 0.45em 1.4em;
+      border: none;
+      border-radius: 4px;
+      background: #4cc9f0;
+      color: #1a1a2e;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .controls button:hover {
+      background: #7bdff2;
+    }
+
+    .controls button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .controls button.save-btn {
+      background: #57cc99;
+    }
+
+    .controls button.save-btn:hover {
+      background: #80ed99;
+    }
+
+    #status {
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      min-height: 1.3em;
+    }
+
+    #status.error {
+      color: #f07167;
+    }
+
+    #status.ok {
+      color: #57cc99;
+    }
+
+    .stats {
+      display: flex;
+      gap: 2em;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      color: #aaa;
+      margin-bottom: 1rem;
+    }
+
+    .stats span {
+      white-space: nowrap;
+    }
+
+    .stats .value {
+      color: #4cc9f0;
+      font-weight: 600;
+    }
+
+    .canvas-area {
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 1rem;
+      display: inline-block;
+      max-width: 100%;
+      overflow: auto;
+    }
+
+    #preview-canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+  <script src="coi-serviceworker.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "wasm-vips": "https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js"
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <h1>TIFF to PDF Converter</h1>
+  <p class="description">
+    Load a TIFF file (local or URL), preview it, and save as PDF on A4.
+    JPEG and CCITT G4 data is embedded unprocessed; other formats are
+    decoded and deflate-compressed.  Embedded ICC profiles are preserved.
+    Uses wasm-vips in the browser — no server required.
+  </p>
+
+  <div class="controls">
+    <label>
+      TIFF URL (must allow CORS)
+      <input type="text" id="url-input" value="dscf0013.tif">
+    </label>
+    <label>
+      Local file
+      <input type="file" id="file-input" accept=".tif,.tiff">
+    </label>
+    <button id="load-btn">Load</button>
+    <label style="flex-direction:row; align-items:center;">
+      <input type="checkbox" id="cmyk-check">
+      Convert to CMYK
+    </label>
+    <button id="save-btn" class="save-btn" disabled>Save PDF</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div class="stats">
+    <span>Dimensions: <span class="value" id="stat-dims">—</span></span>
+    <span>Compression: <span class="value" id="stat-comp">—</span></span>
+    <span>PDF embed: <span class="value" id="stat-mode">—</span></span>
+    <span>Bands: <span class="value" id="stat-bands">—</span></span>
+    <span>Color space: <span class="value" id="stat-cs">—</span></span>
+    <span>ICC profile: <span class="value" id="stat-icc">—</span></span>
+    <span>File size: <span class="value" id="stat-size">—</span></span>
+    <span>Elapsed: <span class="value" id="stat-time">—</span></span>
+  </div>
+
+  <div class="canvas-area">
+    <canvas id="preview-canvas"></canvas>
+  </div>
+
+  <script type="module">
+    import { initVips, loadTiff, tiffToPdf, imageToPreview } from './lib/tiff-pdf.js';
+
+    const urlInput = /** @type {HTMLInputElement} */ (document.getElementById('url-input'));
+    const fileInput = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
+    const loadBtn = /** @type {HTMLButtonElement} */ (document.getElementById('load-btn'));
+    const cmykCheck = /** @type {HTMLInputElement} */ (document.getElementById('cmyk-check'));
+    const saveBtn = /** @type {HTMLButtonElement} */ (document.getElementById('save-btn'));
+    const statusEl = /** @type {HTMLDivElement} */ (document.getElementById('status'));
+    const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('preview-canvas'));
+
+    const statDims = /** @type {HTMLSpanElement} */ (document.getElementById('stat-dims'));
+    const statComp = /** @type {HTMLSpanElement} */ (document.getElementById('stat-comp'));
+    const statMode = /** @type {HTMLSpanElement} */ (document.getElementById('stat-mode'));
+    const statBands = /** @type {HTMLSpanElement} */ (document.getElementById('stat-bands'));
+    const statCs = /** @type {HTMLSpanElement} */ (document.getElementById('stat-cs'));
+    const statIcc = /** @type {HTMLSpanElement} */ (document.getElementById('stat-icc'));
+    const statSize = /** @type {HTMLSpanElement} */ (document.getElementById('stat-size'));
+    const statTime = /** @type {HTMLSpanElement} */ (document.getElementById('stat-time'));
+
+    /** @type {ArrayBuffer | null} */
+    let currentBuffer = null;
+    let currentFilename = 'output';
+
+    function setStatus(msg, cls) {
+      statusEl.textContent = msg;
+      statusEl.className = cls || '';
+    }
+
+    function resetStats() {
+      statDims.textContent = '—';
+      statComp.textContent = '—';
+      statMode.textContent = '—';
+      statBands.textContent = '—';
+      statCs.textContent = '—';
+      statIcc.textContent = '—';
+      statSize.textContent = '—';
+      statTime.textContent = '—';
+    }
+
+    fileInput.addEventListener('change', () => { urlInput.value = ''; });
+    urlInput.addEventListener('input', () => { fileInput.value = ''; });
+
+    loadBtn.addEventListener('click', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      const url = urlInput.value.trim();
+      if (!file && !url) { setStatus('Enter a URL or pick a file.', 'error'); return; }
+
+      loadBtn.disabled = true;
+      saveBtn.disabled = true;
+      resetStats();
+      currentBuffer = null;
+
+      const t0 = performance.now();
+
+      try {
+        setStatus('Initializing wasm-vips...');
+        await initVips();
+
+        if (file) {
+          setStatus('Reading file...');
+          currentBuffer = await file.arrayBuffer();
+          currentFilename = file.name.replace(/\.[^.]+$/, '');
+          statSize.textContent = formatBytes(file.size);
+        } else {
+          setStatus('Fetching TIFF...');
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+          currentBuffer = await resp.arrayBuffer();
+          currentFilename = url.split('/').pop().replace(/\.[^.]+$/, '') || 'output';
+          statSize.textContent = formatBytes(currentBuffer.byteLength);
+        }
+
+        setStatus('Decoding TIFF...');
+        const info = loadTiff(currentBuffer);
+        try {
+          statDims.textContent = `${info.width} \u00d7 ${info.height}`;
+          statComp.textContent = info.compressionName;
+          statMode.textContent = info.pdfMode;
+          statBands.textContent = String(info.bands) + (info.hasAlpha ? ' (alpha)' : '');
+          statCs.textContent = info.interpretation;
+          statIcc.textContent = `${info.iccSource} (${info.iccColorSpace})`;
+
+          setStatus('Rendering preview...');
+          const { rgba, width, height } = imageToPreview(info.image, 1200);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            throw new Error('2D canvas context is not available');
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const imgData = new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, rgba.byteLength), width, height);
+          ctx.putImageData(imgData, 0, 0);
+        } finally {
+          info.image.delete();
+        }
+
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        statTime.textContent = elapsed + ' s';
+        setStatus(`Loaded \u2014 ${info.width}\u00d7${info.height}, ready to save as PDF.`, 'ok');
+        saveBtn.disabled = false;
+      } catch (err) {
+        setStatus(`Error: ${err.message}`, 'error');
+      } finally {
+        loadBtn.disabled = false;
+      }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      if (!currentBuffer) return;
+
+      saveBtn.disabled = true;
+      const t0 = performance.now();
+
+      try {
+        setStatus('Generating PDF...');
+        const pdfBytes = await tiffToPdf(currentBuffer, { cmyk: cmykCheck.checked });
+
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        setStatus(`PDF generated (${formatBytes(pdfBytes.byteLength)}) in ${elapsed}s \u2014 downloading...`, 'ok');
+
+        // Trigger download
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${currentFilename}.pdf`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        setStatus(`PDF error: ${err.message}`, 'error');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+  </script>
+</body>
+
+</html>
