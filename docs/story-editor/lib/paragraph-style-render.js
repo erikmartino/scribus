@@ -51,11 +51,12 @@ export function ensureParagraphStylesLength(paragraphStyles, paragraphCount, bas
 /**
  * @param {number} baseFontSize
  * @param {import('./paragraph-style.js').ParagraphStyle[]} paragraphStyles
- * @returns {{ fontSize: number }[]}
+ * @returns {{ fontSize: number, fontFamily: string }[]}
  */
 export function buildParagraphLayoutStyles(baseFontSize, paragraphStyles) {
   void baseFontSize;
   return paragraphStyles.map((style) => ({
     fontSize: style.fontSize,
+    fontFamily: style.fontFamily,
   }));
 }

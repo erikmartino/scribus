@@ -120,7 +120,7 @@ export class LayoutEngine {
    *
    * @param {Story} runsParagraphs
    * @param {number} fontSize
-   * @param {{ fontSize: number, fontFamily?: string }[]} [paragraphStyles]
+   * @param {{ fontSize: number, fontFamily: string }[]} [paragraphStyles]
    * @returns {ShapedPara[]}
    */
   shapeParagraphs(runsParagraphs, fontSize, paragraphStyles = []) {
@@ -349,7 +349,7 @@ export class LayoutEngine {
    * @param {Box[]} boxes
    * @param {number} fontSize
    * @param {number} lineHeightPct
-   * @param {{ fontSize: number, fontFamily?: string }[]} [paragraphStyles]
+   * @param {{ fontSize: number, fontFamily: string }[]} [paragraphStyles]
    * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[] }>}
    */
   async renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
@@ -398,7 +398,7 @@ export class LayoutEngine {
 /**
  * @param {number} baseFontSize
  * @param {import('./paragraph-style.js').ParagraphStyle[]} paragraphStyles
- * @returns {{ fontSize: number, fontFamily?: string }[]}
+ * @returns {{ fontSize: number, fontFamily: string }[]}
  */
 export function buildParagraphLayoutStyles(baseFontSize, paragraphStyles) {
   void baseFontSize;
