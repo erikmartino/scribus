@@ -43,7 +43,8 @@ export function buildPdf(img) {
   const offY = (A4_H - dispH) / 2;
 
   const hasAlpha = !!(img.alphaMask && img.alphaMask.length > 0);
-  const hasIcc = !!(img.iccProfile && img.iccProfile.length > 0 && img.iccN > 0);
+  const iccN = img.iccN || 0;
+  const hasIcc = !!(img.iccProfile && img.iccProfile.length > 0 && iccN > 0);
   const enc = new TextEncoder();
 
   // --- Assign object IDs ---
@@ -101,7 +102,7 @@ export function buildPdf(img) {
   objects.push(pdfStream(contentsId, `<< /Length ${drawBytes.length} >>`, drawBytes));
 
   // Soft-mask (optional)
-  if (hasAlpha) {
+  if (hasAlpha && img.alphaMask) {
     const maskDict = `<< /Type /XObject /Subtype /Image ` +
       `/Width ${img.width} /Height ${img.height} ` +
       `/ColorSpace /DeviceGray /BitsPerComponent 8 ` +
@@ -111,11 +112,11 @@ export function buildPdf(img) {
   }
 
   // ICC profile stream (optional)
-  if (hasIcc) {
-    const alternate = img.iccN === 4 ? ' /Alternate /DeviceCMYK'
-      : img.iccN === 1 ? ' /Alternate /DeviceGray'
+  if (hasIcc && img.iccProfile) {
+    const alternate = iccN === 4 ? ' /Alternate /DeviceCMYK'
+      : iccN === 1 ? ' /Alternate /DeviceGray'
       : ' /Alternate /DeviceRGB';
-    const iccDict = `<< /N ${img.iccN}${alternate} ` +
+    const iccDict = `<< /N ${iccN}${alternate} ` +
       `/Length ${img.iccProfile.length} >>`;
     objects.push(pdfStream(iccId, iccDict, img.iccProfile));
   }
@@ -155,17 +156,32 @@ export function buildPdf(img) {
   return pdf;
 }
 
-/** Format a number to a reasonable precision for PDF */
+/**
+ * Format a number to a reasonable precision for PDF
+ * @param {number} n
+ * @returns {string}
+ */
 function fmt(n) {
   return n % 1 === 0 ? String(n) : n.toFixed(2);
 }
 
-/** Build a simple PDF object (no stream) */
+/**
+ * Build a simple PDF object (no stream)
+ * @param {number} id
+ * @param {string} dict
+ * @returns {Uint8Array}
+ */
 function pdfObj(id, dict) {
   return new TextEncoder().encode(`${id} 0 obj\n${dict}\nendobj\n`);
 }
 
-/** Build a PDF stream object */
+/**
+ * Build a PDF stream object
+ * @param {number} id
+ * @param {string} dict
+ * @param {Uint8Array} data
+ * @returns {Uint8Array}
+ */
 function pdfStream(id, dict, data) {
   const enc = new TextEncoder();
   const head = enc.encode(`${id} 0 obj\n${dict}\nstream\n`);

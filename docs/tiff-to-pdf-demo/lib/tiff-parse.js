@@ -28,7 +28,10 @@ const COMP_JPEG = 7;
 const COMP_DEFLATE = 8;
 const COMP_DEFLATE2 = 32946;
 
-/** Human-readable compression names */
+/**
+ * Human-readable compression names
+ * @type {Record<number, string>}
+ */
 const COMP_NAMES = {
   [COMP_NONE]: 'Uncompressed',
   2: 'CCITT Group 3 (1D)',
@@ -92,8 +95,8 @@ export function parseTiff(buffer) {
   const view = new DataView(buffer);
   const le = bytes[0] === 0x49; // 'II' = little-endian
 
-  const read16 = (off) => view.getUint16(off, le);
-  const read32 = (off) => view.getUint32(off, le);
+  const read16 = (/** @type {number} */ off) => view.getUint16(off, le);
+  const read32 = (/** @type {number} */ off) => view.getUint32(off, le);
 
   if (read16(2) !== 42) throw new Error('Not a TIFF file');
 
@@ -114,7 +117,11 @@ export function parseTiff(buffer) {
     tags.set(tag, { type, count, offset: valOff });
   }
 
-  /** Read a single numeric value from a tag */
+  /**
+   * Read a single numeric value from a tag
+   * @param {number} tagId
+   * @param {number} [fallback=0]
+   */
   function readOne(tagId, fallback = 0) {
     const t = tags.get(tagId);
     if (!t) return fallback;
@@ -124,7 +131,10 @@ export function parseTiff(buffer) {
     return read32(t.offset);
   }
 
-  /** Read an array of SHORT or LONG values */
+  /**
+   * Read an array of SHORT or LONG values
+   * @param {number} tagId
+   */
   function readArray(tagId) {
     const t = tags.get(tagId);
     if (!t) return [];
