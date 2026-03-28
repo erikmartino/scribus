@@ -32,11 +32,21 @@ export class Shaper {
    * @param {string} text
    * @param {Style} style
    * @param {number} fontSize
+   * @param {string} [defaultFamily]
    * @returns {Glyph[]}
    */
-  shapeRun(text, style, fontSize) {
-    const fk = this._fontRegistry.fontKeyForStyle(style);
-    const { hbFont, upem } = this._fontRegistry.getFont(fk);
+  shapeRun(text, style, fontSize, defaultFamily = '') {
+    const family = style.fontFamily || defaultFamily;
+    const vk = this._fontRegistry.variantForStyle(style);
+    const fontEntry = this._fontRegistry.getFont(family, vk);
+    
+    if (!fontEntry) {
+      // Fallback if font not loaded
+      const scale = fontSize / 1000; // placeholder UPEM
+      return [{ gid: 0, cl: 0, ax: fontSize * 0.5, ay: 0, dx: 0, dy: 0, style }];
+    }
+
+    const { hbFont, upem } = fontEntry;
     const scale = fontSize / upem;
 
     const buffer = this._hb.createBuffer();
@@ -63,15 +73,16 @@ export class Shaper {
    * Cluster indices are offset per run to form a single coordinate space.
    * @param {Run[]} runs
    * @param {number} fontSize
+   * @param {string} [defaultFamily]
    * @returns {{ text: string, glyphs: Glyph[] }}
    */
-  shapeParagraph(runs, fontSize) {
+  shapeParagraph(runs, fontSize, defaultFamily = '') {
     let fullText = '';
     const allGlyphs = [];
 
     for (const run of runs) {
       const offset = fullText.length;
-      const shaped = this.shapeRun(run.text, run.style, fontSize);
+      const shaped = this.shapeRun(run.text, run.style, fontSize, defaultFamily);
       for (const g of shaped) {
         g.cl += offset;
         allGlyphs.push(g);

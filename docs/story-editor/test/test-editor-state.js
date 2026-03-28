@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { EditorState } from '../lib/editor-state.js';
 
-const N = { bold: false, italic: false };
+const N = { bold: false, italic: false, fontFamily: '' };
 
 function makeEvent(inputType, data) {
   return { inputType, data };
@@ -176,7 +176,7 @@ describe('EditorState', () => {
     assert.equal(editor.hasSelection(), false);
     assert.deepEqual(editor.story[0].map((r) => ({ text: r.text, style: r.style })), [
       { text: 'a', style: N },
-      { text: 'bC', style: { bold: true, italic: false } },
+      { text: 'bC', style: { bold: true, italic: false, fontFamily: '' } },
       { text: 'D', style: N },
     ]);
   });
@@ -187,12 +187,12 @@ describe('EditorState', () => {
 
     assert.equal(editor.applyCharacterStyle({ italic: true }), true);
     const typing = editor.getTypingStyle();
-    assert.deepEqual(typing, { bold: false, italic: true });
+    assert.deepEqual(typing, { bold: false, italic: true, fontFamily: '' });
 
     assert.equal(editor.handleBeforeInput(makeEvent('insertText', 'X')), true);
     assert.deepEqual(editor.story[0].map((r) => ({ text: r.text, style: r.style })), [
       { text: 'ab', style: N },
-      { text: 'X', style: { bold: false, italic: true } },
+      { text: 'X', style: { bold: false, italic: true, fontFamily: '' } },
     ]);
   });
 });

@@ -8,65 +8,97 @@
  */
 
 export class FontRegistry {
-  /** @param {object} hb — HarfBuzz WASM instance */
-  constructor(hb) {
+  /** 
+   * @param {object} hb — HarfBuzz WASM instance 
+   * @param {object} [fontManager] - Optional GoogleFontManager for dynamic loading
+   */
+  constructor(hb, fontManager = null) {
     this._hb = hb;
-    this._fonts = {};
-    this._fontFaces = [];
+    this._fontManager = fontManager;
+    this._fonts = {}; // family -> variant -> FontEntry
+    this._fontFaces = new Set(); // set of registered family:weight:style keys
+    this._defaultFamily = '';
+  }
+
+  setDefaultFamily(family) {
+    this._defaultFamily = family;
   }
 
   /**
-   * Load a font from a URL and register variants (e.g. regular + bold from same variable font).
+   * Load a font from a URL and register variants.
+   * @param {string} family
    * @param {string} url
-   * @param {{ key: string, bold: boolean }[]} variants
-   * @returns {Promise<ArrayBuffer>}
+   * @param {{ variant: string, bold?: boolean, italic?: boolean }[]} variants
+   * @returns {Promise<Uint8Array>}
    */
-  async loadFont(url, variants) {
+  async loadFont(family, url, variants) {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`Font fetch failed: ${resp.status} ${url}`);
     const buffer = await resp.arrayBuffer();
+    const uint8 = new Uint8Array(buffer);
 
-    for (const { key, bold } of variants) {
+    this.registerFontBinaries(family, uint8, variants);
+    return uint8;
+  }
+
+  /**
+   * @param {string} family
+   * @param {Uint8Array} buffer
+   * @param {{ variant: string, bold?: boolean, italic?: boolean }[]} variants
+   */
+  registerFontBinaries(family, buffer, variants) {
+    if (!this._fonts[family]) this._fonts[family] = {};
+
+    for (const { variant, bold } of variants) {
       const blob = this._hb.createBlob(buffer);
       const face = this._hb.createFace(blob, 0);
       const font = this._hb.createFont(face);
-      if (bold) font.setVariations({ wght: 700 });
-      this._fonts[key] = { hbFont: font, hbFace: face, upem: face.upem };
+      // If the font is a variable font, we can set variations.
+      // For now, we follow the existing pattern.
+      if (bold) {
+        // Check if it's a variable font by looking for 'wght' axis (simplified check)
+        // In this prototype, we assume the caller knows if it's variable.
+        font.setVariations({ wght: 700 });
+      }
+      this._fonts[family][variant] = { hbFont: font, hbFace: face, upem: face.upem };
     }
-
-    return buffer;
   }
 
   /**
-   * Register @font-face entries from raw buffers.
-   * @param {{ buffer: ArrayBuffer, style: string, weight: string }[]} entries
-   * @param {string} fontFamily
-   * @returns {Promise<void>}
+   * Register @font-face entries in the browser.
+   * @param {string} family
+   * @param {Uint8Array} buffer
+   * @param {string} weight
+   * @param {string} style
    */
-  async registerFontFaces(entries, fontFamily) {
-    for (const { buffer, style, weight } of entries) {
-      const ff = new FontFace(fontFamily, buffer, { style, weight });
-      await ff.load();
-      document.fonts.add(ff);
-      this._fontFaces.push(ff);
-    }
+  async registerFontFace(family, buffer, weight, style) {
+    const key = `${family}:${weight}:${style}`;
+    if (this._fontFaces.has(key)) return;
+
+    const ff = new FontFace(family, buffer, { weight, style });
+    await ff.load();
+    document.fonts.add(ff);
+    this._fontFaces.add(key);
   }
 
   /**
-   * Get the HarfBuzz font/face/upem for a style key.
-   * @param {"regular"|"bold"|"italic"|"bolditalic"} styleKey
+   * Get the HarfBuzz font entry.
+   * @param {string} family
+   * @param {string} variant
    * @returns {FontEntry|undefined}
    */
-  getFont(styleKey) {
-    return this._fonts[styleKey];
+  getFont(family, variant) {
+    const f = family || this._defaultFamily;
+    if (!this._fonts[f]) return undefined;
+    return this._fonts[f][variant];
   }
 
   /**
-   * Derive the style key from a style object.
+   * Derive the variant ID from a style object.
    * @param {import('./style.js').Style} style
-   * @returns {"regular"|"bold"|"italic"|"bolditalic"}
+   * @returns {string}
    */
-  fontKeyForStyle(style) {
+  variantForStyle(style) {
     if (style.bold && style.italic) return 'bolditalic';
     if (style.bold) return 'bold';
     if (style.italic) return 'italic';

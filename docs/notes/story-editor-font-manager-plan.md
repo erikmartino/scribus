@@ -23,18 +23,25 @@ Add a standalone font manager module (outside `story-editor`) that can dynamical
 2. **On-Demand Loading:** Add a mechanism to download font binaries (`ArrayBuffer`) only when a font is actually used in the editor.
    - Use standard `fetch()` or a CDN-hosted loader library (e.g., `google-fonts-file-loader` via `/+esm`) to retrieve binary data from the URLs discovered in the metadata.
    - Implement a simple cache to avoid re-downloading the same font.
-3. **Integration Helpers:** Add `paragraph-style` helper with `fontFamily` field and normalization logic (mapping family + weight/style to specific URLs).
-4. **Validation:** Add focused tests for metadata parsing, query building, and binary loading.
-5. **Verify:** Verify with `node --test docs/font-manager/test/*.js`.
+3. **Integration with `story-editor`:**
+   - **Style Updates:** Update `CharacterStyle` in `style.js` to include an optional `fontFamily` field.
+   - **Dynamic Registry:** Replace or wrap `FontRegistry` with a version that:
+     - Asynchronously loads fonts via `GoogleFontManager` when a new `fontFamily` is encountered.
+     - Maintains a cache of HarfBuzz font handles (`hb_font_t`) indexed by `family:variant`.
+     - Automatically registers `@font-face` in the browser to keep SVG rendering in sync.
+   - **Shaper Refactor:** Update `shaper.js` to handle `async` font resolution. Since shaping is currently synchronous, this might require pre-loading fonts during the layout phase.
+   - **Layout Engine Integration:** 
+     - Update `LayoutEngine.shapeParagraphs` to identify all required font families in the story.
+     - Add an `async ensureFonts(story)` method to `LayoutEngine` to pre-fetch and register all font binaries before the (synchronous) shaping and line-breaking passes begin.
 
-## Suggestion: Implementation Strategy
+## Architectural Suggestion: Async Font Pre-loading
 
-To satisfy the requirements efficiently without reinventing the wheel:
+To maintain the performance of the synchronous shaping loop while supporting dynamic loading:
 
-- **Metadata Source:** The **`google-webfonts-helper`** API (e.g., `https://gwfh.mranftl.com/api/fonts`) is ideal as it provides direct download links for all formats, including TTF, without requiring an API key. This avoids the need for a large metadata library.
-- **Lazy Fetching:** The `GoogleFontManager` should expose an `async resolveFont(family, variant)` method. This method checks if the font list is loaded, finds the `.ttf` URL, and then performs a `fetch()` for the binary data.
-- **HarfBuzz Integration:** Return the `Uint8Array` directly. This allows the editor to pass it into the HarfBuzz `createBlob` function without any conversion.
-- **No WOFF/WOFF2:** When parsing the font list, look specifically for the `truetype` or `opentype` fields and discard any `woff` or `woff2` entries.
+1. **Discovery Pass:** Before layout, scan the `Story` (runs) and `ParagraphStyle` arrays for unique `fontFamily` values.
+2. **Parallel Load:** Trigger `Promise.all(families.map(f => registry.load(f)))`.
+3. **Sync Shaping:** Once all promises resolve, proceed with the standard synchronous `renderToContainer` pipeline.
+4. **Placeholder/Fallback:** If a font is still loading, the `FontRegistry` should return a fallback (e.g., the default "EB Garamond") to prevent the editor from hanging, then trigger a re-render once the font is ready.
 
 ## Progress
 
@@ -45,3 +52,6 @@ To satisfy the requirements efficiently without reinventing the wheel:
 - [x] Added tests in `docs/font-manager/test/test-google-font-manager.js`.
 - [x] Verified with `node --test`.
 - [ ] Integration with `story-editor`.
+  - [ ] Update `style.js` and `paragraph-style.js`.
+  - [ ] Implement `DynamicFontRegistry`.
+  - [ ] Add font pre-loading to `LayoutEngine`.

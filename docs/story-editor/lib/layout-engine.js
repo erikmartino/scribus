@@ -2,6 +2,7 @@
 
 import { FontRegistry } from './font-registry.js';
 import { Shaper } from './shaper.js';
+import { GoogleFontManager } from '../../font-manager/google-font-manager.js';
 import { Hyphenator } from './hyphenator.js';
 import { breakLines } from './line-breaker.js';
 import { justifyLine } from './justifier.js';
@@ -78,26 +79,29 @@ export class LayoutEngine {
     const hb = hbjsFactory(instance);
 
     // Load fonts and hyphenation in parallel
-    const fontRegistry = new FontRegistry(hb);
+    const fontManager = new GoogleFontManager();
+    const fontRegistry = new FontRegistry(hb, fontManager);
+    fontRegistry.setDefaultFamily(fontFamily);
+
     const [regularBuf, italicBuf, hyphenModule] = await Promise.all([
-      fontRegistry.loadFont(fontUrl, [
-        { key: 'regular', bold: false },
-        { key: 'bold', bold: true },
+      fontRegistry.loadFont(fontFamily, fontUrl, [
+        { variant: 'regular', bold: false },
+        { variant: 'bold', bold: true },
       ]),
-      fontRegistry.loadFont(fontItalicUrl, [
-        { key: 'italic', bold: false },
-        { key: 'bolditalic', bold: true },
+      fontRegistry.loadFont(fontFamily, fontItalicUrl, [
+        { variant: 'italic', bold: false },
+        { variant: 'bolditalic', bold: true },
       ]),
       import(hyphenUrl),
     ]);
 
     // Register @font-face variants
-    await fontRegistry.registerFontFaces([
-      { buffer: regularBuf, style: 'normal', weight: 'normal' },
-      { buffer: regularBuf, style: 'normal', weight: 'bold' },
-      { buffer: italicBuf,  style: 'italic', weight: 'normal' },
-      { buffer: italicBuf,  style: 'italic', weight: 'bold' },
-    ], fontFamily);
+    await Promise.all([
+      fontRegistry.registerFontFace(fontFamily, regularBuf, 'normal', 'normal'),
+      fontRegistry.registerFontFace(fontFamily, regularBuf, 'bold', 'normal'),
+      fontRegistry.registerFontFace(fontFamily, italicBuf, 'normal', 'italic'),
+      fontRegistry.registerFontFace(fontFamily, italicBuf, 'bold', 'italic'),
+    ]);
 
     const shaper = new Shaper(hb, fontRegistry);
     const hyphenator = new Hyphenator(hyphenModule.default.hyphenateSync);
@@ -116,7 +120,7 @@ export class LayoutEngine {
    *
    * @param {Story} runsParagraphs
    * @param {number} fontSize
-   * @param {{ fontSize: number }[]} [paragraphStyles]
+   * @param {{ fontSize: number, fontFamily?: string }[]} [paragraphStyles]
    * @returns {ShapedPara[]}
    */
   shapeParagraphs(runsParagraphs, fontSize, paragraphStyles = []) {
@@ -136,7 +140,8 @@ export class LayoutEngine {
       }
 
       const hRuns = this._hyphenator.hyphenateRuns(runs);
-      const { text, glyphs } = this._shaper.shapeParagraph(hRuns, paraFontSize);
+      const defaultFamily = paragraphStyles[pi]?.fontFamily || this._svgRenderer._fontFamily;
+      const { text, glyphs } = this._shaper.shapeParagraph(hRuns, paraFontSize, defaultFamily);
 
       // Build mapping from hyphenated text positions to original text positions.
       // Soft hyphens (\u00AD) are inserted by the hyphenator and don't exist in the story.
@@ -276,6 +281,65 @@ export class LayoutEngine {
   }
 
   /**
+   * Ensure all fonts used in the story are loaded.
+   * @param {Story} paragraphs
+   * @param {import('./paragraph-style.js').ParagraphStyle[]} [paragraphStyles]
+   */
+  async ensureFonts(paragraphs, paragraphStyles = []) {
+    const families = new Set();
+    const defaultFamily = this._svgRenderer._fontFamily;
+    if (defaultFamily) families.add(defaultFamily);
+
+    for (const para of paragraphs) {
+      for (const run of para) {
+        if (run.style.fontFamily) families.add(run.style.fontFamily);
+      }
+    }
+    for (const style of paragraphStyles) {
+      if (style.fontFamily) families.add(style.fontFamily);
+    }
+
+    const loads = [];
+    for (const family of families) {
+      if (!this._fontRegistry.getFont(family, 'regular')) {
+        loads.push(this._loadFamily(family));
+      }
+    }
+    await Promise.all(loads);
+  }
+
+  /**
+   * @param {string} family
+   */
+  async _loadFamily(family) {
+    if (!family || !this._fontRegistry._fontManager) return;
+
+    // We try to load regular, bold, italic, and bold-italic variants
+    const variants = [
+      { id: 'regular', weight: 'normal', style: 'normal' },
+      { id: 'bold', weight: 'bold', style: 'normal', variant: '700' },
+      { id: 'italic', weight: 'normal', style: 'italic' },
+      { id: 'bolditalic', weight: 'bold', style: 'italic', variant: '700italic' },
+    ];
+
+    const tasks = variants.map(async (v) => {
+      if (this._fontRegistry.getFont(family, v.id)) return;
+
+      try {
+        const binary = await this._fontRegistry._fontManager.resolveFont(family, v.variant || v.id);
+        if (binary) {
+          this._fontRegistry.registerFontBinaries(family, binary, [{ variant: v.id, bold: v.weight === 'bold' }]);
+          await this._fontRegistry.registerFontFace(family, binary, v.weight, v.style);
+        }
+      } catch (e) {
+        console.warn(`Failed to load font ${family} ${v.id}:`, e);
+      }
+    });
+
+    await Promise.all(tasks);
+  }
+
+  /**
    * Full pipeline: shape, flow into boxes, render to SVG.
    *
    * @param {Element} container
@@ -283,10 +347,11 @@ export class LayoutEngine {
    * @param {Box[]} boxes
    * @param {number} fontSize
    * @param {number} lineHeightPct
-   * @param {{ fontSize: number }[]} [paragraphStyles]
-   * @returns {{ svg: SVGSVGElement, lineMap: LineMapEntry[] }}
+   * @param {{ fontSize: number, fontFamily?: string }[]} [paragraphStyles]
+   * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[] }>}
    */
-  renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
+  async renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
+    await this.ensureFonts(paragraphs, paragraphStyles);
     const shaped = this.shapeParagraphs(paragraphs, fontSize, paragraphStyles);
     const boxResults = this.flowIntoBoxes(shaped, boxes, fontSize, lineHeightPct);
     const { svg, lineMap } = this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
@@ -294,6 +359,7 @@ export class LayoutEngine {
     container.appendChild(svg);
     return { svg, lineMap };
   }
+
 
   /**
    * Measure the advance width of a hyphen in the default style.
@@ -325,4 +391,17 @@ export class LayoutEngine {
       }
     }
   }
+}
+
+/**
+ * @param {number} baseFontSize
+ * @param {import('./paragraph-style.js').ParagraphStyle[]} paragraphStyles
+ * @returns {{ fontSize: number, fontFamily?: string }[]}
+ */
+export function buildParagraphLayoutStyles(baseFontSize, paragraphStyles) {
+  void baseFontSize;
+  return paragraphStyles.map((style) => ({
+    fontSize: style.fontSize,
+    fontFamily: style.fontFamily,
+  }));
 }

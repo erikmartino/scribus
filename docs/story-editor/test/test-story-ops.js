@@ -26,13 +26,13 @@ function run(text, style) {
   return { text, style };
 }
 
-const N = { bold: false, italic: false };
-const B = { bold: true, italic: false };
-const I = { bold: false, italic: true };
+const N = { bold: false, italic: false, fontFamily: '' };
+const B = { bold: true, italic: false, fontFamily: '' };
+const I = { bold: false, italic: true, fontFamily: '' };
 
 describe('styleEq', () => {
   it('compares bold/italic only', () => {
-    assert.equal(styleEq(N, { bold: false, italic: false }), true);
+    assert.equal(styleEq(N, { bold: false, italic: false, fontFamily: '' }), true);
     assert.equal(styleEq(N, B), false);
     assert.equal(styleEq(I, B), false);
   });
@@ -293,8 +293,8 @@ describe('range operations', () => {
     assert.deepEqual(out[0].map((r) => r.text), ['a', 'b', 'CD', 'ef']);
     assert.deepEqual(out[0].map((r) => r.style), [
       N,
-      { bold: false, italic: true },
-      { bold: true, italic: true },
+      { bold: false, italic: true, fontFamily: '' },
+      { bold: true, italic: true, fontFamily: '' },
       I,
     ]);
   });

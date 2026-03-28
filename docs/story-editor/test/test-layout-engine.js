@@ -6,7 +6,7 @@ import {
   buildParagraphLayoutStyles,
 } from '../lib/paragraph-style-render.js';
 
-const STYLE = { bold: false, italic: false };
+const STYLE = { bold: false, italic: false, fontFamily: '' };
 
 describe('LayoutEngine.shapeParagraphs', () => {
   it('builds hyphToOrig and origLen correctly with soft hyphens', () => {
@@ -25,7 +25,7 @@ describe('LayoutEngine.shapeParagraphs', () => {
       },
     };
 
-    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
     const shaped = engine.shapeParagraphs([
       [{ text: 'abcd', style: STYLE }],
       [{ text: 'xy', style: STYLE }],
@@ -57,7 +57,7 @@ describe('LayoutEngine.shapeParagraphs', () => {
       },
     };
 
-    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
     const story = [[{ text: 'cached', style: STYLE }]];
 
     const first = engine.shapeParagraphs(story, 12);
@@ -83,7 +83,7 @@ describe('LayoutEngine.shapeParagraphs', () => {
       },
     };
 
-    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
     const original = [[{ text: 'one', style: STYLE }]];
     const updated = [[{ text: 'two', style: STYLE }]];
 
@@ -110,7 +110,7 @@ describe('LayoutEngine.shapeParagraphs', () => {
       },
     };
 
-    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, hyphenator, { _padding: 0 });
     const story = [
       [{ text: 'lead', style: STYLE }],
       [{ text: 'body', style: STYLE }],
@@ -135,7 +135,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         return [{ ax: 5 }];
       },
     };
-    const engine = new LayoutEngine({}, {}, shaper, {}, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, {}, { _padding: 0 });
 
     const text = 'ab cd ef';
     const glyphs = [
@@ -190,7 +190,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
         return [{ ax: 5 }];
       },
     };
-    const engine = new LayoutEngine({}, {}, shaper, {}, { _padding: 0 });
+    const engine = new LayoutEngine({}, { variantForStyle: () => 'regular' }, shaper, {}, { _padding: 0 });
 
     const shapedParas = [
       {

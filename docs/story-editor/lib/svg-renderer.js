@@ -35,12 +35,18 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 /**
  * Apply SVG attributes for a character style.
  * @param {import('./style.js').Style} style
+ * @param {string} [defaultFamily]
  * @returns {Record<string, string>}
  */
-function svgAttrsForStyle(style) {
+function svgAttrsForStyle(style, defaultFamily = '') {
   const attrs = {};
   if (style.bold) attrs['font-weight'] = 'bold';
   if (style.italic) attrs['font-style'] = 'italic';
+  if (style.fontFamily) {
+    attrs['font-family'] = `'${style.fontFamily}', serif`;
+  } else if (defaultFamily) {
+    attrs['font-family'] = `'${defaultFamily}', serif`;
+  }
   return attrs;
 }
 
@@ -112,7 +118,6 @@ export class SvgRenderer {
 
         const textEl = document.createElementNS(SVG_NS, 'text');
         textEl.setAttribute('y', y.toFixed(1));
-        textEl.setAttribute('font-family', `'${this._fontFamily}', serif`);
         textEl.setAttribute('font-size', entryFontSize);
         textEl.setAttribute('fill', '#222');
         textEl.setAttribute('style', 'user-select:none;pointer-events:none');
@@ -122,7 +127,7 @@ export class SvgRenderer {
             const frag = word.fragments[fi];
             const tspan = document.createElementNS(SVG_NS, 'tspan');
             if (fi === 0) tspan.setAttribute('x', (box.x + this._padding + word.x).toFixed(2));
-            const attrs = svgAttrsForStyle(frag.style);
+            const attrs = svgAttrsForStyle(frag.style, this._fontFamily);
             for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
             tspan.textContent = frag.text;
             textEl.appendChild(tspan);

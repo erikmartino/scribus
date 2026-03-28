@@ -34,11 +34,11 @@ describe('extractRuns', () => {
 
     const runs = extractRuns(p);
     assert.deepEqual(runs, [
-      { text: 'plain ', style: { bold: false, italic: false } },
-      { text: 'bold ', style: { bold: true, italic: false } },
-      { text: 'italic', style: { bold: false, italic: true } },
-      { text: ' end', style: { bold: true, italic: false } },
-      { text: 'emph', style: { bold: false, italic: true } },
+      { text: 'plain ', style: { bold: false, italic: false, fontFamily: '' } },
+      { text: 'bold ', style: { bold: true, italic: false, fontFamily: '' } },
+      { text: 'italic', style: { bold: false, italic: true, fontFamily: '' } },
+      { text: ' end', style: { bold: true, italic: false, fontFamily: '' } },
+      { text: 'emph', style: { bold: false, italic: true, fontFamily: '' } },
     ]);
   });
 
@@ -54,10 +54,10 @@ describe('extractRuns', () => {
 
     const runs = extractRuns(p);
     assert.deepEqual(runs, [
-      { text: 'S', style: { bold: true, italic: false } },
-      { text: 'BI', style: { bold: true, italic: true } },
-      { text: 'N', style: { bold: false, italic: false } },
-      { text: 'E', style: { bold: false, italic: true } },
+      { text: 'S', style: { bold: true, italic: false, fontFamily: '' } },
+      { text: 'BI', style: { bold: true, italic: true, fontFamily: '' } },
+      { text: 'N', style: { bold: false, italic: false, fontFamily: '' } },
+      { text: 'E', style: { bold: false, italic: true, fontFamily: '' } },
     ]);
   });
 });
@@ -74,6 +74,6 @@ describe('extractParagraphs', () => {
     assert.equal(story.length, 2);
     assert.equal(story[0][0].text, 'one');
     assert.equal(story[1][0].text, 'two');
-    assert.deepEqual(story[1][0].style, { bold: true, italic: false });
+    assert.deepEqual(story[1][0].style, { bold: true, italic: false, fontFamily: '' });
   });
 });

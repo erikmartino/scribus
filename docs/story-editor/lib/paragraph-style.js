@@ -4,12 +4,14 @@
  * Paragraph-level style (block style on a paragraph).
  * @typedef {{
  *   fontSize: number,
+ *   fontFamily?: string,
  *   [key: string]: unknown,
  * }} ParagraphStyle
  */
 
 export const DEFAULT_PARAGRAPH_STYLE = Object.freeze({
   fontSize: 22,
+  fontFamily: '',
 });
 
 /**

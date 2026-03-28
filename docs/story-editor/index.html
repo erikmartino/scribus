@@ -544,11 +544,11 @@
         };
       }
 
-      function deleteToLineBoundary(side) {
+      async function deleteToLineBoundary(side) {
         if (editor.hasSelection()) {
           if (editor.replaceSelectionWithText('')) {
             if (cursor) cursor.moveTo(editor.cursor);
-            update();
+            await update();
             return true;
           }
           return false;
@@ -564,11 +564,11 @@
         const changed = editor.replaceSelectionWithText('');
         if (!changed) return false;
         cursor.moveTo(editor.cursor);
-        update();
+        await update();
         return true;
       }
 
-      function update() {
+      async function update() {
         const boxWidth = +boxWidthInput.value;
         const fontSize = +fontSizeInput.value;
         const lineHeightPct = +lineHeightInput.value;
@@ -602,7 +602,7 @@
 
         const paragraphLayoutStyles = buildParagraphLayoutStyles(fontSize, paragraphStyles);
 
-        const { svg, lineMap } = engine.renderToContainer(
+        const { svg, lineMap } = await engine.renderToContainer(
           container,
           editor.story,
           boxes,
@@ -627,7 +627,7 @@
         }
       }
 
-      container.addEventListener('mousedown', (e) => {
+      container.addEventListener('mousedown', async (e) => {
         if (!cursor || e.button !== 0) return;
         e.preventDefault();
         container.focus();
@@ -657,10 +657,10 @@
 
         selecting = true;
         dragMoved = false;
-        update();
+        await update();
       });
 
-      document.addEventListener('mousemove', (e) => {
+      document.addEventListener('mousemove', async (e) => {
         if (!selecting || !cursor || !dragAnchor) return;
 
         cursor.handleClick(e);
@@ -687,7 +687,7 @@
           editor.setSelection(dragAnchor, { paraIndex: pos.paraIndex, charOffset: pos.charOffset });
         }
         dragMoved = true;
-        update();
+        await update();
       });
 
       document.addEventListener('mouseup', () => {
@@ -695,7 +695,7 @@
         dragAnchor = null;
       });
 
-      container.addEventListener('click', (e) => {
+      container.addEventListener('click', async (e) => {
         if (dragMoved) {
           dragMoved = false;
           return;
@@ -705,17 +705,17 @@
         const pos = cursor.getPosition();
         if (!pos) return;
         editor.moveCursor(pos, false);
-        update();
+        await update();
       });
 
-      container.addEventListener('keydown', (e) => {
+      container.addEventListener('keydown', async (e) => {
         if (!cursor) return;
 
         const mod = e.metaKey || e.ctrlKey;
         if (mod && (e.key === 'a' || e.key === 'A')) {
           e.preventDefault();
           editor.selectAll();
-          update();
+          await update();
           return;
         }
 
@@ -741,7 +741,7 @@
           if (target) {
             editor.moveCursor(target, e.shiftKey);
             cursor.moveTo(editor.cursor);
-            update();
+            await update();
           }
           return;
         }
@@ -753,7 +753,7 @@
           if (target) {
             editor.moveCursor(target, e.shiftKey);
             cursor.moveTo(editor.cursor);
-            update();
+            await update();
           }
           return;
         }
@@ -764,7 +764,7 @@
           if (target) {
             editor.moveCursor(target, e.shiftKey);
             cursor.moveTo(editor.cursor);
-            update();
+            await update();
           }
           return;
         }
@@ -775,7 +775,7 @@
           if (target) {
             editor.moveCursor(target, e.shiftKey);
             cursor.moveTo(editor.cursor);
-            update();
+            await update();
           }
           return;
         }
@@ -785,7 +785,7 @@
           e.preventDefault();
           editor.moveCursorByWord(e.key === 'ArrowLeft' ? 'left' : 'right', e.shiftKey);
           if (cursor) cursor.moveTo(editor.cursor);
-          update();
+          await update();
           return;
         }
 
@@ -793,7 +793,7 @@
           cursor.handleKeydown(e);
           const pos = cursor.getPosition();
           if (pos) editor.moveCursor(pos, e.shiftKey);
-          update();
+          await update();
           return;
         }
 
@@ -802,15 +802,15 @@
         if (editor.handleKeydown(e)) {
           e.preventDefault();
           if (cursor) cursor.moveTo(editor.cursor);
-          update();
+          await update();
         }
       });
 
-      container.addEventListener('beforeinput', (e) => {
+      container.addEventListener('beforeinput', async (e) => {
         if (!cursor) return;
         if (!editor.handleBeforeInput(e)) return;
         e.preventDefault();
-        update();
+        await update();
       });
 
       container.addEventListener('copy', (e) => {
@@ -821,16 +821,16 @@
         e.clipboardData.setData('text/plain', text);
       });
 
-      container.addEventListener('cut', (e) => {
+      container.addEventListener('cut', async (e) => {
         const text = editor.getSelectedText();
         if (!text) return;
         if (!e.clipboardData) return;
         e.preventDefault();
         e.clipboardData.setData('text/plain', text);
-        if (editor.replaceSelectionWithText('')) update();
+        if (editor.replaceSelectionWithText('')) await update();
       });
 
-      container.addEventListener('paste', (e) => {
+      container.addEventListener('paste', async (e) => {
         if (!e.clipboardData) return;
         const text = e.clipboardData.getData('text/plain');
         if (typeof text !== 'string') return;
@@ -840,44 +840,44 @@
         } else {
           editor.applyOperation('insertText', { text });
         }
-        update();
+        await update();
       });
 
-      boxWidthInput.addEventListener('input', update);
-      fontSizeInput.addEventListener('input', update);
-      lineHeightInput.addEventListener('input', update);
-      applyParaFontBtn.addEventListener('click', () => {
+      boxWidthInput.addEventListener('input', async () => await update());
+      fontSizeInput.addEventListener('input', async () => await update());
+      lineHeightInput.addEventListener('input', async () => await update());
+      applyParaFontBtn.addEventListener('click', async () => {
         const px = Number(paraFontSizeInput.value);
         if (!Number.isFinite(px) || px <= 0) return;
         ensureParagraphStylesLength(paragraphStyles, editor.story.length, +fontSizeInput.value);
         const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
         const base = paragraphStyles[pi] || defaultParagraphStyle('normal', +fontSizeInput.value);
         paragraphStyles[pi] = { ...base, fontSize: px };
-        update();
+        await update();
       });
-      clearParaFontBtn.addEventListener('click', () => {
+      clearParaFontBtn.addEventListener('click', async () => {
         ensureParagraphStylesLength(paragraphStyles, editor.story.length, +fontSizeInput.value);
         const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
         paragraphStyles[pi] = defaultParagraphStyle('normal', +fontSizeInput.value);
-        update();
+        await update();
       });
 
-      toggleBoldBtn.addEventListener('click', () => {
+      toggleBoldBtn.addEventListener('click', async () => {
         const style = editor.getTypingStyle();
         editor.applyCharacterStyle({ bold: !style.bold });
-        update();
+        await update();
       });
 
-      toggleItalicBtn.addEventListener('click', () => {
+      toggleItalicBtn.addEventListener('click', async () => {
         const style = editor.getTypingStyle();
         editor.applyCharacterStyle({ italic: !style.italic });
-        update();
+        await update();
       });
       window.addEventListener('beforeunload', () => {
         if (cursor) cursor.destroy();
       });
 
-      update();
+      await update();
     }
 
     main();
