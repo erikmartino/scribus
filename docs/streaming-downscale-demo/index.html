@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streaming Image Downscaler</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 1.5rem;
+      line-height: 1.5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.25rem;
+      color: #fff;
+    }
+
+    .description {
+      font-size: 0.85rem;
+      color: #999;
+      margin-bottom: 1.25rem;
+    }
+
+    .controls {
+      display: flex;
+      gap: 1em;
+      flex-wrap: wrap;
+      align-items: end;
+      margin-bottom: 1rem;
+    }
+
+    .controls label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    .controls input[type="text"] {
+      width: 28em;
+      padding: 0.4em 0.6em;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 0.85rem;
+    }
+
+    .controls input[type="file"] {
+      padding: 0.3em 0.5em;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 0.8rem;
+    }
+
+    .controls input[type="range"] {
+      width: 8em;
+      accent-color: #4cc9f0;
+    }
+
+    .controls button {
+      padding: 0.45em 1.4em;
+      border: none;
+      border-radius: 4px;
+      background: #4cc9f0;
+      color: #1a1a2e;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .controls button:hover {
+      background: #7bdff2;
+    }
+
+    .controls button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    #status {
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      min-height: 1.3em;
+    }
+
+    #status.error {
+      color: #f07167;
+    }
+
+    #status.ok {
+      color: #57cc99;
+    }
+
+    .stats {
+      display: flex;
+      gap: 2em;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      color: #aaa;
+      margin-bottom: 1rem;
+    }
+
+    .stats span {
+      white-space: nowrap;
+    }
+
+    .stats .value {
+      color: #4cc9f0;
+      font-weight: 600;
+    }
+
+    .canvas-area {
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 1rem;
+      display: inline-block;
+      max-width: 100%;
+      overflow: auto;
+    }
+
+    #output-canvas {
+      display: block;
+      image-rendering: pixelated;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "wasm-vips": "https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js"
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <h1>Streaming Image Downscaler</h1>
+  <p class="description">
+    Downscales large images on the fly using a box filter.
+    Supports PNG (8/16-bit), TIFF (stripped/tiled, CMYK), and JPEG2000.
+    PNG streams row-by-row; TIFF and JP2 decode fully then feed the downscaler.
+  </p>
+
+  <div class="controls">
+    <label>
+      Image URL (PNG, TIFF, JP2 — must allow CORS)
+      <input type="text" id="url-input" value="CMU-1.tiff">
+    </label>
+    <label>
+      Local file
+      <input type="file" id="file-input" accept=".png,.tif,.tiff,.jp2,.j2k,.j2c">
+    </label>
+    <label>
+      Scale factor: <span id="scale-label">4</span>x
+      <input type="range" id="scale-input" min="2" max="64" value="4" step="1">
+    </label>
+    <button id="start-btn">Start</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div class="stats">
+    <span>Format: <span class="value" id="stat-fmt">—</span></span>
+    <span>Source: <span class="value" id="stat-src">—</span></span>
+    <span>Output: <span class="value" id="stat-out">—</span></span>
+    <span>Rows: <span class="value" id="stat-rows">0 / 0</span></span>
+    <span>Downloaded: <span class="value" id="stat-bytes">0 KB</span></span>
+    <span>Elapsed: <span class="value" id="stat-time">0.0 s</span></span>
+  </div>
+
+  <div class="canvas-area">
+    <canvas id="output-canvas"></canvas>
+  </div>
+
+  <script type="module">
+    import { streamPng } from './lib/png-stream.js';
+    import { createDownscaler } from './lib/downscaler.js';
+    import { createRenderer } from './lib/renderer.js';
+    import { detectFormat } from './lib/format-detect.js';
+    import { decodeTiff } from './lib/tiff-decoder.js';
+    import { decodeJp2 } from './lib/jp2-decoder.js';
+
+    const urlInput = /** @type {HTMLInputElement} */ (document.getElementById('url-input'));
+    const fileInput = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
+    const scaleInput = /** @type {HTMLInputElement} */ (document.getElementById('scale-input'));
+    const scaleLabel = /** @type {HTMLSpanElement} */ (document.getElementById('scale-label'));
+    const startBtn = /** @type {HTMLButtonElement} */ (document.getElementById('start-btn'));
+    const statusEl = /** @type {HTMLDivElement} */ (document.getElementById('status'));
+    const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('output-canvas'));
+
+    const statFmt = /** @type {HTMLSpanElement} */ (document.getElementById('stat-fmt'));
+    const statSrc = /** @type {HTMLSpanElement} */ (document.getElementById('stat-src'));
+    const statOut = /** @type {HTMLSpanElement} */ (document.getElementById('stat-out'));
+    const statRows = /** @type {HTMLSpanElement} */ (document.getElementById('stat-rows'));
+    const statBytes = /** @type {HTMLSpanElement} */ (document.getElementById('stat-bytes'));
+    const statTime = /** @type {HTMLSpanElement} */ (document.getElementById('stat-time'));
+
+    /** @type {AbortController | null} */
+    let controller = null;
+
+    /**
+     * @param {string} msg
+     * @param {string} [cls]
+     */
+    function setStatus(msg, cls) {
+      statusEl.textContent = msg;
+      statusEl.className = cls || '';
+    }
+
+    function resetStats() {
+      statFmt.textContent = '—';
+      statSrc.textContent = '—';
+      statOut.textContent = '—';
+      statRows.textContent = '0 / 0';
+      statBytes.textContent = '0 KB';
+      statTime.textContent = '0.0 s';
+    }
+
+    scaleInput.addEventListener('input', () => {
+      scaleLabel.textContent = scaleInput.value;
+    });
+
+    // Clear URL when a file is picked and vice versa
+    fileInput.addEventListener('change', () => { urlInput.value = ''; });
+    urlInput.addEventListener('input', () => { fileInput.value = ''; });
+
+    startBtn.addEventListener('click', async () => {
+      // If running, abort
+      if (controller) {
+        controller.abort();
+        controller = null;
+        startBtn.textContent = 'Start';
+        setStatus('Aborted.', 'error');
+        return;
+      }
+
+      const file = fileInput.files && fileInput.files[0];
+      const url = urlInput.value.trim();
+      if (!file && !url) { setStatus('Enter a URL or pick a file.', 'error'); return; }
+
+      const scale = parseInt(scaleInput.value, 10);
+      controller = new AbortController();
+      startBtn.textContent = 'Stop';
+      resetStats();
+
+      const t0 = performance.now();
+      let srcRows = 0;
+      let outRows = 0;
+      let totalOutRows = 0;
+
+      /** @type {ReturnType<typeof createDownscaler> | null} */
+      let downscaler = null;
+      /** @type {ReturnType<typeof createRenderer> | null} */
+      let renderer = null;
+
+      let lastStatUpdate = 0;
+      function updateStats() {
+        const now = performance.now();
+        if (now - lastStatUpdate < 33) return;
+        lastStatUpdate = now;
+        if (totalOutRows > 0) {
+          statRows.textContent = `${srcRows} src -> ${outRows} / ${totalOutRows} out`;
+        } else {
+          statRows.textContent = `${srcRows} src -> ${outRows} out`;
+        }
+        statTime.textContent = ((now - t0) / 1000).toFixed(1) + ' s';
+      }
+
+      /**
+       * Shared handler for onHeader from PNG stream or buffer decoders.
+       * @param {{ width: number, height: number }} header
+       */
+      function handleHeader(header) {
+        statSrc.textContent = `${header.width} × ${header.height}`;
+        downscaler = createDownscaler(
+          header.width, header.height, scale,
+          (outRowIdx, rgba) => {
+            if (renderer) renderer.drawRow(outRowIdx, rgba);
+            outRows++;
+          }
+        );
+        totalOutRows = downscaler.outHeight;
+        renderer = createRenderer(canvas, downscaler.outWidth, downscaler.outHeight);
+        statOut.textContent = `${downscaler.outWidth} × ${downscaler.outHeight}`;
+        setStatus('Decoding & downscaling...');
+      }
+
+      /**
+       * Shared handler for onRow.
+       * @param {number} rowIndex
+       * @param {Uint8Array} rgba
+       */
+      function handleRow(rowIndex, rgba) {
+        srcRows++;
+        if (downscaler) downscaler.pushRow(rowIndex, rgba);
+        updateStats();
+      }
+
+      function handleEnd() {
+        if (renderer) renderer.flush();
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        statRows.textContent = `${srcRows} src → ${outRows} out`;
+        statTime.textContent = elapsed + ' s';
+        setStatus(`Done — ${outRows} rows in ${elapsed}s`, 'ok');
+        startBtn.textContent = 'Start';
+        controller = null;
+      }
+
+      try {
+        if (file) {
+          // Local file path
+          setStatus('Reading file...');
+          statBytes.textContent = (file.size / 1024).toFixed(0) + ' KB';
+          const headerBytes = await file.slice(0, 12).arrayBuffer();
+          const format = detectFormat(new Uint8Array(headerBytes));
+          statFmt.textContent = format ? format.toUpperCase() : 'unknown';
+
+          if (format === 'png') {
+            setStatus('Streaming PNG...');
+            await streamPng(
+              file.stream(),
+              handleHeader, handleRow, handleEnd,
+              { signal: controller.signal }
+            );
+          } else if (format === 'tiff') {
+            setStatus('Decoding TIFF...');
+            const buffer = await file.arrayBuffer();
+            await decodeTiff(buffer, {
+              onHeader(header) {
+                if (header.tiled) {
+                  // For tiled TIFFs, set up canvas but skip row-based downscaler
+                  statSrc.textContent = `${header.width} × ${header.height}`;
+                  const outW = Math.floor(header.width / scale);
+                  const outH = Math.floor(header.height / scale);
+                  renderer = createRenderer(canvas, outW, outH);
+                  statOut.textContent = `${outW} × ${outH}`;
+                  setStatus('Decoding tiled TIFF...');
+                } else {
+                  handleHeader(header);
+                }
+              },
+              onRow: handleRow,
+              onTile(tileX, tileY, rgba, tileW, tileH) {
+                if (renderer) renderer.drawTile(tileX, tileY, rgba, tileW, tileH);
+                outRows += tileH;
+                updateStats();
+              },
+              onEnd: handleEnd,
+              scale
+            });
+          } else if (format === 'jp2') {
+            setStatus('Decoding JPEG2000...');
+            const buffer = await file.arrayBuffer();
+            await decodeJp2(buffer, {
+              onHeader: handleHeader,
+              onRow: handleRow,
+              onEnd: handleEnd
+            });
+          } else {
+            setStatus('Unrecognized file format.', 'error');
+            startBtn.textContent = 'Start';
+            controller = null;
+          }
+        } else {
+          // URL path — fetch and detect format
+          setStatus('Fetching...');
+          statFmt.textContent = '...';
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+          if (!response.body) throw new Error('ReadableStream not supported');
+
+          // Read first chunk to detect format
+          const bodyReader = response.body.getReader();
+          const firstChunk = await bodyReader.read();
+          if (firstChunk.done || !firstChunk.value) throw new Error('Empty response');
+
+          const headerBytes = firstChunk.value.subarray(0, 12);
+          const format = detectFormat(headerBytes);
+          statFmt.textContent = format ? format.toUpperCase() : 'unknown';
+
+          if (format === 'png') {
+            // Re-assemble stream from first chunk + rest of body
+            const reassembled = new ReadableStream({
+              start(ctrl) { ctrl.enqueue(firstChunk.value); },
+              async pull(ctrl) {
+                const { value, done } = await bodyReader.read();
+                if (done) { ctrl.close(); return; }
+                if (value) ctrl.enqueue(value);
+              },
+              cancel() { bodyReader.cancel(); }
+            });
+
+            await streamPng(
+              reassembled,
+              handleHeader, handleRow, handleEnd,
+              {
+                signal: controller.signal,
+                onProgress: (bytes) => {
+                  statBytes.textContent = (bytes / 1024).toFixed(0) + ' KB';
+                }
+              }
+            );
+          } else if (format === 'tiff' || format === 'jp2') {
+            // Collect full buffer
+            setStatus(`Downloading ${format.toUpperCase()}...`);
+            const chunks = [firstChunk.value];
+            let totalBytes = firstChunk.value.length;
+            while (true) {
+              const { value, done } = await bodyReader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(value);
+                totalBytes += value.length;
+                statBytes.textContent = (totalBytes / 1024).toFixed(0) + ' KB';
+              }
+            }
+
+            // Merge chunks into a single ArrayBuffer
+            const merged = new Uint8Array(totalBytes);
+            let offset = 0;
+            for (const chunk of chunks) {
+              merged.set(chunk, offset);
+              offset += chunk.length;
+            }
+            const buffer = merged.buffer;
+
+            if (format === 'tiff') {
+              setStatus('Decoding TIFF...');
+              await decodeTiff(buffer, {
+                onHeader(header) {
+                  if (header.tiled) {
+                    statSrc.textContent = `${header.width} × ${header.height}`;
+                    const outW = Math.floor(header.width / scale);
+                    const outH = Math.floor(header.height / scale);
+                    renderer = createRenderer(canvas, outW, outH);
+                    statOut.textContent = `${outW} × ${outH}`;
+                    setStatus('Decoding tiled TIFF...');
+                  } else {
+                    handleHeader(header);
+                  }
+                },
+                onRow: handleRow,
+                onTile(tileX, tileY, rgba, tileW, tileH) {
+                  if (renderer) renderer.drawTile(tileX, tileY, rgba, tileW, tileH);
+                  outRows += tileH;
+                  updateStats();
+                },
+                onEnd: handleEnd,
+                scale
+              });
+            } else {
+              setStatus('Decoding JPEG2000...');
+              await decodeJp2(buffer, {
+                onHeader: handleHeader,
+                onRow: handleRow,
+                onEnd: handleEnd
+              });
+            }
+          } else {
+            setStatus('Unrecognized format from URL.', 'error');
+            startBtn.textContent = 'Start';
+            controller = null;
+          }
+        }
+      } catch (err) {
+        if (/** @type {Error} */ (err).name !== 'AbortError') {
+          setStatus(`Error: ${/** @type {Error} */ (err).message}`, 'error');
+        }
+        startBtn.textContent = 'Start';
+        controller = null;
+      }
+    });
+  </script>
+</body>
+
+</html>

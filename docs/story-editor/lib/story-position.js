@@ -7,8 +7,29 @@
 // The last entry in positions is always the right edge of the line.
 
 /**
+ * @typedef {import('./text-extract.js').Story} Story
+ * @typedef {import('./svg-renderer.js').LineMapEntry} LineMapEntry
+ */
+
+/**
+ * A cursor position in the story: paragraph + character offset + line.
+ * @typedef {object} CursorPos
+ * @property {number} paraIndex  — index of the paragraph in the story
+ * @property {number} charOffset — character offset into the paragraph's flattened text
+ * @property {number} lineIndex  — index into the flat lineMap array
+ */
+
+/**
+ * A visual point for rendering the cursor.
+ * @typedef {object} CursorPoint
+ * @property {number} x      — pixel x on the SVG canvas
+ * @property {number} y      — top of the cursor line
+ * @property {number} height — cursor height in pixels
+ */
+
+/**
  * Compute the total text length of a paragraph.
- * @param {object[][]} story
+ * @param {Story} story
  * @param {number} paraIndex
  * @returns {number}
  */
@@ -21,7 +42,7 @@ export function paraTextLength(story, paraIndex) {
  * boundary between two lines, prefer the later line (start of new line).
  * @param {number} paraIndex
  * @param {number} charOffset
- * @param {object[]} lineMap
+ * @param {LineMapEntry[]} lineMap
  * @returns {number}
  */
 function findLine(paraIndex, charOffset, lineMap) {
@@ -46,6 +67,10 @@ function findLine(paraIndex, charOffset, lineMap) {
 
 /**
  * Move cursor one character to the left.
+ * @param {CursorPos} pos
+ * @param {Story} story
+ * @param {LineMapEntry[]} lineMap
+ * @returns {CursorPos}
  */
 export function moveLeft(pos, story, lineMap) {
   if (pos.charOffset > 0) {
@@ -62,6 +87,10 @@ export function moveLeft(pos, story, lineMap) {
 
 /**
  * Move cursor one character to the right.
+ * @param {CursorPos} pos
+ * @param {Story} story
+ * @param {LineMapEntry[]} lineMap
+ * @returns {CursorPos}
  */
 export function moveRight(pos, story, lineMap) {
   const len = paraTextLength(story, pos.paraIndex);
@@ -79,6 +108,10 @@ export function moveRight(pos, story, lineMap) {
 /**
  * Convert a cursor position to visual (x, y) coordinates.
  * Uses lineIndex directly — no searching.
+ * @param {CursorPos} pos
+ * @param {LineMapEntry[]} lineMap
+ * @param {number} fontSize
+ * @returns {CursorPoint|null}
  */
 export function positionToPoint(pos, lineMap, fontSize) {
   const line = lineMap[pos.lineIndex];
@@ -99,7 +132,11 @@ export function positionToPoint(pos, lineMap, fontSize) {
 
 /**
  * Given an x coordinate within a line, find the closest cursor position.
- * Uses left-half/right-half logic.
+ * Uses left-half/right-half logic for sub-glyph precision.
+ * @param {number} x — target x coordinate on the SVG canvas
+ * @param {LineMapEntry} line
+ * @param {number} lineIdx — index of the line in lineMap
+ * @returns {CursorPos & { x: number }} — position with resolved pixel x
  */
 export function xToPos(x, line, lineIdx) {
   const positions = line.positions;
@@ -129,6 +166,11 @@ export function xToPos(x, line, lineIdx) {
 
 /**
  * Convert SVG coordinates from a mouse click to a cursor position.
+ * Finds the nearest box, then the nearest line, then the nearest character.
+ * @param {number} svgX
+ * @param {number} svgY
+ * @param {LineMapEntry[]} lineMap
+ * @returns {CursorPos & { x?: number }}
  */
 export function pointToPos(svgX, svgY, lineMap) {
   if (lineMap.length === 0) return { paraIndex: 0, charOffset: 0, lineIndex: 0 };

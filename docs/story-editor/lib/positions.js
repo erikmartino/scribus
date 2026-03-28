@@ -1,11 +1,41 @@
 // positions.js — build cursor positions from layout data (no DOM dependencies)
 
+/**
+ * @typedef {import('./shaper.js').Glyph} Glyph
+ * @typedef {import('./justifier.js').Word} Word
+ */
+
+/**
+ * A cursor position mapping an original-text character offset to a pixel x coordinate.
+ * @typedef {object} CursorPosition
+ * @property {number} charPos — character offset in the original (un-hyphenated) paragraph text
+ * @property {number} x       — pixel x coordinate on the SVG canvas
+ */
+
+/**
+ * A line entry produced by layout, carrying everything needed for cursor positioning.
+ * @typedef {object} LineEntry
+ * @property {Word[]}   words         — justified words with x offsets
+ * @property {Glyph[]}  glyphs        — raw shaped glyphs for this line
+ * @property {string}   text          — full hyphenated paragraph text
+ * @property {number[]} hyphToOrig    — mapping from hyphenated-text index to original-text index
+ * @property {number}   origLen       — length of the original (un-hyphenated) paragraph text
+ * @property {boolean}  isLastInPara  — true if this is the last line of its paragraph
+ * @property {boolean}  hyphenated    — true if the line ends with a soft-hyphen break
+ * @property {number}   hyphenAdvance — width of a hyphen glyph
+ * @property {number}   startChar     — start character offset in hyphenated text
+ * @property {number}   endChar       — end character offset in hyphenated text
+ * @property {number}   paraIndex     — index of the paragraph in the story
+ */
+
 const SHY = '\u00AD';
 
 /**
  * Merge consecutive glyphs that share the same cluster index (cl).
  * HarfBuzz emits multiple glyphs per ligature cluster — the first carries
  * the advance, the rest have ax=0. Merging sums the advances into one entry.
+ * @param {Glyph[]} rawGlyphs
+ * @returns {Glyph[]}
  */
 export function mergeLigatureClusters(rawGlyphs) {
   const merged = [];
@@ -23,6 +53,10 @@ export function mergeLigatureClusters(rawGlyphs) {
 /**
  * Split a merged glyph array into word groups separated by space glyphs.
  * Each group is { glyphs, endCl, spaceGlyph }.
+ * @param {Glyph[]} glyphs
+ * @param {string} text — full hyphenated paragraph text
+ * @param {number} lineEndChar — end character offset of the line
+ * @returns {{ glyphs: Glyph[], endCl: number, spaceGlyph: Glyph|null }[]}
  */
 export function splitGlyphsIntoWords(glyphs, text, lineEndChar) {
   const wordGroups = [];
@@ -42,6 +76,11 @@ export function splitGlyphsIntoWords(glyphs, text, lineEndChar) {
  * For a single glyph, resolve its cluster span to original-text character
  * positions, filtering out zero-width characters (soft hyphens).
  * Divides the glyph's advance equally among the real characters (sub-glyph hack).
+ * @param {Glyph} glyph
+ * @param {number} nextCl — cluster index of the next glyph (or line end)
+ * @param {string} text — full hyphenated paragraph text
+ * @param {number[]} hyphToOrig — mapping from hyphenated-text index to original-text index
+ * @returns {{ origPos: number, width: number }[]}
  */
 export function resolveGlyphPositions(glyph, nextCl, text, hyphToOrig) {
   const span = Math.max(1, nextCl - glyph.cl);
@@ -59,6 +98,9 @@ export function resolveGlyphPositions(glyph, nextCl, text, hyphToOrig) {
 /**
  * Build cursor positions for a line: an array of { charPos, x } in
  * original-text space. The last entry is always the right edge of the line.
+ * @param {LineEntry} entry
+ * @param {number} baseX — pixel x of the line's left text edge (box.x + padding)
+ * @returns {CursorPosition[]}
  */
 export function buildPositions(entry, baseX) {
   const { glyphs: rawGlyphs, words, text, hyphToOrig, origLen, isLastInPara,
