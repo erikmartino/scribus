@@ -175,6 +175,9 @@
 
   <!-- Sample text as HTML — the DOM tree is the style source -->
   <div id="sample-text">
+    <p data-pstyle="lead">
+      <n>Story Editor Prototype</n>
+    </p>
     <!-- Line breaks between tags are safe (whitespace-only text nodes inside <p>
        are ignored since <p> is not a style tag). But line breaks INSIDE a style
        tag become part of the text content, so keep each tag's text on one line. -->
@@ -329,6 +332,80 @@
     import { TextCursor } from './lib/cursor.js';
     import { EditorState } from './lib/editor-state.js';
 
+    const PARAGRAPH_STYLES = {
+      normal: { firstLineScale: 1 },
+      lead: { firstLineScale: 1.34 },
+    };
+
+    function extractParagraphStyleNames(container) {
+      const names = [];
+      for (const el of container.children) {
+        if (el.tagName.toLowerCase() !== 'p') continue;
+        names.push(el.getAttribute('data-pstyle') || 'normal');
+      }
+      return names;
+    }
+
+    function applyParagraphStylesToSvg(svg, lineMap, baseFontSize, paragraphStyleNames) {
+      const firstLineByPara = new Map();
+      for (const line of lineMap) {
+        if (!firstLineByPara.has(line.paraIndex)) {
+          firstLineByPara.set(line.paraIndex, line.lineIndex);
+        }
+      }
+
+      const textEls = svg.querySelectorAll('text');
+      const lineOffsets = new Array(lineMap.length).fill(0);
+
+      for (let paraIndex = 0; paraIndex < paragraphStyleNames.length; paraIndex++) {
+        const styleName = paragraphStyleNames[paraIndex] || 'normal';
+        const style = PARAGRAPH_STYLES[styleName] || PARAGRAPH_STYLES.normal;
+        const scale = style.firstLineScale || 1;
+        if (scale === 1) continue;
+
+        const lineIndex = firstLineByPara.get(paraIndex);
+        if (!Number.isInteger(lineIndex)) continue;
+        const textEl = textEls[lineIndex];
+        if (!textEl) continue;
+
+        const firstLine = lineMap[lineIndex];
+        const anchorX = firstLine.positions[0]?.x ?? firstLine.colX;
+        textEl.setAttribute('font-size', (baseFontSize * scale).toFixed(2));
+
+        const tspans = textEl.querySelectorAll('tspan[x]');
+        for (const tspan of tspans) {
+          const x = Number(tspan.getAttribute('x'));
+          if (!Number.isFinite(x)) continue;
+          const scaledX = anchorX + (x - anchorX) * scale;
+          tspan.setAttribute('x', scaledX.toFixed(2));
+        }
+
+        for (const pos of firstLine.positions) {
+          pos.x = anchorX + (pos.x - anchorX) * scale;
+        }
+
+        const delta = baseFontSize * (scale - 1);
+        const boxKey = `${firstLine.colX},${firstLine.boxY},${firstLine.boxWidth},${firstLine.boxHeight}`;
+
+        for (let li = lineIndex + 1; li < lineMap.length; li++) {
+          const line = lineMap[li];
+          const key = `${line.colX},${line.boxY},${line.boxWidth},${line.boxHeight}`;
+          if (key === boxKey) {
+            lineOffsets[li] += delta;
+          }
+        }
+      }
+
+      for (let i = 0; i < lineMap.length; i++) {
+        if (lineOffsets[i] === 0) continue;
+        const textEl = textEls[i];
+        if (!textEl) continue;
+        const nextY = lineMap[i].y + lineOffsets[i];
+        lineMap[i].y = nextY;
+        textEl.setAttribute('y', nextY.toFixed(1));
+      }
+    }
+
     const statusEl = document.getElementById('status');
     function setStatus(msg, cls) {
       statusEl.textContent = msg;
@@ -361,6 +438,7 @@
       const fontSizeInput = document.getElementById('font-size');
       const lineHeightInput = document.getElementById('line-height');
       const editor = new EditorState(extractParagraphs(sampleEl));
+      const paragraphStyleNames = extractParagraphStyleNames(sampleEl);
       const hasBeforeInput = 'onbeforeinput' in document;
 
       let cursor = null;
@@ -487,6 +565,7 @@
         const { svg, lineMap } = engine.renderToContainer(container, editor.story, boxes, fontSize, lineHeightPct);
         // NOTE: Demo keeps implementation simple and does full re-layout/re-render on each edit.
         // Production editor should add paragraph-level shaping/layout cache and incremental updates.
+        applyParagraphStylesToSvg(svg, lineMap, fontSize, paragraphStyleNames);
         svg.setAttribute('style', 'user-select:none');
         renderSelection(svg, lineMap, editor.selection, fontSize);
 
