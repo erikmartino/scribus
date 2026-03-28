@@ -1,0 +1,8 @@
+{
+  "name": "scribus-docs",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "start:8000": "node server.js 8000"
+  }
+}

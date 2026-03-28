@@ -2,6 +2,8 @@
 
 A standalone HTML/JavaScript prototype that reimplements the core of the Scribus text layout pipeline in the browser. It uses HarfBuzz WASM for text shaping, renders to SVG, and supports an interactive cursor with sub-glyph ligature positioning.
 
+For AI-agent working rules in the docs tree, see `../AGENTS.md`.
+
 Open `index.html` in a browser. No build step required.
 
 ## Purpose

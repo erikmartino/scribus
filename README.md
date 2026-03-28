@@ -20,6 +20,8 @@ Complex text layout features available right now:
 ## Contributing
 For Bugs and patches: please send them to the [Scribus Bugtracker](http://bugs.scribus.net) to be evaluated. If you do send a PR here, someone will either ask you to do the same or submit the PR as a patch to the bugtracker for you.
 
+AI assistants working in `docs/` should follow `docs/AGENTS.md`.
+
 ## Links
 |Resource | Address |  
 |:---------|:---------|  
@@ -30,5 +32,4 @@ For Bugs and patches: please send them to the [Scribus Bugtracker](http://bugs.s
 |WebSVN | http://scribus.net/websvn |
 |SVN | svn://scribus.net/trunk/Scribus |  
 |IRC | irc://scribus@irc.libera.chat |  
-
 
