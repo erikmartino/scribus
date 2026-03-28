@@ -21,3 +21,12 @@ The standard web typography mapping is:
 *   **900** – Black (Heavy)
 
 When text is configured with a rule such as `font-weight: bold;`, the layout engine immediately resolves that to `700`. If you define `normal` or standard text, it defaults to `400`.
+
+### Missing Weights and Fallback Matching
+
+What happens if a user requests `font-weight: 700` (bold) but the active font family lacks a 700-weight file or definition? 
+
+Web browsers follow a standardized fallback search algorithm:
+1. **Search Upwards (for bold requested weights > 500):** The browser first tries to find a *bolder* weight. If `700` is missing, it checks for `800`, then `900`. 
+2. **Search Downwards:** If no bolder font is found up to `900`, it reverses direction, checking lower weights starting at `600`, then `500`, `400`, all the way down to `100`.
+3. **Synthetic Bolding ("Faux Bold"):** As a final resort, if the browser algorithm decides to map `700` requests onto a normal `400` font face, most rendering engines will automatically apply "faux bold" — artificially smearing/thickening the stroke of the glyphs to make them look bolder, though this usually degrades typographic quality.
