@@ -49,6 +49,12 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
 4. Run verification.
 5. Return a concise change summary.
 
+## Planning Requirement
+
+- If an assistant provides an implementation plan, it must be written to a Markdown file in the repository (not only in chat).
+- Preferred location for cross-demo plans: `docs/notes/`.
+- Use clear, dateable names such as `spread-editor-movable-resizable-boxes-plan.md`.
+
 ## Editing Guidance for `docs/story-editor`
 
 - Keep model logic in `lib/` pure where possible.
