@@ -38,8 +38,10 @@ To satisfy the requirements efficiently without reinventing the wheel:
 
 ## Progress
 
-- In progress.
-- Updated discovery strategy to use Developer API v1 / google-webfonts-helper for TTF/OTF support.
-- Refined plan to support dynamic list downloading and on-demand font fetching.
-- Identified existing libraries (`google-fonts-helper`, `google-fonts-file-loader`) to accelerate implementation via CDN.
-- Updated `AGENTS.md` with CDN-only mandate.
+- [x] Initial research and plan updates.
+- [x] Updated `AGENTS.md` with CDN-only mandate.
+- [x] Implemented `GoogleFontManager` in `docs/font-manager/google-font-manager.js`.
+- [x] Implemented normalization helpers in `docs/font-manager/paragraph-font-style.js`.
+- [x] Added tests in `docs/font-manager/test/test-google-font-manager.js`.
+- [x] Verified with `node --test`.
+- [ ] Integration with `story-editor`.
