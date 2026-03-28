@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spread Editor - Story Core Component</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: #ece8df;
+      color: #2c261f;
+    }
+
+    .shell {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    #status {
+      background: #efe9dc;
+      border: 1px solid #c7bcaa;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+    }
+
+    #status.ok {
+      background: #dfe8d6;
+      border-color: #9fb38f;
+      color: #31482d;
+    }
+
+    #status.error {
+      background: #f3d8d3;
+      border-color: #b98a82;
+      color: #6e2c26;
+    }
+
+    #svg-container {
+      border: 1px solid #b7ae9e;
+      border-radius: 10px;
+      background: #fffef9;
+      min-height: 360px;
+      padding: 10px;
+      overflow: auto;
+      cursor: text;
+      user-select: none;
+      caret-color: transparent;
+      box-shadow: 0 5px 20px rgba(40, 34, 27, 0.12);
+    }
+
+    #svg-container:focus {
+      outline: 2px solid #4d77a8;
+      outline-offset: 2px;
+    }
+
+    #sample-text {
+      display: none;
+    }
+
+    .links {
+      margin-top: 12px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+    <h1>Story Core Component</h1>
+    <p>This page runs the core story editor stack on its own.</p>
+
+    <div id="status">Booting...</div>
+    <div id="svg-container" tabindex="0" contenteditable="true" spellcheck="false"></div>
+
+    <div id="sample-text">
+      <p><n>Story-core component demo with </n><em>standalone execution</em><n>.</n></p>
+      <p><n>Edit here to validate core wiring without spread geometry.</n></p>
+    </div>
+
+    <div class="links">
+      <a href="../../index.html">Back to spread app</a>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+
+</html>

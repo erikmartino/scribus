@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spread Editor Demo</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+      background: linear-gradient(135deg, #e6e1d7 0%, #d7d2c8 50%, #c9c4ba 100%);
+      color: #2a241c;
+    }
+
+    .shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      margin: 8px 0 16px;
+      color: #564d40;
+    }
+
+    #status {
+      background: #efe9dc;
+      border: 1px solid #c3baa8;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+    }
+
+    #status.ok {
+      background: #dfe8d6;
+      border-color: #9fb38f;
+      color: #31482d;
+    }
+
+    #status.error {
+      background: #f3d8d3;
+      border-color: #b98a82;
+      color: #6e2c26;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px 14px;
+      background: rgba(255, 252, 246, 0.65);
+      border: 1px solid #c3baa8;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+
+    .controls label {
+      display: block;
+      font-size: 13px;
+      color: #4f4538;
+    }
+
+    .controls input[type=range] {
+      width: 100%;
+    }
+
+    #svg-container {
+      border: 1px solid #b8b0a0;
+      border-radius: 10px;
+      background: #dad5cb;
+      padding: 8px;
+      overflow: auto;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 4px 18px rgba(50, 42, 32, 0.2);
+      user-select: none;
+      caret-color: transparent;
+      min-height: 340px;
+      cursor: text;
+    }
+
+    #svg-container:focus {
+      outline: 2px solid #4d77a8;
+      outline-offset: 2px;
+    }
+
+    .info {
+      margin-top: 12px;
+      color: #51483b;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    #sample-text {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+    <h1>Spread Editor</h1>
+    <p class="subtitle">A facing-pages demo built on top of the story-editor core modules.</p>
+
+    <div id="status">Booting editor...</div>
+
+    <div class="controls">
+      <label>Page width: <span id="page-width-val">420</span> px
+        <input type="range" id="page-width" min="300" max="680" value="420">
+      </label>
+      <label>Page height: <span id="page-height-val">560</span> px
+        <input type="range" id="page-height" min="380" max="840" value="560">
+      </label>
+      <label>Page margin: <span id="margin-val">44</span> px
+        <input type="range" id="margin" min="20" max="90" value="44">
+      </label>
+      <label>Inner gutter: <span id="gutter-val">36</span> px
+        <input type="range" id="gutter" min="10" max="90" value="36">
+      </label>
+      <label>Column gap: <span id="col-gap-val">18</span> px
+        <input type="range" id="col-gap" min="8" max="44" value="18">
+      </label>
+      <label>Font size: <span id="font-size-val">20</span> px
+        <input type="range" id="font-size" min="12" max="40" value="20">
+      </label>
+      <label>Line height: <span id="line-height-val">138</span> %
+        <input type="range" id="line-height" min="105" max="190" value="138">
+      </label>
+    </div>
+
+    <div id="svg-container" tabindex="0" contenteditable="true" spellcheck="false"></div>
+
+    <div id="sample-text">
+      <p>
+        <n>The spread prototype treats an entire story as one flowing narrative, </n>
+        <em>composed continuously</em>
+        <n> from the left page into the right page.</n>
+      </p>
+      <p>
+        <n>Paragraphs remain style-aware runs, so </n>
+        <b>bold emphasis</b>
+        <n>, </n>
+        <em>italic tone</em>
+        <n>, and </n>
+        <bi>combined styling</bi>
+        <n> survive edits while the text reflows.</n>
+      </p>
+      <p>
+        <n>Use this demo to experiment with page geometry first, then layer in richer features such as folios,
+          page-level guides, and spread annotations.</n>
+      </p>
+    </div>
+
+    <p class="info">
+      This demo reuses `story-editor/lib` modules through `spread-editor/lib/story-editor-core.js` and keeps
+      spread-specific behavior in `spread-editor/app/*`, so additional demos can share the same editing core.
+    </p>
+    <p class="info">
+      Component pages: <a href="./components/story-core/">story-core</a> and
+      <a href="./components/spread-layout/">spread-layout</a>.
+    </p>
+  </div>
+
+  <script type="module" src="./app/main.js"></script>
+</body>
+
+</html>
