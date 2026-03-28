@@ -11,7 +11,10 @@ import {
   deleteBackward,
   deleteForward,
   insertParagraphBreak,
+  applyStyleRange,
+  getStyleAtPos,
 } from './story-ops.js';
+import { cloneStyle } from './style.js';
 
 /**
  * @typedef {import('./text-extract.js').Story} Story
@@ -482,5 +485,41 @@ export class EditorState {
     };
     this._selection = null;
     return true;
+  }
+
+  /**
+   * @param {Partial<import('./style.js').CharacterStyle>} stylePatch
+   * @returns {boolean}
+   */
+  applyCharacterStyle(stylePatch) {
+    const patch = { ...(stylePatch || {}) };
+    if (Object.keys(patch).length === 0) return false;
+
+    const range = this.getSelectionRange();
+    if (range) {
+      this._story = applyStyleRange(this._story, range.start, range.end, patch);
+      this._selection = null;
+      this._cursor = {
+        paraIndex: range.end.paraIndex,
+        charOffset: range.end.charOffset,
+        lineIndex: this._cursor.lineIndex,
+      };
+      return true;
+    }
+
+    const caret = { paraIndex: this._cursor.paraIndex, charOffset: this._cursor.charOffset };
+    const base = getStyleAtPos(this._story, caret, this._cursor.charOffset === 0 ? 'right' : 'left');
+    this._typingStyle = cloneStyle({ ...base, ...patch });
+    return true;
+  }
+
+  /**
+   * @returns {import('./style.js').CharacterStyle}
+   */
+  getTypingStyle() {
+    if (this._typingStyle) return cloneStyle(this._typingStyle);
+    const caret = { paraIndex: this._cursor.paraIndex, charOffset: this._cursor.charOffset };
+    const bias = this._cursor.charOffset === 0 ? 'right' : 'left';
+    return getStyleAtPos(this._story, caret, bias);
   }
 }

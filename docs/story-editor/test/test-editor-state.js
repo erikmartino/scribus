@@ -167,4 +167,32 @@ describe('EditorState', () => {
     assert.equal(editor.story[0][0].text, 'alpha ');
     assert.deepEqual(editor.cursor, { paraIndex: 0, charOffset: 6, lineIndex: 0 });
   });
+
+  it('applyCharacterStyle patches selected text styles', () => {
+    const editor = new EditorState([[{ text: 'ab', style: N }, { text: 'CD', style: N }]]);
+    editor.setSelection({ paraIndex: 0, charOffset: 1 }, { paraIndex: 0, charOffset: 3 });
+
+    assert.equal(editor.applyCharacterStyle({ bold: true }), true);
+    assert.equal(editor.hasSelection(), false);
+    assert.deepEqual(editor.story[0].map((r) => ({ text: r.text, style: r.style })), [
+      { text: 'a', style: N },
+      { text: 'bC', style: { bold: true, italic: false } },
+      { text: 'D', style: N },
+    ]);
+  });
+
+  it('applyCharacterStyle updates typing style at caret for new text', () => {
+    const editor = new EditorState([[{ text: 'ab', style: N }]]);
+    editor.setCursor({ paraIndex: 0, charOffset: 2, lineIndex: 0 });
+
+    assert.equal(editor.applyCharacterStyle({ italic: true }), true);
+    const typing = editor.getTypingStyle();
+    assert.deepEqual(typing, { bold: false, italic: true });
+
+    assert.equal(editor.handleBeforeInput(makeEvent('insertText', 'X')), true);
+    assert.deepEqual(editor.story[0].map((r) => ({ text: r.text, style: r.style })), [
+      { text: 'ab', style: N },
+      { text: 'X', style: { bold: false, italic: true } },
+    ]);
+  });
 });

@@ -110,6 +110,13 @@
       background: linear-gradient(180deg, #ffffff 0%, #dbe8f3 100%);
     }
 
+    .controls button.is-active {
+      background: linear-gradient(180deg, #f2f7ff 0%, #cdddf0 100%);
+      border-color: #5f7ea3;
+      color: #1f3550;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
     #svg-container {
       background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 252, 246, 0.94) 100%),
@@ -209,6 +216,10 @@
     <div class="button-row">
       <button type="button" id="apply-para-font">Apply to paragraph</button>
       <button type="button" id="clear-para-font">Reset paragraph</button>
+    </div>
+    <div class="button-row">
+      <button type="button" id="toggle-bold"><strong>B</strong></button>
+      <button type="button" id="toggle-italic"><em>I</em></button>
     </div>
   </div>
 
@@ -414,6 +425,8 @@
       const currentParaEl = document.getElementById('current-para');
       const applyParaFontBtn = document.getElementById('apply-para-font');
       const clearParaFontBtn = document.getElementById('clear-para-font');
+      const toggleBoldBtn = document.getElementById('toggle-bold');
+      const toggleItalicBtn = document.getElementById('toggle-italic');
       const defaultFontSize = +fontSizeInput.value;
       const editor = new EditorState(extractParagraphs(sampleEl));
       const paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
@@ -570,8 +583,11 @@
         prevParagraphTexts = nextParagraphTexts;
         const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
         const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', fontSize);
+        const typingStyle = editor.getTypingStyle();
         currentParaEl.textContent = String(currentParaIndex + 1);
         paraFontSizeInput.value = String(Math.round(currentStyle.fontSize));
+        toggleBoldBtn.classList.toggle('is-active', !!typingStyle.bold);
+        toggleItalicBtn.classList.toggle('is-active', !!typingStyle.italic);
 
         // Three boxes: varied widths/heights to mimic uneven editorial regions
         const box1Width = boxWidth * 0.44;
@@ -843,6 +859,18 @@
         ensureParagraphStylesLength(paragraphStyles, editor.story.length, +fontSizeInput.value);
         const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
         paragraphStyles[pi] = defaultParagraphStyle('normal', +fontSizeInput.value);
+        update();
+      });
+
+      toggleBoldBtn.addEventListener('click', () => {
+        const style = editor.getTypingStyle();
+        editor.applyCharacterStyle({ bold: !style.bold });
+        update();
+      });
+
+      toggleItalicBtn.addEventListener('click', () => {
+        const style = editor.getTypingStyle();
+        editor.applyCharacterStyle({ italic: !style.italic });
         update();
       });
       window.addEventListener('beforeunload', () => {
