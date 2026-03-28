@@ -5,6 +5,9 @@ import {
   EditorState,
 } from '../lib/story-editor-core.js';
 import { computeSpreadLayout } from './spread-geometry.js';
+import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
+import { drawBoxOverlay } from './box-overlay.js';
+import { BoxInteractionController } from './box-interactions.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -27,6 +30,11 @@ export class SpreadEditorApp {
     this.editor = null;
     this.cursor = null;
     this.hasBeforeInput = 'onbeforeinput' in document;
+    this.boxes = [];
+    this.selectedBoxId = null;
+    this.currentSpread = null;
+    this._svg = null;
+    this._interaction = null;
   }
 
   async init() {
@@ -39,8 +47,24 @@ export class SpreadEditorApp {
         fontUrl: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf',
         fontItalicUrl: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf',
         fontFamily: 'EB Garamond',
+        reserveBottom: false,
       });
       this.editor = new EditorState(extractParagraphs(this.sampleEl));
+      this._interaction = new BoxInteractionController({
+        getSvg: () => this._svg,
+        getBounds: () => this.currentSpread?.pasteboardRect,
+        getBoxes: () => this.boxes,
+        setBoxes: (next) => {
+          this.boxes = typeof next === 'function' ? next(this.boxes) : next;
+          this.update();
+        },
+        onSelectBox: (boxId) => {
+          this.selectedBoxId = boxId;
+        },
+        onBodyClick: (event) => {
+          this._handleTextClick(event);
+        },
+      });
       this.bindEvents();
       this.update();
       this.setStatus('Ready - spread editor active.', 'ok');
@@ -65,14 +89,26 @@ export class SpreadEditorApp {
     this.fontSizeInput.addEventListener('input', update);
     this.lineHeightInput.addEventListener('input', update);
 
+    this.container.addEventListener('pointerdown', (e) => {
+      if (!this._svg) return;
+
+      const target = e.target;
+      const boxId = target?.dataset?.boxId;
+      const handle = target?.dataset?.handle;
+      if (boxId && handle && this._interaction.pointerDown(e, boxId, handle)) {
+        return;
+      }
+
+      if (target?.tagName === 'svg') {
+        this.selectedBoxId = null;
+        this.update();
+      }
+    });
+
     this.container.addEventListener('click', (e) => {
-      if (!this.cursor) return;
-      this.container.focus();
-      this.cursor.handleClick(e);
-      const pos = this.cursor.getPosition();
-      if (!pos) return;
-      this.editor.moveCursor(pos, e.shiftKey);
-      this.update();
+      const target = e.target;
+      if (target?.dataset?.boxId) return;
+      this._handleTextClick(e);
     });
 
     this.container.addEventListener('keydown', (e) => {
@@ -152,14 +188,34 @@ export class SpreadEditorApp {
     this.root.querySelector('#line-height-val').textContent = this.lineHeightInput.value;
   }
 
+  _handleTextClick(e) {
+    if (!this.cursor) return;
+    this.container.focus();
+    this.cursor.handleClick(e);
+    const pos = this.cursor.getPosition();
+    if (!pos) return;
+    this.editor.moveCursor(pos, e.shiftKey);
+    this.update();
+  }
+
   decorateSpread(svg, pageRects, spread) {
     const bg = document.createElementNS(SVG_NS, 'rect');
-    bg.setAttribute('x', '0');
-    bg.setAttribute('y', '0');
-    bg.setAttribute('width', String(spread.spreadWidth));
-    bg.setAttribute('height', String(spread.spreadHeight));
-    bg.setAttribute('fill', '#d7d7d2');
+    bg.setAttribute('x', String(spread.pasteboardRect.x));
+    bg.setAttribute('y', String(spread.pasteboardRect.y));
+    bg.setAttribute('width', String(spread.pasteboardRect.width));
+    bg.setAttribute('height', String(spread.pasteboardRect.height));
+    bg.setAttribute('fill', '#ccc8bc');
     svg.insertBefore(bg, svg.firstChild);
+
+    const spreadShadow = document.createElementNS(SVG_NS, 'rect');
+    spreadShadow.setAttribute('x', String(spread.spreadRect.x));
+    spreadShadow.setAttribute('y', String(spread.spreadRect.y));
+    spreadShadow.setAttribute('width', String(spread.spreadRect.width));
+    spreadShadow.setAttribute('height', String(spread.spreadRect.height));
+    spreadShadow.setAttribute('fill', '#e9e3d6');
+    spreadShadow.setAttribute('stroke', '#b9b09f');
+    spreadShadow.setAttribute('stroke-width', '1.2');
+    svg.insertBefore(spreadShadow, svg.firstChild.nextSibling);
 
     for (let i = pageRects.length - 1; i >= 0; i--) {
       const page = pageRects[i];
@@ -173,6 +229,17 @@ export class SpreadEditorApp {
       r.setAttribute('stroke-width', '1.2');
       svg.insertBefore(r, svg.firstChild.nextSibling);
     }
+
+    const spine = document.createElementNS(SVG_NS, 'line');
+    const spineX = spread.spreadRect.x + spread.spreadRect.width / 2;
+    spine.setAttribute('x1', String(spineX));
+    spine.setAttribute('y1', String(spread.spreadRect.y));
+    spine.setAttribute('x2', String(spineX));
+    spine.setAttribute('y2', String(spread.spreadRect.y + spread.spreadRect.height));
+    spine.setAttribute('stroke', '#aba18d');
+    spine.setAttribute('stroke-width', '1');
+    spine.setAttribute('stroke-dasharray', '4 4');
+    svg.insertBefore(spine, svg.firstChild.nextSibling);
   }
 
   update() {
@@ -190,23 +257,50 @@ export class SpreadEditorApp {
       pageWidth,
       pageHeight,
       margin,
-      gutter,
+      pasteboardPad: gutter,
       colsPerPage: 2,
       colGap,
     });
+    this.currentSpread = spread;
+
+    if (this.boxes.length === 0) {
+      this.boxes = createBoxesFromDefaults(spread.boxes);
+      this.selectedBoxId = this.boxes[0]?.id || null;
+    }
+    if (this.boxes.length !== spread.boxes.length) {
+      const defaults = createBoxesFromDefaults(spread.boxes);
+      this.boxes = defaults.map((d, i) => {
+        const existing = this.boxes[i];
+        if (!existing) return d;
+        return {
+          ...existing,
+          id: d.id,
+        };
+      });
+      this.selectedBoxId = this.boxes[0]?.id || null;
+    }
+    this.boxes = clampBoxesToBounds(this.boxes, spread.pasteboardRect);
 
     const { svg, lineMap } = this.engine.renderToContainer(
       this.container,
       this.editor.story,
-      spread.boxes,
+      this.boxes,
       fontSize,
       lineHeightPct,
     );
+    this._svg = svg;
 
     this.decorateSpread(svg, spread.pageRects, spread);
-    svg.setAttribute('width', String(spread.spreadWidth));
-    svg.setAttribute('height', String(spread.spreadHeight));
-    svg.setAttribute('viewBox', `0 0 ${spread.spreadWidth} ${spread.spreadHeight}`);
+    drawBoxOverlay(svg, {
+      boxes: this.boxes,
+      selectedBoxId: this.selectedBoxId,
+    });
+    svg.setAttribute('width', String(spread.pasteboardRect.width));
+    svg.setAttribute('height', String(spread.pasteboardRect.height));
+    svg.setAttribute(
+      'viewBox',
+      `${spread.pasteboardRect.x} ${spread.pasteboardRect.y} ${spread.pasteboardRect.width} ${spread.pasteboardRect.height}`,
+    );
 
     if (this.cursor) {
       this.cursor.setStory(this.editor.story);

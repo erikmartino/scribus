@@ -36,7 +36,7 @@ export class LayoutEngine {
    * @param {Hyphenator} hyphenator
    * @param {SvgRenderer} svgRenderer
    */
-  constructor(hb, fontRegistry, shaper, hyphenator, svgRenderer) {
+  constructor(hb, fontRegistry, shaper, hyphenator, svgRenderer, options = {}) {
     this._hb = hb;
     this._fontRegistry = fontRegistry;
     this._shaper = shaper;
@@ -44,6 +44,7 @@ export class LayoutEngine {
     this._svgRenderer = svgRenderer;
     this._shapeCache = new Map();
     this._hyphenAdvanceCache = new Map();
+    this._reserveBottom = options.reserveBottom ?? true;
   }
 
   /**
@@ -65,6 +66,7 @@ export class LayoutEngine {
       hbWasmUrl, hbJsUrl, hyphenUrl,
       fontUrl, fontItalicUrl, fontFamily,
       padding,
+      reserveBottom,
     } = options;
 
     // Load HarfBuzz
@@ -103,7 +105,9 @@ export class LayoutEngine {
       ...(padding != null && { padding }),
     });
 
-    return new LayoutEngine(hb, fontRegistry, shaper, hyphenator, svgRenderer);
+    return new LayoutEngine(hb, fontRegistry, shaper, hyphenator, svgRenderer, {
+      reserveBottom,
+    });
   }
 
   /**
@@ -167,6 +171,7 @@ export class LayoutEngine {
     const lineHeight = fontSize * (lineHeightPct / 100);
     const paraSpacing = lineHeight * 0.5;
     const hyphenAdvance = this._measureHyphen(fontSize);
+    const bottomReserve = this._reserveBottom ? fontSize : 0;
 
     const boxResults = boxes.map(box => ({ box, lines: [] }));
     let boxIdx = 0;
@@ -179,7 +184,7 @@ export class LayoutEngine {
             boxResults[boxIdx].lines[boxResults[boxIdx].lines.length - 1].isLastInPara)
             ? paraSpacing : 0;
           const needed = extraSpace + lineHeight;
-          const available = boxes[boxIdx].height - padding * 2 - fontSize - usedHeight;
+          const available = boxes[boxIdx].height - padding * 2 - bottomReserve - usedHeight;
 
           if (needed > available && boxResults[boxIdx].lines.length > 0) {
             boxIdx++;
@@ -223,7 +228,7 @@ export class LayoutEngine {
             boxResults[boxIdx].lines[boxResults[boxIdx].lines.length - 1].isLastInPara)
             ? paraSpacing : 0;
           const needed = extraSpace + lineHeight;
-          const available = boxes[boxIdx].height - padding * 2 - fontSize - usedHeight;
+          const available = boxes[boxIdx].height - padding * 2 - bottomReserve - usedHeight;
 
           if (needed > available && boxResults[boxIdx].lines.length > 0) {
             // Overflow: collect remaining glyphs and re-break in next box
