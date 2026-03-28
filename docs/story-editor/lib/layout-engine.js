@@ -42,6 +42,8 @@ export class LayoutEngine {
     this._shaper = shaper;
     this._hyphenator = hyphenator;
     this._svgRenderer = svgRenderer;
+    this._shapeCache = new Map();
+    this._hyphenAdvanceCache = new Map();
   }
 
   /**
@@ -112,9 +114,19 @@ export class LayoutEngine {
    * @returns {ShapedPara[]}
    */
   shapeParagraphs(runsParagraphs, fontSize) {
+    this._pruneShapeCache(runsParagraphs.length);
+
     const shaped = [];
     for (let pi = 0; pi < runsParagraphs.length; pi++) {
       const runs = runsParagraphs[pi];
+      const fingerprint = this._fingerprintRuns(runs);
+      const cached = this._shapeCache.get(pi);
+
+      if (cached && cached.fontSize === fontSize && cached.fingerprint === fingerprint) {
+        shaped.push(cached.shapedPara);
+        continue;
+      }
+
       const hRuns = this._hyphenator.hyphenateRuns(runs);
       const { text, glyphs } = this._shaper.shapeParagraph(hRuns, fontSize);
 
@@ -134,7 +146,9 @@ export class LayoutEngine {
       // One past end
       const origLen = origText.length;
 
-      shaped.push({ text, glyphs, paraIndex: pi, hyphToOrig, origLen });
+      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen };
+      this._shapeCache.set(pi, { fontSize, fingerprint, shapedPara });
+      shaped.push(shapedPara);
     }
     return shaped;
   }
@@ -270,7 +284,28 @@ export class LayoutEngine {
    * @returns {number}
    */
   _measureHyphen(fontSize) {
+    if (this._hyphenAdvanceCache.has(fontSize)) {
+      return this._hyphenAdvanceCache.get(fontSize);
+    }
     const glyphs = this._shaper.shapeRun('-', { bold: false, italic: false }, fontSize);
-    return glyphs.length > 0 ? glyphs[0].ax : fontSize * 0.3;
+    const advance = glyphs.length > 0 ? glyphs[0].ax : fontSize * 0.3;
+    this._hyphenAdvanceCache.set(fontSize, advance);
+    return advance;
+  }
+
+  _fingerprintRuns(runs) {
+    let out = '';
+    for (const run of runs) {
+      out += `${run.text.length}:${run.text}|${JSON.stringify(run.style)}\n`;
+    }
+    return out;
+  }
+
+  _pruneShapeCache(paraCount) {
+    for (const paraIndex of this._shapeCache.keys()) {
+      if (paraIndex >= paraCount) {
+        this._shapeCache.delete(paraIndex);
+      }
+    }
   }
 }

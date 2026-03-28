@@ -15,8 +15,8 @@ In place:
 ## Remaining Gaps
 
 1. **Performance**
-   - Full-document relayout/rerender per edit.
-   - No incremental paragraph layout cache yet.
+   - Full-document relayout/rerender still happens per edit.
+   - Paragraph shaping cache is now implemented in `layout-engine`, but line breaking/justification/rendering are still global.
 
 2. **Text correctness depth**
    - No explicit grapheme-cluster-aware movement/deletion.
@@ -31,7 +31,7 @@ In place:
 ## Recommended Next Milestone
 
 Focus on production-oriented reliability:
-- incremental layout + shaping cache,
+- incremental line layout/render on top of existing shaping cache,
 - undo/redo transaction history,
 - grapheme-aware cursor/delete semantics,
 - IME test coverage and handling notes.

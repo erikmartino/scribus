@@ -35,6 +35,61 @@ describe('LayoutEngine.shapeParagraphs', () => {
     assert.equal(shaped[1].origLen, 2);
     assert.equal(shaped[1].paraIndex, 1);
   });
+
+  it('reuses cached shaping for unchanged paragraph and font size', () => {
+    let shapeCalls = 0;
+    let hyphenCalls = 0;
+    const shaper = {
+      shapeParagraph(runs) {
+        shapeCalls++;
+        const text = runs.map((r) => r.text).join('');
+        return { text, glyphs: [{ cl: 0, ax: 10, style: STYLE }] };
+      },
+    };
+    const hyphenator = {
+      hyphenateRuns(runs) {
+        hyphenCalls++;
+        return runs;
+      },
+    };
+
+    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const story = [[{ text: 'cached', style: STYLE }]];
+
+    const first = engine.shapeParagraphs(story, 12);
+    const second = engine.shapeParagraphs(story, 12);
+
+    assert.equal(shapeCalls, 1);
+    assert.equal(hyphenCalls, 1);
+    assert.equal(second[0], first[0]);
+  });
+
+  it('invalidates cache when paragraph content changes', () => {
+    let shapeCalls = 0;
+    const shaper = {
+      shapeParagraph(runs) {
+        shapeCalls++;
+        const text = runs.map((r) => r.text).join('');
+        return { text, glyphs: [{ cl: 0, ax: text.length, style: STYLE }] };
+      },
+    };
+    const hyphenator = {
+      hyphenateRuns(runs) {
+        return runs;
+      },
+    };
+
+    const engine = new LayoutEngine({}, {}, shaper, hyphenator, { _padding: 0 });
+    const original = [[{ text: 'one', style: STYLE }]];
+    const updated = [[{ text: 'two', style: STYLE }]];
+
+    const first = engine.shapeParagraphs(original, 12);
+    const second = engine.shapeParagraphs(updated, 12);
+
+    assert.equal(shapeCalls, 2);
+    assert.notEqual(second[0], first[0]);
+    assert.equal(second[0].text, 'two');
+  });
 });
 
 describe('LayoutEngine.flowIntoBoxes', () => {
