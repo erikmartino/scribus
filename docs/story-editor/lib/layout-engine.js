@@ -159,7 +159,7 @@ export class LayoutEngine {
       // One past end
       const origLen = origText.length;
 
-      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen, fontSize: paraFontSize };
+      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen, fontSize: paraFontSize, fontFamily: defaultFamily };
       this._shapeCache.set(pi, { fontSize: paraFontSize, fontFamily: defaultFamily, fingerprint, shapedPara });
       shaped.push(shapedPara);
     }
@@ -183,7 +183,7 @@ export class LayoutEngine {
     let boxIdx = 0;
     let usedHeight = 0;
 
-    for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize } of shapedParas) {
+    for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize, fontFamily } of shapedParas) {
       const effectiveFontSize = paraFontSize;
       const lineHeight = effectiveFontSize * (lineHeightPct / 100);
       const paraSpacing = lineHeight * 0.5;
@@ -215,6 +215,7 @@ export class LayoutEngine {
             hyphenated: false,
             hyphenAdvance,
             fontSize: effectiveFontSize,
+            fontFamily,
             lineHeight,
             paraSpacing,
           });
@@ -265,6 +266,7 @@ export class LayoutEngine {
             hyphenated: line.hyphenated,
             hyphenAdvance,
             fontSize: effectiveFontSize,
+            fontFamily,
             lineHeight,
             paraSpacing,
           });

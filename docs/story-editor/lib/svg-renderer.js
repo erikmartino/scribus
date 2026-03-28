@@ -111,6 +111,7 @@ export class SvgRenderer {
       for (let i = 0; i < lines.length; i++) {
         const entry = lines[i];
         const entryFontSize = entry.fontSize ?? fontSize;
+        const entryFontFamily = entry.fontFamily || this._fontFamily;
         const lineHeight = entry.lineHeight || defaultLineHeight;
         const paraSpacing = entry.paraSpacing || defaultParaSpacing;
         const { words, isLastInPara } = entry;
@@ -127,7 +128,7 @@ export class SvgRenderer {
             const frag = word.fragments[fi];
             const tspan = document.createElementNS(SVG_NS, 'tspan');
             if (fi === 0) tspan.setAttribute('x', (box.x + this._padding + word.x).toFixed(2));
-            const attrs = svgAttrsForStyle(frag.style, this._fontFamily);
+            const attrs = svgAttrsForStyle(frag.style, entryFontFamily);
             for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
             tspan.textContent = frag.text;
             textEl.appendChild(tspan);
