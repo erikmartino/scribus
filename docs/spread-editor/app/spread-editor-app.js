@@ -56,7 +56,7 @@ export class SpreadEditorApp {
         getBoxes: () => this.boxes,
         setBoxes: (next) => {
           this.boxes = typeof next === 'function' ? next(this.boxes) : next;
-          this.update();
+          this.update(); // fire-and-forget from interaction handler
         },
         onSelectBox: (boxId) => {
           this.selectedBoxId = boxId;
@@ -66,7 +66,7 @@ export class SpreadEditorApp {
         },
       });
       this.bindEvents();
-      this.update();
+      await this.update();
       this.setStatus('Ready - spread editor active.', 'ok');
     } catch (err) {
       this.setStatus(`Error: ${err.message}`, 'error');
@@ -89,7 +89,7 @@ export class SpreadEditorApp {
     this.fontSizeInput.addEventListener('input', update);
     this.lineHeightInput.addEventListener('input', update);
 
-    this.container.addEventListener('pointerdown', (e) => {
+    this.container.addEventListener('pointerdown', async (e) => {
       if (!this._svg) return;
 
       const target = e.target;
@@ -101,24 +101,24 @@ export class SpreadEditorApp {
 
       if (target?.tagName === 'svg') {
         this.selectedBoxId = null;
-        this.update();
+        await this.update();
       }
     });
 
-    this.container.addEventListener('click', (e) => {
+    this.container.addEventListener('click', async (e) => {
       const target = e.target;
       if (target?.dataset?.boxId) return;
-      this._handleTextClick(e);
+      await this._handleTextClick(e);
     });
 
-    this.container.addEventListener('keydown', (e) => {
+    this.container.addEventListener('keydown', async (e) => {
       if (!this.cursor) return;
 
       const mod = e.metaKey || e.ctrlKey;
       if (mod && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
         this.editor.selectAll();
-        this.update();
+        await this.update();
         return;
       }
 
@@ -126,7 +126,7 @@ export class SpreadEditorApp {
         this.cursor.handleKeydown(e);
         const pos = this.cursor.getPosition();
         if (pos) this.editor.moveCursor(pos, e.shiftKey);
-        this.update();
+        await this.update();
         return;
       }
 
@@ -134,15 +134,15 @@ export class SpreadEditorApp {
 
       if (this.editor.handleKeydown(e)) {
         e.preventDefault();
-        this.update();
+        await this.update();
       }
     });
 
-    this.container.addEventListener('beforeinput', (e) => {
+    this.container.addEventListener('beforeinput', async (e) => {
       if (!this.cursor) return;
       if (!this.editor.handleBeforeInput(e)) return;
       e.preventDefault();
-      this.update();
+      await this.update();
     });
 
     this.container.addEventListener('copy', (e) => {
@@ -152,15 +152,15 @@ export class SpreadEditorApp {
       e.clipboardData.setData('text/plain', text);
     });
 
-    this.container.addEventListener('cut', (e) => {
+    this.container.addEventListener('cut', async (e) => {
       const text = this.editor.getSelectedText();
       if (!text || !e.clipboardData) return;
       e.preventDefault();
       e.clipboardData.setData('text/plain', text);
-      if (this.editor.replaceSelectionWithText('')) this.update();
+      if (this.editor.replaceSelectionWithText('')) await this.update();
     });
 
-    this.container.addEventListener('paste', (e) => {
+    this.container.addEventListener('paste', async (e) => {
       if (!e.clipboardData) return;
       const text = e.clipboardData.getData('text/plain');
       if (typeof text !== 'string') return;
@@ -170,7 +170,7 @@ export class SpreadEditorApp {
       } else {
         this.editor.applyOperation('insertText', { text });
       }
-      this.update();
+      await this.update();
     });
 
     window.addEventListener('beforeunload', () => {
@@ -188,14 +188,14 @@ export class SpreadEditorApp {
     this.root.querySelector('#line-height-val').textContent = this.lineHeightInput.value;
   }
 
-  _handleTextClick(e) {
+  async _handleTextClick(e) {
     if (!this.cursor) return;
     this.container.focus();
     this.cursor.handleClick(e);
     const pos = this.cursor.getPosition();
     if (!pos) return;
     this.editor.moveCursor(pos, e.shiftKey);
-    this.update();
+    await this.update();
   }
 
   decorateSpread(svg, pageRects, spread) {
@@ -242,7 +242,7 @@ export class SpreadEditorApp {
     svg.insertBefore(spine, svg.firstChild.nextSibling);
   }
 
-  update() {
+  async update() {
     this.updateControlLabels();
 
     const pageWidth = Number(this.pageWidthInput.value);
@@ -281,7 +281,7 @@ export class SpreadEditorApp {
     }
     this.boxes = clampBoxesToBounds(this.boxes, spread.pasteboardRect);
 
-    const { svg, lineMap } = this.engine.renderToContainer(
+    const { svg, lineMap } = await this.engine.renderToContainer(
       this.container,
       this.editor.story,
       this.boxes,
