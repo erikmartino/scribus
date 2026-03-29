@@ -38,12 +38,16 @@ export class Shaper {
   shapeRun(text, style, fontSize, defaultFamily = '') {
     const family = style.fontFamily || defaultFamily;
     const vk = this._fontRegistry.variantForStyle(style);
-    const fontEntry = this._fontRegistry.getFont(family, vk);
+
+    // Resolve the best available variant, falling back if the exact one isn't loaded.
+    const fontEntry = this._resolveFontEntry(family, vk);
     
     if (!fontEntry) {
-      // Fallback if font not loaded
-      const scale = fontSize / 1000; // placeholder UPEM
-      return [{ gid: 0, cl: 0, ax: fontSize * 0.5, ay: 0, dx: 0, dy: 0, style }];
+      // No variant at all loaded for this family — return placeholder advances.
+      // One entry per character so line-breaking can at least split runs.
+      return Array.from(text).map((_, i) => ({
+        gid: 0, cl: i, ax: fontSize * 0.5, ay: 0, dx: 0, dy: 0, style,
+      }));
     }
 
     const { hbFont, upem } = fontEntry;
@@ -103,5 +107,25 @@ export class Shaper {
   measureString(text, style, fontSize) {
     const glyphs = this.shapeRun(text, style, fontSize);
     return glyphs.reduce((sum, g) => sum + g.ax, 0);
+  }
+
+  /**
+   * Resolve the best available FontEntry for a family+variant, cascading
+   * through less specific variants when the exact one isn't loaded.
+   * @param {string} family
+   * @param {string} variant
+   * @returns {import('./font-registry.js').FontEntry|undefined}
+   */
+  _resolveFontEntry(family, variant) {
+    const get = (v) => this._fontRegistry.getFont(family, v);
+    if (get(variant)) return get(variant);
+    // Cascade: prefer dropping bold or italic before giving up entirely.
+    if (variant === 'bolditalic') {
+      return get('italic') || get('bold') || get('regular');
+    }
+    if (variant === 'bold' || variant === 'italic') {
+      return get('regular');
+    }
+    return undefined;
   }
 }
