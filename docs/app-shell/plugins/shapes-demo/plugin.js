@@ -181,25 +181,61 @@ export class ShapesDemoPlugin {
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     });
+
+    return item;
   }
 
   _handlePaste(event) {
     const payload = event.detail;
-    payload.items.forEach(data => {
-      if (data.type === 'circle' || data.type === 'square' || data.type === 'triangle') {
-        this._createShapeFromData(data);
+    const compatibleItems = payload.items.filter(data => 
+      data.type === 'circle' || data.type === 'square' || data.type === 'triangle'
+    );
+    
+    if (compatibleItems.length === 0) return;
+
+    // Prepare exactly what will be created, including pre-calculated positions and stable IDs
+    const itemsToCreate = compatibleItems.map(data => {
+      const id = data.id || ('pasted-' + Math.random().toString(36).substr(2, 9));
+      // Apply the paste offset only once here
+      const offset = (data.isUndo || data.id) ? 0 : 10;
+      return {
+        ...data,
+        id,
+        left: (data.left || 0) + offset,
+        top: (data.top || 0) + offset,
+        isUndo: true // Disable further offsetting in _createShapeFromData
+      };
+    });
+
+    this.shell.history.submit({
+      label: `Paste ${itemsToCreate.length} Shape${itemsToCreate.length > 1 ? 's' : ''}`,
+      execute: () => {
+        selection.clear();
+        itemsToCreate.forEach(data => {
+          this._createShapeFromData(data);
+        });
+      },
+      undo: () => {
+        itemsToCreate.forEach(data => {
+          const item = activeDocument.get(data.id);
+          if (item) {
+            if (item.element) item.element.remove();
+            activeDocument.removeItem(data.id);
+          }
+        });
+        selection.clear();
       }
     });
   }
 
   _createShapeFromData(data) {
     const container = document.getElementById('selectable-shapes');
-    if (!container) return;
+    if (!container) return null;
 
     const el = document.createElement('div');
     el.className = `selectable ${data.type}`;
     el.dataset.type = data.type;
-    el.dataset.id = 'pasted-' + Math.random().toString(36).substr(2, 9);
+    el.dataset.id = data.id || ('pasted-' + Math.random().toString(36).substr(2, 9));
     
     if (data.type === 'triangle') {
       el.style.borderBottomColor = data.color || '#4caf50';
@@ -209,7 +245,7 @@ export class ShapesDemoPlugin {
     
     el.textContent = data.text || '';
     
-    // Position with offset if it's a paste
+    // Position with offset if it's a first-time paste (not undo/redo)
     const offset = data.isUndo ? 0 : 10;
     el.style.left = `${(data.left || 0) + offset}px`;
     el.style.top = `${(data.top || 0) + offset}px`;
@@ -217,8 +253,9 @@ export class ShapesDemoPlugin {
     
     container.appendChild(el);
     
-    this._registerShape(el);
-    selection.select(activeDocument.get(el.dataset.id));
+    const item = this._registerShape(el);
+    selection.add(item);
+    return item;
   }
 
   _handleMarquee(event) {

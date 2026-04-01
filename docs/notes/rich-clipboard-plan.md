@@ -17,12 +17,7 @@ Enable rich object copy-pasting (shapes, text, components) across different brow
 
 ## Task List
 
-- [ ] Create `docs/app-shell/lib/clipboard-service.js`
-- [ ] Implement `ClipboardService.copy(items)`
-- [ ] Implement `ClipboardService.paste()`
-- [ ] Define serialization/deserialization for Shapes
-- [ ] Wire up global `copy` and `paste` listeners in `AppShell`
-- [ ] Provide UI feedback (status messages)
+Status: Completed
 
 ## Example JSON Fragment
 ```json
