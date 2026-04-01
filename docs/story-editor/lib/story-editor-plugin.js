@@ -129,15 +129,35 @@ export class StoryEditorPlugin {
   }
 
   handlePaste(payload) {
-    // Look for story data in items
+    // 1. Native Story Data (preferred)
     const storyItem = payload.items.find(it => it.type === 'story');
     if (storyItem) {
       this.submitAction('Paste Story', () => {
-         // Simplest implementation: replace what's selected with the pasted story text
-         // or if it's matching the whole shell, maybe merge?
-         // For now, let's just insert as text.
          const text = storyItem.story.map(p => p.map(r => r.text).join('')).join('\n');
-         this.editor.replaceSelectionWithText(text);
+         if (this.editor.hasSelection()) {
+           this.editor.replaceSelectionWithText(text);
+         } else {
+           this.editor.applyOperation('insertText', { text });
+         }
+      });
+      return;
+    }
+
+    // 2. Plain Text / Rich Text Fallbacks
+    const textItem = payload.items.find(it => it.type === 'plain-text' || it.type === 'rich-text-fragment');
+    if (textItem) {
+      this.submitAction('Paste Text', () => {
+        // For rich text, we currently just extract text content for simplicity in this demo
+        const raw = textItem.data;
+        const text = textItem.type === 'rich-text-fragment' 
+          ? raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ') 
+          : raw;
+        
+        if (this.editor.hasSelection()) {
+          this.editor.replaceSelectionWithText(text);
+        } else {
+          this.editor.applyOperation('insertText', { text });
+        }
       });
     }
   }

@@ -8,8 +8,9 @@ In place:
 - pure story mutation operations,
 - central editor state,
 - beforeinput + keydown fallback editing loop,
-- selection + plain-text clipboard path,
+- selection + rich clipboard service,
 - cursor/navigation tied to line-map positions,
+- integrated undo/redo transaction history via App Shell,
 - unit tests for story ops, editor state, cursor/positions, and layout integration.
 
 ## Remaining Gaps
@@ -24,14 +25,14 @@ In place:
    - BiDi/complex-script editing behavior not fully addressed.
 
 3. **Editing features**
-   - Clipboard currently plain-text only.
-   - Undo/redo transaction model not implemented.
-   - Typing style model is minimal.
+   - [x] Rich clipboard support inside the App Shell.
+- [x] Undo/redo transaction history.
+- Typing style model is minimal.
 
 ## Recommended Next Milestone
 
 Focus on production-oriented reliability:
 - incremental line layout/render on top of existing shaping cache,
-- undo/redo transaction history,
+- [x] integrated undo/redo history,
 - grapheme-aware cursor/delete semantics,
 - IME test coverage and handling notes.

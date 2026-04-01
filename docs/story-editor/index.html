@@ -10,75 +10,87 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --paper: #fffcf5;
+      --paper-border: #cdc2af;
+      --workspace-bg: #121214;
+    }
+
+    body {
+      background-color: var(--workspace-bg);
+      margin: 0;
+      padding: 0;
+      color: var(--text-main);
+    }
+
     /* Story Editor Specific Styles */
     #svg-container {
-      background: var(--paper, #fffcf5);
-      padding: 40px;
-      border-radius: 4px;
-      border: 1px solid var(--paper-border, #cdc2af);
-      box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+      background: var(--paper);
+      padding: 60px;
+      border-radius: 8px;
+      border: 1px solid var(--paper-border);
+      box-shadow: 0 30px 90px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
       cursor: text;
       user-select: none;
       caret-color: transparent;
-      overflow: auto;
-      min-height: 800px;
-      margin: 0 auto;
+      overflow: visible;
+      min-height: 1000px;
+      margin: 40px auto;
       max-width: fit-content;
       color: #1a1a1a;
       outline: none;
+      transition: box-shadow 0.3s ease, transform 0.3s ease;
     }
 
     #svg-container:focus {
-      box-shadow: 0 20px 50px rgba(0,0,0,0.4), 0 0 0 2px var(--accent);
+      box-shadow: 0 40px 100px rgba(0,0,0,0.5), 0 0 0 2px var(--accent);
+      transform: translateY(-2px);
     }
 
-    /* Comparison Table styles */
-    .comparison-table {
-      border-collapse: collapse;
-      width: 100%;
-      font-size: 0.85em;
-      line-height: 1.5;
-      color: var(--text-main);
-    }
-    .comparison-table th {
-      border-bottom: 2px solid var(--border);
-      text-align: left;
-      padding: 8px;
-    }
-    .comparison-table td {
-      border-bottom: 1px solid var(--border);
-      padding: 8px;
-      vertical-align: top;
+    .workspace-wrapper {
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
-    .info {
+    .info-card {
       font-size: 0.84rem;
       color: var(--text-dim);
-      margin-top: 14px;
+      margin-top: 40px;
       line-height: 1.6;
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(10px);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 800px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    .info-card strong {
+      color: var(--accent);
     }
   </style>
 </head>
 
+<body>
   <scribus-app-shell>
-    <div slot="ribbon" id="dynamic-ribbon-sections"></div>
+    <div slot="ribbon" id="dynamic-ribbon-sections" class="ribbon-controls"></div>
 
-    <div class="workspace-centered">
-      <div id="svg-container" tabindex="0" contenteditable="true" spellcheck="false"></div>
+    <div class="workspace-wrapper">
+      <div id="svg-container" tabindex="0" spellcheck="false"></div>
 
-      <div class="info" style="max-width: 800px; margin: 40px auto; opacity: 0.8;">
-        <p><strong>Story Editor:</strong> This environment is built using modular web components and a plugin-driven architecture. 
-           Shaping is performed by HarfBuzz (WASM), providing the same high-quality ligatures and metrics used in the Scribus desktop application.
+      <div class="info-card">
+        <p><strong>Story Editor Pro:</strong> Powered by HarfBuzz WASM & Scribus Layout Logic. 
+           This environment provides pixel-perfect typography with full OpenType support, 
+            ligatures, and professional hyphenation.
         </p>
       </div>
     </div>
 
     <div slot="panels" id="properties-panel">
-      <h3 id="panel-title" style="margin-bottom: 1rem; color: var(--accent); padding: 1.5rem 1.5rem 0;">Properties</h3>
+      <h3 id="panel-title" style="margin-bottom: 1.5rem; color: var(--accent); padding: 1.5rem 1.5rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em;">Properties</h3>
       <div id="properties-view" style="padding: 0 1.5rem 1.5rem;">
         <!-- Plugin will inject content here -->
       </div>
@@ -238,6 +250,7 @@
   </details>
 
   <script type="module">
+    import '../app-shell/lib/components/app-shell-element.js';
     import shell from '../app-shell/lib/shell-core.js';
     import { StoryEditorPlugin } from './lib/story-editor-plugin.js';
 

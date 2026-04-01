@@ -19,10 +19,10 @@ To ensure high-quality and stable builds of the Scribus App Shell, we need a tes
     - **Undo/Redo**: Performing actions in a plugin are reversible through shell-level UI buttons.
 
 ## 3. Manual Verification (Now Automated)
-- [x] Selection functionality (Playwright: `shapes-demo.spec.js`)
-- [x] Marquee selection logic (Playwright: `shapes-demo.spec.js`)
-- [x] Clipboard cross-window sync (Tested manually, E2E pending)
-- [x] Undo/Redo stability (Playwright: `shapes-demo.spec.js`)
+- [x] Selection functionality (Playwright: `shapes-spec.js`, `story-spec.js`)
+- [x] Marquee selection logic (Playwright: `shapes-spec.js`)
+- [x] Clipboard rich sync (Node Test: `test-clipboard.js`, Playwright: `story-editor.spec.js`)
+- [x] Undo/Redo stability (Node Test: `test-shell-history.js`, Playwright: `shapes-spec.js`)
 
 
 ## 4. Automation Recommendations
