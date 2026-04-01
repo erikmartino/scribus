@@ -81,13 +81,13 @@ export class SpreadEditorApp {
 
   bindEvents() {
     const update = () => this.update();
-    this.pageWidthInput.addEventListener('input', update);
-    this.pageHeightInput.addEventListener('input', update);
-    this.marginInput.addEventListener('input', update);
-    this.gutterInput.addEventListener('input', update);
-    this.colGapInput.addEventListener('input', update);
-    this.fontSizeInput.addEventListener('input', update);
-    this.lineHeightInput.addEventListener('input', update);
+    this.pageWidthInput.addEventListener('change', update);
+    this.pageHeightInput.addEventListener('change', update);
+    this.marginInput.addEventListener('change', update);
+    this.gutterInput.addEventListener('change', update);
+    this.colGapInput.addEventListener('change', update);
+    this.fontSizeInput.addEventListener('change', update);
+    this.lineHeightInput.addEventListener('change', update);
 
     this.container.addEventListener('pointerdown', async (e) => {
       if (!this._svg) return;
@@ -178,16 +178,6 @@ export class SpreadEditorApp {
     });
   }
 
-  updateControlLabels() {
-    this.root.querySelector('#page-width-val').textContent = this.pageWidthInput.value;
-    this.root.querySelector('#page-height-val').textContent = this.pageHeightInput.value;
-    this.root.querySelector('#margin-val').textContent = this.marginInput.value;
-    this.root.querySelector('#gutter-val').textContent = this.gutterInput.value;
-    this.root.querySelector('#col-gap-val').textContent = this.colGapInput.value;
-    this.root.querySelector('#font-size-val').textContent = this.fontSizeInput.value;
-    this.root.querySelector('#line-height-val').textContent = this.lineHeightInput.value;
-  }
-
   async _handleTextClick(e) {
     if (!this.cursor) return;
     this.container.focus();
@@ -243,7 +233,6 @@ export class SpreadEditorApp {
   }
 
   async update() {
-    this.updateControlLabels();
 
     const pageWidth = Number(this.pageWidthInput.value);
     const pageHeight = Number(this.pageHeightInput.value);

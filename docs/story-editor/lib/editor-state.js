@@ -143,6 +143,34 @@ export class EditorState {
   }
 
   /**
+   * Returns a deep-cloned snapshot of the current state.
+   */
+  getState() {
+    return {
+      story: JSON.parse(JSON.stringify(this._story)),
+      cursor: { ...this._cursor },
+      selection: this._selection ? {
+        anchor: { ...this._selection.anchor },
+        focus: { ...this._selection.focus }
+      } : null,
+      typingStyle: this._typingStyle ? { ...this._typingStyle } : null
+    };
+  }
+
+  /**
+   * Restores state from a snapshot.
+   */
+  setState(state) {
+    this._story = state.story;
+    this._cursor = { ...state.cursor };
+    this._selection = state.selection ? {
+      anchor: { ...state.selection.anchor },
+      focus: { ...state.selection.focus }
+    } : null;
+    this._typingStyle = state.typingStyle ? { ...state.typingStyle } : null;
+  }
+
+  /**
    * @param {{ paraIndex: number, charOffset: number }} anchor
    * @param {{ paraIndex: number, charOffset: number }} focus
    */

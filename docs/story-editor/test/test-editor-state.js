@@ -195,4 +195,28 @@ describe('EditorState', () => {
       { text: 'X', style: { bold: false, italic: true, fontFamily: '' } },
     ]);
   });
+
+  it('getState/setState snapshots and restores full state', () => {
+    const editor = new EditorState([[{ text: 'abc', style: N }]]);
+    editor.setSelection({ paraIndex: 0, charOffset: 0 }, { paraIndex: 0, charOffset: 2 });
+    editor.applyCharacterStyle({ bold: true }); // Sets typing style at caret or applies to range
+    editor.setCursor({ paraIndex: 0, charOffset: 1 });
+    
+    // Set a specific typing style
+    editor.applyCharacterStyle({ italic: true });
+    
+    const snapshot = editor.getState();
+    
+    // Mutate state
+    editor.applyOperation('insertText', { text: 'CHANGED' });
+    editor.setCursor({ paraIndex: 0, charOffset: 0 });
+    
+    // Restore
+    editor.setState(snapshot);
+    
+    assert.deepEqual(editor.getState(), snapshot);
+    assert.equal(editor.story[0][0].text, 'ab'); // Applied bold to [0,2), so 'abc' became 'ab' (bold) + 'c' (normal)
+    assert.deepEqual(editor.cursor, { paraIndex: 0, charOffset: 1, lineIndex: 0 });
+    assert.deepEqual(editor.getTypingStyle(), { bold: true, italic: true, fontFamily: '' });
+  });
 });

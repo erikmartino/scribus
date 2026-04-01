@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scribus App Shell Demo</title>
+  <meta name="description" content="A reusable app shell with adaptable ribbon and panel architecture.">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Selection styles for the demo */
+    .selectable {
+      width: 150px;
+      height: 150px;
+      margin: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 600;
+      border: 2px solid transparent;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+
+    .selectable.selected {
+      border-color: var(--accent);
+      transform: scale(1.05);
+      box-shadow: 0 8px 30px rgba(187, 134, 252, 0.4);
+    }
+
+    .circle { border-radius: 50%; background: #ff4081; }
+    .square { background: #3f51b5; }
+    .triangle { 
+      background: transparent;
+      width: 0;
+      height: 0;
+      border-left: 75px solid transparent;
+      border-right: 75px solid transparent;
+      border-bottom: 150px solid #4caf50;
+      border-radius: 0;
+      box-shadow: none;
+    }
+  </style>
+</head>
+<body>
+  <scribus-app-shell>
+    <div slot="ribbon" id="dynamic-ribbon-sections" class="ribbon-controls">
+      <!-- Ribbon sections will be injected here by the shell-core and plugins -->
+    </div>
+
+    <div class="workspace-centered" id="main-content">
+      <h1>App Shell Workspace</h1>
+      <p style="color: var(--text-dim); margin-bottom: 2rem;">Select an object to see the ribbon adapt.</p>
+      
+      <div id="selectable-shapes">
+        <div class="selectable circle" data-type="circle" data-id="c1">Circle</div>
+        <div class="selectable square" data-type="square" data-id="s1">Square</div>
+        <div class="selectable triangle" data-type="triangle" data-id="t1"></div>
+      </div>
+    </div>
+
+    <div slot="panels" id="panel-content" style="padding: 1.5rem;">
+      <h3 id="panel-title" style="margin-bottom: 1rem; color: var(--accent);">Properties</h3>
+      <div id="properties-view">
+        Select an object to inspect.
+      </div>
+    </div>
+  </scribus-app-shell>
+
+  <script type="module">
+    import './lib/components/app-shell-element.js';
+    import shell from './lib/shell-core.js';
+    import { ShapesDemoPlugin } from './plugins/shapes-demo/plugin.js';
+    
+    // External plugins (like the demo) are registered here
+    shell.registerPlugin(new ShapesDemoPlugin());
+  </script>
+</body>
+</html>
