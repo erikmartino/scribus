@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-const http = require('node:http');
-const fs = require('node:fs');
-const path = require('node:path');
-const url = require('node:url');
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import url from 'node:url';
 
 const rootDir = process.cwd();
 const portArg = process.argv[2];

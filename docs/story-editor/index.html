@@ -4,222 +4,86 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SVG Text Layout with HarfBuzz.js</title>
+  <title>Story Editor - Scribus App Shell</title>
+  <link rel="stylesheet" href="../app-shell/css/shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: "Source Sans 3", "Segoe UI", sans-serif;
-      max-width: 1240px;
-      margin: 0 auto;
-      padding: 24px 16px 40px;
-      background:
-        radial-gradient(1200px 420px at 10% -10%, #f2e6d3 0%, transparent 62%),
-        radial-gradient(1200px 440px at 90% -20%, #d7e5ef 0%, transparent 62%),
-        linear-gradient(160deg, #ece8e1 0%, #e7e2d9 48%, #ded8cc 100%);
-      color: #2a2a2a;
-    }
-
-    h1 {
-      margin: 0;
-      font-family: "Fraunces", "Georgia", serif;
-      font-size: clamp(1.55rem, 2.2vw, 2.05rem);
-      letter-spacing: 0.01em;
-      color: #2c2b2a;
-    }
-
-    .subtitle {
-      color: #5e5b56;
-      margin: 8px 0 16px;
-      font-size: 0.98rem;
-    }
-
-    #status {
-      padding: 10px 12px;
-      margin: 0 0 14px;
-      border-radius: 10px;
-      background: #efe8da;
-      border: 1px solid #c9bfae;
-      color: #4a4339;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-    }
-
-    #status.error {
-      background: #f6ddd8;
-      border-color: #c79990;
-      color: #7a2f28;
-    }
-
-    #status.ok {
-      background: #dfebdc;
-      border-color: #9cb692;
-      color: #2f4f2b;
-    }
-
-    .controls {
-      margin: 0 0 16px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 10px 14px;
-      align-items: end;
-      background: rgba(255, 252, 245, 0.72);
-      border: 1px solid #c8bda9;
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: 0 10px 24px rgba(58, 50, 37, 0.08);
-    }
-
-    .controls label {
-      font-size: 0.86rem;
-      color: #4a443a;
-      display: block;
-      letter-spacing: 0.01em;
-    }
-
-    .controls input[type=range] {
-      width: 100%;
-      accent-color: #476f99;
-    }
-
-    .controls input[type=number] {
-      width: 100%;
-      box-sizing: border-box;
-      border: 1px solid #b9ad97;
-      border-radius: 6px;
-      padding: 4px 6px;
-      font: inherit;
-      background: #fffdf8;
-    }
-
-    .controls .button-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .controls button {
-      border: 1px solid #9caec2;
-      border-radius: 8px;
-      background: linear-gradient(180deg, #f9fcff 0%, #e5eef7 100%);
-      color: #2f4660;
-      padding: 6px 10px;
-      font: inherit;
-      cursor: pointer;
-    }
-
-    .controls button:hover {
-      background: linear-gradient(180deg, #ffffff 0%, #dbe8f3 100%);
-    }
-
-    .controls button.is-active {
-      background: linear-gradient(180deg, #f2f7ff 0%, #cdddf0 100%);
-      border-color: #5f7ea3;
-      color: #1f3550;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    }
-
+    /* Story Editor Specific Styles */
     #svg-container {
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 252, 246, 0.94) 100%),
-        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.015) 0, rgba(0, 0, 0, 0.015) 1px, transparent 1px, transparent 22px);
-      padding: 12px;
-      border-radius: 12px;
-      border: 1px solid #b6ae9d;
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.72),
-        0 16px 32px rgba(42, 36, 27, 0.12);
+      background: var(--paper, #fffcf5);
+      padding: 40px;
+      border-radius: 4px;
+      border: 1px solid var(--paper-border, #cdc2af);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.3);
       cursor: text;
       user-select: none;
       caret-color: transparent;
       overflow: auto;
-      min-height: 380px;
+      min-height: 800px;
+      margin: 0 auto;
+      max-width: fit-content;
+      color: #1a1a1a;
+      outline: none;
     }
 
     #svg-container:focus {
-      outline: 2px solid #4e7eab;
-      outline-offset: 2px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.4), 0 0 0 2px var(--accent);
     }
 
-    #svg-container::selection {
-      background: transparent;
-      color: inherit;
+    /* Comparison Table styles */
+    .comparison-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.85em;
+      line-height: 1.5;
+      color: var(--text-main);
     }
-
-    #sample-text {
-      display: none;
+    .comparison-table th {
+      border-bottom: 2px solid var(--border);
+      text-align: left;
+      padding: 8px;
+    }
+    .comparison-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 8px;
+      vertical-align: top;
     }
 
     .info {
       font-size: 0.84rem;
-      color: #4f4a42;
+      color: var(--text-dim);
       margin-top: 14px;
       line-height: 1.6;
-      background: rgba(255, 252, 245, 0.58);
-      border: 1px solid #cdc2af;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 12px;
-      box-shadow: 0 8px 18px rgba(58, 50, 37, 0.06);
-    }
-
-    .info code {
-      background: #ece4d8;
-      padding: 0.1em 0.3em;
-      border-radius: 4px;
-      border: 1px solid #d4c8b6;
-    }
-
-    details {
-      margin-top: 14px;
-      background: rgba(255, 252, 245, 0.58);
-      border: 1px solid #cdc2af;
-      border-radius: 10px;
-      padding: 10px 12px;
-      box-shadow: 0 8px 18px rgba(58, 50, 37, 0.06);
-    }
-
-    summary {
-      cursor: pointer;
-      color: #4d473d;
-    }
-
-    @media (max-width: 720px) {
-      body {
-        padding: 16px 12px 28px;
-      }
-
-      #svg-container {
-        min-height: 300px;
-      }
     }
   </style>
 </head>
 
-<body>
+  <scribus-app-shell>
+    <div slot="ribbon" id="dynamic-ribbon-sections"></div>
 
-  <h1>SVG Text Layout with HarfBuzz.js</h1>
-  <p class="subtitle">Browser-side text shaping &amp; line breaking, rendered as SVG &lt;text&gt; elements</p>
+    <div class="workspace-centered">
+      <div id="svg-container" tabindex="0" contenteditable="true" spellcheck="false"></div>
 
-  <div id="status">Loading HarfBuzz WASM and font&hellip;</div>
-
-  <div class="controls">
-    <label>Box width: <input type="range" id="box-width" min="420" max="1120" value="1040"> <span
-        id="box-width-val">1040</span>px</label>
-    <label>Font size: <input type="range" id="font-size" min="12" max="96" value="22"> <span
-        id="font-size-val">22</span>px</label>
-    <label>Line height: <input type="range" id="line-height" min="100" max="200" value="140"> <span
-        id="line-height-val">140</span>%</label>
-    <label>Paragraph: <span id="current-para">1</span></label>
-    <label>Font:
-      <select id="font-family">
-        <option value="">EB Garamond (Default)</option>
-      </select>
-    </label>
-    <div class="button-row">
-      <button type="button" id="toggle-bold"><strong>B</strong></button>
-      <button type="button" id="toggle-italic"><em>I</em></button>
+      <div class="info" style="max-width: 800px; margin: 40px auto; opacity: 0.8;">
+        <p><strong>Story Editor:</strong> This environment is built using modular web components and a plugin-driven architecture. 
+           Shaping is performed by HarfBuzz (WASM), providing the same high-quality ligatures and metrics used in the Scribus desktop application.
+        </p>
+      </div>
     </div>
-  </div>
 
-  <div id="svg-container" tabindex="0" contenteditable="true" spellcheck="false"></div>
+    <div slot="panels" id="properties-panel">
+      <h3 id="panel-title" style="margin-bottom: 1rem; color: var(--accent); padding: 1.5rem 1.5rem 0;">Properties</h3>
+      <div id="properties-view" style="padding: 0 1.5rem 1.5rem;">
+        <!-- Plugin will inject content here -->
+      </div>
+    </div>
+  </scribus-app-shell>
 
   <!-- Sample text as HTML — the DOM tree is the style source -->
   <div id="sample-text">
@@ -374,6 +238,8 @@
   </details>
 
   <script type="module">
+    import shell from '../app-shell/lib/shell-core.js';
+    import { StoryEditorPlugin } from './lib/story-editor-plugin.js';
 
     import { LayoutEngine } from './lib/layout-engine.js';
     import { extractParagraphs } from './lib/text-extract.js';
@@ -386,17 +252,16 @@
       buildParagraphLayoutStyles,
     } from './lib/paragraph-style-render.js';
 
-    const statusEl = document.getElementById('status');
-    function setStatus(msg, cls) {
-      statusEl.textContent = msg;
-      statusEl.className = cls || '';
+    function updateStatus(msg, isOk = true) {
+      console.log(`[Status] ${msg}`);
+      // In a real app we might update a status bar in the shell
     }
 
     async function main() {
       let engine;
 
       try {
-        setStatus('Loading HarfBuzz WASM, fonts, and hyphenation patterns...');
+        updateStatus('Loading HarfBuzz WASM, fonts, and hyphenation patterns...');
         engine = await LayoutEngine.create({
           hbWasmUrl: 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hb.wasm',
           hbJsUrl: 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hbjs.js',
@@ -406,47 +271,44 @@
           fontFamily: 'EB Garamond',
         });
         
-        setStatus('Ready — HarfBuzz loaded, fonts shaped, hyphenation active. Loading font catalog...', 'ok');
-        
+        updateStatus('Ready', true);
+
+        // Populate Font List
         const fm = engine._fontRegistry._fontManager;
         if (fm) {
           try {
             const families = await fm.getFamilies();
             const select = document.getElementById('font-family');
-            const frag = document.createDocumentFragment();
-            for (const f of families) {
-              if (f.family === 'EB Garamond') continue;
-              const opt = document.createElement('option');
-              opt.value = f.family;
-              opt.textContent = f.family;
-              frag.appendChild(opt);
+            if (select) {
+              const frag = document.createDocumentFragment();
+              for (const f of families) {
+                if (f.family === 'EB Garamond') continue;
+                const opt = document.createElement('option');
+                opt.value = f.family;
+                opt.textContent = f.family;
+                frag.appendChild(opt);
+              }
+              select.appendChild(frag);
             }
-            select.appendChild(frag);
-            setStatus('Ready — HarfBuzz loaded, fonts shaped, hyphenation active.', 'ok');
           } catch (e) {
-            console.warn('Failed to fetch font catalog:', e);
-            setStatus('Ready — HarfBuzz loaded (font catalog failed to load)', 'ok');
+            console.warn('Font catalog failed to load:', e);
           }
         }
-        
+
       } catch (err) {
-        setStatus('Error: ' + err.message, 'error');
+        updateStatus('Error: ' + err.message, false);
         console.error(err);
         return;
       }
-
       const sampleEl = document.getElementById('sample-text');
       const container = document.getElementById('svg-container');
-      const boxWidthInput = document.getElementById('box-width');
-      const fontSizeInput = document.getElementById('font-size');
-      const fontFamilySelect = document.getElementById('font-family');
-      const lineHeightInput = document.getElementById('line-height');
-      const currentParaEl = document.getElementById('current-para');
-      const toggleBoldBtn = document.getElementById('toggle-bold');
-      const toggleItalicBtn = document.getElementById('toggle-italic');
       const defaultFontSize = 22;
       const editor = new EditorState(extractParagraphs(sampleEl));
       const paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
+      
+      const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles);
+      shell.registerPlugin(storyPlugin);
+
       const hasBeforeInput = 'onbeforeinput' in document;
       let prevParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
 
@@ -533,7 +395,7 @@
           rect.setAttribute('y', (line.y - lineFontSize * 0.8).toFixed(2));
           rect.setAttribute('width', (x2 - x1).toFixed(2));
           rect.setAttribute('height', (lineFontSize * 1.2).toFixed(2));
-          rect.setAttribute('fill', 'rgba(74, 144, 217, 0.28)');
+          rect.setAttribute('fill', 'rgba(187, 134, 252, 0.15)');
           svg.appendChild(rect);
         }
       }
@@ -550,71 +412,64 @@
         };
       }
 
-      function paragraphBoundaryForCursor(story, cursorPos, side) {
-        const para = story[cursorPos.paraIndex];
-        if (!para) return null;
-        const len = para.reduce((sum, run) => sum + run.text.length, 0);
-        return {
-          paraIndex: cursorPos.paraIndex,
-          charOffset: side === 'start' ? 0 : len,
-          lineIndex: cursorPos.lineIndex,
-        };
-      }
-
       async function deleteToLineBoundary(side) {
         if (editor.hasSelection()) {
-          if (editor.replaceSelectionWithText('')) {
-            if (cursor) cursor.moveTo(editor.cursor);
-            await update();
-            return true;
-          }
-          return false;
+          storyPlugin.submitAction('Delete Selection', () => {
+            editor.replaceSelectionWithText('');
+          });
+          if (cursor) cursor.moveTo(editor.cursor);
+          return true;
         }
 
         if (!cursor) return false;
         const boundary = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, side);
         if (!boundary) return false;
 
-        const from = { paraIndex: editor.cursor.paraIndex, charOffset: editor.cursor.charOffset };
-        const to = { paraIndex: boundary.paraIndex, charOffset: boundary.charOffset };
-        editor.setSelection(from, to);
-        const changed = editor.replaceSelectionWithText('');
-        if (!changed) return false;
+        storyPlugin.submitAction('Delete to Boundary', () => {
+          const from = { paraIndex: editor.cursor.paraIndex, charOffset: editor.cursor.charOffset };
+          const to = { paraIndex: boundary.paraIndex, charOffset: boundary.charOffset };
+          editor.setSelection(from, to);
+          editor.replaceSelectionWithText('');
+        });
+        
         cursor.moveTo(editor.cursor);
-        await update();
         return true;
       }
 
       async function update() {
-        const boxWidth = +boxWidthInput.value;
-        const lineHeightPct = +lineHeightInput.value;
+        const boxWidthInput = document.getElementById('box-width');
+        const lineHeightInput = document.getElementById('line-height');
+        const fontSizeInput = document.getElementById('font-size');
 
-        document.getElementById('box-width-val').textContent = boxWidth;
-        document.getElementById('line-height-val').textContent = lineHeightPct;
+        const boxWidth = boxWidthInput ? +boxWidthInput.value : 1040;
+        const lineHeightPct = lineHeightInput ? +lineHeightInput.value : 140;
 
         const nextParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
         reconcileParagraphStyles(paragraphStyles, prevParagraphTexts, nextParagraphTexts);
         ensureParagraphStylesLength(paragraphStyles, editor.story.length, defaultFontSize);
         prevParagraphTexts = nextParagraphTexts;
+        
         const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
         const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', defaultFontSize);
         
-        document.getElementById('font-size-val').textContent = String(Math.round(currentStyle.fontSize));
-        if (fontSizeInput.value !== String(Math.round(currentStyle.fontSize))) {
+        if (fontSizeInput && fontSizeInput.value !== String(Math.round(currentStyle.fontSize))) {
           fontSizeInput.value = String(Math.round(currentStyle.fontSize));
         }
         
-        const fam = currentStyle.fontFamily || "";
-        if (fontFamilySelect.value !== fam) {
-           fontFamilySelect.value = fam;
-        }
-
         const typingStyle = editor.getTypingStyle();
-        currentParaEl.textContent = String(currentParaIndex + 1);
-        toggleBoldBtn.classList.toggle('is-active', !!typingStyle.bold);
-        toggleItalicBtn.classList.toggle('is-active', !!typingStyle.italic);
+        
+        const currentParaEl = document.getElementById('current-para');
+        if (currentParaEl) currentParaEl.textContent = String(currentParaIndex + 1);
+        
+        const selectionStatusEl = document.getElementById('selection-status');
+        if (selectionStatusEl) selectionStatusEl.textContent = editor.hasSelection() ? 'Active' : 'None';
 
-        // Three boxes: varied widths/heights to mimic uneven editorial regions
+        const toggleBoldBtn = document.getElementById('toggle-bold');
+        const toggleItalicBtn = document.getElementById('toggle-italic');
+        if (toggleBoldBtn) toggleBoldBtn.toggleAttribute('active', !!typingStyle.bold);
+        if (toggleItalicBtn) toggleItalicBtn.toggleAttribute('active', !!typingStyle.italic);
+
+        // Layout Boxes
         const box1Width = boxWidth * 0.44;
         const box2Width = boxWidth * 0.33;
         const box3Width = boxWidth * 0.23;
@@ -635,8 +490,7 @@
           lineHeightPct,
           paragraphLayoutStyles,
         );
-        // NOTE: Demo keeps implementation simple and does full re-layout/re-render on each edit.
-        // Production editor should add paragraph-level shaping/layout cache and incremental updates.
+        
         svg.setAttribute('style', 'user-select:none');
         renderSelection(svg, lineMap, editor.selection, defaultFontSize);
 
@@ -663,8 +517,6 @@
 
         if (e.shiftKey) {
           editor.moveCursor(pos, true);
-          dragAnchor = null;
-          dragMode = 'char';
         } else if (e.detail >= 3) {
           editor.selectParagraphAt(pos);
           dragAnchor = { paraIndex: pos.paraIndex, charOffset: 0 };
@@ -735,8 +587,19 @@
 
       container.addEventListener('keydown', async (e) => {
         if (!cursor) return;
-
         const mod = e.metaKey || e.ctrlKey;
+
+        if (mod && (e.key === 'b' || e.key === 'B')) {
+          e.preventDefault();
+          shell.commands.execute('story.bold');
+          return;
+        }
+        if (mod && (e.key === 'i' || e.key === 'I')) {
+          e.preventDefault();
+          shell.commands.execute('story.italic');
+          return;
+        }
+
         if (mod && (e.key === 'a' || e.key === 'A')) {
           e.preventDefault();
           editor.selectAll();
@@ -750,53 +613,10 @@
           return;
         }
 
-        if (!e.metaKey && e.ctrlKey && (e.key === 'k' || e.key === 'K')) {
-          e.preventDefault();
-          deleteToLineBoundary('end');
-          return;
-        }
-
         if (e.key === 'Home' || e.key === 'End') {
           e.preventDefault();
           const side = e.key === 'Home' ? 'start' : 'end';
-          const paragraphMod = e.metaKey || e.ctrlKey;
-          const target = paragraphMod
-            ? paragraphBoundaryForCursor(editor.story, editor.cursor, side)
-            : lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, side);
-          if (target) {
-            editor.moveCursor(target, e.shiftKey);
-            cursor.moveTo(editor.cursor);
-            await update();
-          }
-          return;
-        }
-
-        if (e.metaKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-          e.preventDefault();
-          const side = e.key === 'ArrowLeft' ? 'start' : 'end';
           const target = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, side);
-          if (target) {
-            editor.moveCursor(target, e.shiftKey);
-            cursor.moveTo(editor.cursor);
-            await update();
-          }
-          return;
-        }
-
-        if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
-          e.preventDefault();
-          const target = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, 'start');
-          if (target) {
-            editor.moveCursor(target, e.shiftKey);
-            cursor.moveTo(editor.cursor);
-            await update();
-          }
-          return;
-        }
-
-        if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'e' || e.key === 'E')) {
-          e.preventDefault();
-          const target = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, 'end');
           if (target) {
             editor.moveCursor(target, e.shiftKey);
             cursor.moveTo(editor.cursor);
@@ -826,78 +646,47 @@
 
         if (editor.handleKeydown(e)) {
           e.preventDefault();
+          const opType = e.key === 'Backspace' || e.key === 'Delete' ? 'deleteContent' : 'insertText';
+          storyPlugin.submitAction('Keyboard ' + (e.key.length === 1 ? 'Type' : e.key), () => {
+            editor.handleKeydown(e);
+          }, opType);
           if (cursor) cursor.moveTo(editor.cursor);
-          await update();
         }
       });
 
       container.addEventListener('beforeinput', async (e) => {
         if (!cursor) return;
-        if (!editor.handleBeforeInput(e)) return;
+        const label = e.inputType.replace(/([A-Z])/g, ' $1').trim();
+        storyPlugin.submitAction(label, () => {
+          editor.handleBeforeInput(e);
+        }, e.inputType);
         e.preventDefault();
-        await update();
       });
 
       container.addEventListener('copy', (e) => {
         const text = editor.getSelectedText();
         if (!text) return;
-        if (!e.clipboardData) return;
         e.preventDefault();
-        e.clipboardData.setData('text/plain', text);
+        // Trigger rich copy through the shell service
+        shell.clipboard.copy();
       });
 
       container.addEventListener('cut', async (e) => {
         const text = editor.getSelectedText();
         if (!text) return;
-        if (!e.clipboardData) return;
         e.preventDefault();
-        e.clipboardData.setData('text/plain', text);
-        if (editor.replaceSelectionWithText('')) await update();
+        shell.clipboard.copy();
+        storyPlugin.submitAction('Cut', () => {
+          editor.replaceSelectionWithText('');
+        });
       });
 
       container.addEventListener('paste', async (e) => {
-        if (!e.clipboardData) return;
-        const text = e.clipboardData.getData('text/plain');
-        if (typeof text !== 'string') return;
         e.preventDefault();
-        if (editor.hasSelection()) {
-          editor.replaceSelectionWithText(text);
-        } else {
-          editor.applyOperation('insertText', { text });
-        }
-        await update();
+        // Trigger rich paste through the shell service
+        shell.clipboard.paste();
       });
 
-      boxWidthInput.addEventListener('input', async () => await update());
-      lineHeightInput.addEventListener('input', async () => await update());
-
-      fontSizeInput.addEventListener('input', async () => {
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length, defaultFontSize);
-        const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const base = paragraphStyles[pi] || defaultParagraphStyle('normal', defaultFontSize);
-        paragraphStyles[pi] = { ...base, fontSize: +fontSizeInput.value };
-        await update();
-      });
-
-      fontFamilySelect.addEventListener('change', async () => {
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length, defaultFontSize);
-        const pi = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const base = paragraphStyles[pi] || defaultParagraphStyle('normal', defaultFontSize);
-        paragraphStyles[pi] = { ...base, fontFamily: fontFamilySelect.value };
-        await update();
-      });
-
-      toggleBoldBtn.addEventListener('click', async () => {
-        const style = editor.getTypingStyle();
-        editor.applyCharacterStyle({ bold: !style.bold });
-        await update();
-      });
-
-      toggleItalicBtn.addEventListener('click', async () => {
-        const style = editor.getTypingStyle();
-        editor.applyCharacterStyle({ italic: !style.italic });
-        await update();
-      });
       window.addEventListener('beforeunload', () => {
         if (cursor) cursor.destroy();
       });
@@ -906,8 +695,6 @@
     }
 
     main();
-
   </script>
 </body>
-
 </html>
