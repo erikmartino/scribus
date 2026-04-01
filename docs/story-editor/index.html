@@ -655,9 +655,21 @@
           return;
         }
 
-        if (hasBeforeInput) return;
+        // Handle character input, Backspace, Delete, Enter directly via keydown.
+        // The container is not contenteditable so beforeinput does not fire for
+        // regular keyboard input — keydown is the primary input path.
+        //
+        // Determine if this key is an editor action WITHOUT calling handleKeydown
+        // (which mutates state).  handleKeydown is called exactly once, inside the
+        // submitAction transform.
+        const wordDel = (e.altKey || (e.ctrlKey && !e.metaKey));
+        const isEditorKey = !e.isComposing && (
+          e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter' ||
+          (wordDel && (e.key === 'Backspace' || e.key === 'Delete')) ||
+          (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1)
+        );
 
-        if (editor.handleKeydown(e)) {
+        if (isEditorKey) {
           e.preventDefault();
           const opType = e.key === 'Backspace' || e.key === 'Delete' ? 'deleteContent' : 'insertText';
           storyPlugin.submitAction('Keyboard ' + (e.key.length === 1 ? 'Type' : e.key), () => {
@@ -667,8 +679,22 @@
         }
       });
 
+      // beforeinput may fire from IME composition or browser-level input on
+      // some platforms.  Guard against double-handling when keydown already
+      // processed the same key by tracking a flag.
+      let _keydownHandled = false;
+      const origKeydown = container.onkeydown;
+      container.addEventListener('keydown', (e) => {
+        // Mark that keydown will handle this key (single characters, Backspace, etc.)
+        _keydownHandled = (!e.ctrlKey && !e.metaKey && !e.altKey &&
+          (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter'));
+        // Reset on next tick in case beforeinput never fires
+        if (_keydownHandled) setTimeout(() => { _keydownHandled = false; }, 0);
+      }, true); // capture phase — runs before the main keydown handler above
+
       container.addEventListener('beforeinput', async (e) => {
         if (!cursor) return;
+        if (_keydownHandled) { _keydownHandled = false; return; }
         const label = e.inputType.replace(/([A-Z])/g, ' $1').trim();
         storyPlugin.submitAction(label, () => {
           editor.handleBeforeInput(e);
@@ -680,24 +706,77 @@
         const text = editor.getSelectedText();
         if (!text) return;
         e.preventDefault();
-        // Trigger rich copy through the shell service
-        shell.clipboard.copy();
+        e.stopPropagation();
+
+        // Serialize story data for rich clipboard
+        const payload = {
+          version: 1,
+          source: window.location.origin,
+          items: [storyPlugin.storyItem.serialize()]
+        };
+        const json = JSON.stringify(payload);
+        e.clipboardData.setData('text/plain', text);
+        e.clipboardData.setData('application/json', json);
+        localStorage.setItem('scribus_local_clipboard', json);
       });
 
       container.addEventListener('cut', async (e) => {
         const text = editor.getSelectedText();
         if (!text) return;
         e.preventDefault();
-        shell.clipboard.copy();
+        e.stopPropagation();
+
+        const payload = {
+          version: 1,
+          source: window.location.origin,
+          items: [storyPlugin.storyItem.serialize()]
+        };
+        const json = JSON.stringify(payload);
+        e.clipboardData.setData('text/plain', text);
+        e.clipboardData.setData('application/json', json);
+        localStorage.setItem('scribus_local_clipboard', json);
+
         storyPlugin.submitAction('Cut', () => {
           editor.replaceSelectionWithText('');
         });
       });
 
+      let _pasteGuard = false;
       container.addEventListener('paste', async (e) => {
         e.preventDefault();
-        // Trigger rich paste through the shell service
-        shell.clipboard.paste();
+        e.stopPropagation();
+
+        // Debounce: shell keydown + native Ctrl+V can fire two paste events
+        if (_pasteGuard) return;
+        _pasteGuard = true;
+        setTimeout(() => { _pasteGuard = false; }, 0);
+
+        // Read from localStorage first (rich clipboard), then system clipboard
+        let json = localStorage.getItem('scribus_local_clipboard');
+        if (!json && e.clipboardData) {
+          json = e.clipboardData.getData('application/json');
+        }
+
+        if (json) {
+          try {
+            const data = JSON.parse(json);
+            if (data.items) {
+              storyPlugin.handlePaste(data);
+              return;
+            }
+          } catch (_) { /* fall through */ }
+        }
+
+        // Fallback: plain text from system clipboard
+        if (e.clipboardData) {
+          const text = e.clipboardData.getData('text/plain');
+          if (text) {
+            storyPlugin.handlePaste({
+              version: 1, source: 'external',
+              items: [{ type: 'plain-text', data: text }]
+            });
+          }
+        }
       });
 
       window.addEventListener('beforeunload', () => {

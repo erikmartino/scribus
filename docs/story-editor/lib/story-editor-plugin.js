@@ -20,14 +20,16 @@ export class StoryEditorPlugin {
 
     // Register as an AbstractItem for clipboard / multi-selection services
     const storyItem = new AbstractItem('main-story', 'story');
-    storyItem.export = () => ({
+    storyItem.serialize = () => ({
       type: 'story',
       story: this.editor.story,
       styles: this.paragraphStyles
     });
-    
-    // Register the story item in the document-model
+    this.storyItem = storyItem;
+
+    // Register the story item in the document-model and select it
     this.shell.doc.registerItem(storyItem);
+    this.shell.selection.select(storyItem);
     
     // Listen for rich paste events
     this.shell.addEventListener('paste-received', (e) => this.handlePaste(e.detail));
