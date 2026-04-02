@@ -54,6 +54,10 @@ describe('StoryEditorPlugin Integration', () => {
             return input;
           }
       },
+      selection: {
+          select: () => {},
+          clear: () => {}
+      },
       addEventListener: () => {}
     };
     
@@ -78,7 +82,7 @@ describe('StoryEditorPlugin Integration', () => {
     
     assert.strictEqual(updateCount, 1);
     assert.ok(mockShell.history.lastSubmitted);
-    assert.strictEqual(mockShell.history.lastSubmitted.label, 'Test Action');
+    assert.strictEqual(mockShell.history.lastSubmitted.name, 'Test Action');
     assert.strictEqual(editor.story[0][0].text, 'Initial!');
   });
 
@@ -125,7 +129,7 @@ describe('StoryEditorPlugin Integration', () => {
     plugin.handlePaste(payload);
     
     assert.strictEqual(editor.story[0][0].text, 'Pasted');
-    assert.strictEqual(mockShell.history.lastSubmitted.label, 'Paste Story');
+    assert.strictEqual(mockShell.history.lastSubmitted.name, 'Paste Story');
   });
 
   it('groups consecutive typing actions', (t) => {

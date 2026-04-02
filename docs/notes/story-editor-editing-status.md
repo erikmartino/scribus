@@ -26,13 +26,13 @@ In place:
 
 3. **Editing features**
    - [x] Rich clipboard support inside the App Shell.
-- [x] Undo/redo transaction history.
-- Typing style model is minimal.
+   - [x] Undo/redo transaction history.
+   - [ ] Typing style model is minimal.
 
 ## Recommended Next Milestone
 
 Focus on production-oriented reliability:
 - incremental line layout/render on top of existing shaping cache,
 - [x] integrated undo/redo history,
-- grapheme-aware cursor/delete semantics,
-- IME test coverage and handling notes.
+- [ ] grapheme-aware cursor/delete semantics,
+- [ ] IME test coverage and handling notes.
