@@ -250,22 +250,79 @@ class SystemPlugin {
       isEnabled: () => shell.history.canRedo(),
       shortcut: 'Ctrl+Y'
     });
+
+    shell.commands.register({
+      id: 'app.cut',
+      label: 'Cut',
+      icon: `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="6" r="3"></circle>
+          <circle cx="6" cy="18" r="3"></circle>
+          <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
+          <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
+          <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
+        </svg>`,
+      execute: () => shell.clipboard.cut(),
+      shortcut: 'Ctrl+X'
+    });
+
+    shell.commands.register({
+      id: 'app.copy',
+      label: 'Copy',
+      icon: `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>`,
+      execute: () => shell.clipboard.copy(),
+      shortcut: 'Ctrl+C'
+    });
+
+    shell.commands.register({
+      id: 'app.paste',
+      label: 'Paste',
+      icon: `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+        </svg>`,
+      execute: () => shell.clipboard.paste(),
+      shortcut: 'Ctrl+V'
+    });
   }
 
   getRibbonSections(selected) {
     return [
       AppShell.createRibbonSection('Application', (container) => {
         container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.undo'
+          commandId: 'app.undo',
+          iconOnly: true
         }));
         container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.redo'
+          commandId: 'app.redo',
+          iconOnly: true
         }));
         container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.fullscreen'
+          commandId: 'app.fullscreen',
+          iconOnly: true
         }));
         container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.help'
+          commandId: 'app.help',
+          iconOnly: true
+        }));
+      }),
+      AppShell.createRibbonSection('Edit', (container) => {
+        container.appendChild(this.shell.ui.createButton({
+          commandId: 'app.cut',
+          iconOnly: true
+        }));
+        container.appendChild(this.shell.ui.createButton({
+          commandId: 'app.copy',
+          iconOnly: true
+        }));
+        container.appendChild(this.shell.ui.createButton({
+          commandId: 'app.paste',
+          iconOnly: true
         }));
       })
     ];
@@ -282,9 +339,9 @@ class UIHelper {
 
   /**
    * Creates a button. Can be linked to a command.
-   * @param {Object} options - { label, icon, primary, onClick, commandId }
+   * @param {Object} options - { label, icon, primary, onClick, commandId, iconOnly }
    */
-  createButton({ label, icon, primary, onClick, commandId }) {
+  createButton({ label, icon, primary, onClick, commandId, iconOnly }) {
     const btn = document.createElement('scribus-button');
     
     let actualLabel = label;
@@ -308,6 +365,7 @@ class UIHelper {
     btn.setAttribute('label', actualLabel || '');
     if (actualIcon) btn.setAttribute('icon', actualIcon);
     if (primary) btn.setAttribute('primary', '');
+    if (iconOnly) btn.setAttribute('icon-only', '');
     if (actualClick) btn.onclick = actualClick;
     
     return btn;

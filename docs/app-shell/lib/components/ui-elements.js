@@ -2,7 +2,7 @@
  * ScribusButton - Standard action button for the Scribus ecosystem.
  */
 export class ScribusButton extends HTMLElement {
-  static get observedAttributes() { return ['label', 'primary', 'icon', 'active']; }
+  static get observedAttributes() { return ['label', 'primary', 'icon', 'active', 'icon-only']; }
 
   constructor() {
     super();
@@ -21,8 +21,8 @@ export class ScribusButton extends HTMLElement {
     const label = this.getAttribute('label') || '';
     const primary = this.hasAttribute('primary');
     const icon = this.getAttribute('icon') || '';
-    
     const active = this.hasAttribute('active');
+    const iconOnly = this.hasAttribute('icon-only');
     
     this.shadowRoot.innerHTML = `
       <style>
@@ -33,7 +33,8 @@ export class ScribusButton extends HTMLElement {
           background: ${active ? 'rgba(187, 134, 252, 0.15)' : (primary ? 'var(--accent, #bb86fc)' : 'rgba(255, 255, 255, 0.03)')};
           border: ${active ? '1.5px solid var(--accent, #bb86fc)' : (primary ? 'none' : '1px solid var(--border, #2e2e32)')};
           color: ${active ? 'var(--accent, #bb86fc)' : (primary ? '#000' : 'var(--text-main, #e1e1e6)')};
-          padding: 8px 14px;
+          padding: ${iconOnly ? '8px' : '8px 14px'};
+          min-width: ${iconOnly ? '36px' : 'auto'};
           border-radius: 8px;
           cursor: pointer;
           font-size: 0.875rem;
@@ -43,7 +44,7 @@ export class ScribusButton extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
+          gap: ${iconOnly ? '0' : '8px'};
           outline: none;
           box-shadow: ${active ? '0 0 15px rgba(187, 134, 252, 0.2)' : 'none'};
         }
@@ -60,11 +61,15 @@ export class ScribusButton extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: center;
+          pointer-events: none;
+        }
+        .label {
+          display: ${iconOnly ? 'none' : 'block'};
         }
       </style>
-      <button>
+      <button title="${iconOnly ? label : ''}">
         ${icon ? `<span class="icon">${icon}</span>` : ''}
-        <span>${label}</span>
+        <span class="label">${label}</span>
       </button>
     `;
   }

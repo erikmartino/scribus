@@ -46,6 +46,10 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
    - Do not add new dependencies to `package.json`.
    - Maintain a "no build step" workflow for prototypes and demos.
 
+7. Check Browser Logs for UI Changes.
+   - When modifying UI or browser-side logic, always inspect browser console logs for errors.
+   - Do not rely solely on subagent "success" reports or screenshots; verify that no new console errors or warnings were introduced by the change.
+
 ## Preferred Workflow
 
 1. Read relevant files first.

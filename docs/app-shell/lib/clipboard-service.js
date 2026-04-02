@@ -112,6 +112,13 @@ export class ClipboardService {
   }
 
   /**
+   * Manual cut trigger
+   */
+  cut() {
+    document.execCommand('cut');
+  }
+
+  /**
    * Manual paste trigger
    */
   paste() {
