@@ -286,28 +286,6 @@
         
         updateStatus('Ready', true);
 
-        // Populate Font List
-        const fm = engine._fontRegistry._fontManager;
-        if (fm) {
-          try {
-            const families = await fm.getFamilies();
-            const select = document.getElementById('font-family');
-            if (select) {
-              const frag = document.createDocumentFragment();
-              for (const f of families) {
-                if (f.family === 'EB Garamond') continue;
-                const opt = document.createElement('option');
-                opt.value = f.family;
-                opt.textContent = f.family;
-                frag.appendChild(opt);
-              }
-              select.appendChild(frag);
-            }
-          } catch (e) {
-            console.warn('Font catalog failed to load:', e);
-          }
-        }
-
       } catch (err) {
         updateStatus('Error: ' + err.message, false);
         console.error(err);

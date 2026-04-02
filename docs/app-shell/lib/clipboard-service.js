@@ -12,6 +12,7 @@ export class ClipboardService {
 
   _attachListeners() {
     window.addEventListener('copy', (e) => this._handleCopy(e));
+    window.addEventListener('cut', (e) => this._handleCopy(e));
     window.addEventListener('paste', (e) => this._handlePaste(e));
   }
 
@@ -54,12 +55,8 @@ export class ClipboardService {
       items: []
     };
 
-    // 1. Try Scribus-specific JSON (either from system clipboard or localStorage)
-    let json = localStorage.getItem(this._localKey);
-    if (!json) {
-      json = e.clipboardData.getData('application/json');
-    }
-
+    // 1. Try Scribus-specific JSON from system clipboard FIRST
+    let json = e.clipboardData.getData('application/json');
     if (json) {
        try {
          const data = JSON.parse(json);
@@ -79,10 +76,36 @@ export class ClipboardService {
       });
     } else if (types.includes('text/plain')) {
       const text = e.clipboardData.getData('text/plain');
+      
+      // Check if this text/plain is actually our JSON (some browsers/OSs might strip it)
+      if (text.startsWith('{"version":')) {
+        try {
+          const data = JSON.parse(text);
+          if (data.items) {
+            this.shell.dispatchEvent(new CustomEvent('paste-received', { detail: data }));
+            return;
+          }
+        } catch (e) {}
+      }
+
       payload.items.push({
         type: 'plain-text',
         data: text
       });
+    }
+    
+    // 3. Last fallback: localStorage (only if we didn't find anything in the system clipboard)
+    if (payload.items.length === 0) {
+      const localJson = localStorage.getItem(this._localKey);
+      if (localJson) {
+        try {
+          const data = JSON.parse(localJson);
+          if (data.items) {
+             this.shell.dispatchEvent(new CustomEvent('paste-received', { detail: data }));
+             return;
+          }
+        } catch (e) {}
+      }
     }
 
     // 3. Handle Images from External Apps

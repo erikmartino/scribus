@@ -179,34 +179,18 @@ export class StoryEditorPlugin {
       }),
 
       AppShell.createRibbonSection('Font', (container) => {
-        // Font Family Select
-        const select = document.createElement('select');
-        select.id = 'font-family';
-        select.style.background = 'rgba(255,255,255,0.05)';
-        select.style.border = '1px solid var(--border)';
-        select.style.color = 'var(--text-main)';
-        select.style.padding = '4px 8px';
-        select.style.borderRadius = '6px';
-        select.style.outline = 'none';
-        
-        const defaultOpt = document.createElement('option');
-        defaultOpt.value = 'EB Garamond';
-        defaultOpt.textContent = 'EB Garamond';
-        select.appendChild(defaultOpt);
-
-        select.onchange = () => {
-          this.submitAction('Change Font', () => {
-            const pi = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
-            this.paragraphStyles[pi].fontFamily = select.value;
-          });
-        };
-
-        // Populate from font manager if available
-        const fm = this.shell.element?.querySelector('scribus-app-shell')?.workspace?.querySelector('#svg-container')?.__layoutEngine?._fontRegistry?._fontManager;
-        // Wait, better yet, the main script in index.html can pass the engine.
-        // For now let's just use the select ID if we want to populate it later.
-        
-        container.appendChild(select);
+        const selector = this.shell.ui.createFontSelector({
+          label: 'Family',
+          value: 'EB Garamond',
+          onChange: (val) => {
+            this.submitAction('Change Font', () => {
+              const pi = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
+              this.paragraphStyles[pi].fontFamily = val;
+            });
+          }
+        });
+        selector.id = 'font-family';
+        container.appendChild(selector);
 
         container.appendChild(this.shell.ui.createButton({
           commandId: 'story.bold',

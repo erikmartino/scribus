@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Scribus Components Gallery</title>
+  <link rel="stylesheet" href="../app-shell/css/shell.css">
+  <style>
+    html, body {
+      background: #09090b;
+      color: #fafafa;
+      padding: 64px 32px;
+      line-height: 1.6;
+      height: auto !important;
+      overflow: auto !important;
+    }
+    .gallery {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 64px;
+    }
+    section {
+      border-bottom: 1px solid #27272a;
+      padding-bottom: 64px;
+    }
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 48px;
+      background: linear-gradient(135deg, #fff 0%, #a1a1aa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    h2 {
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+      color: var(--accent, #bb86fc);
+    }
+    p.desc {
+      color: #a1a1aa;
+      margin-bottom: 32px;
+      max-width: 600px;
+    }
+    .preview {
+      background: #18181b;
+      padding: 48px;
+      border-radius: 12px;
+      border: 1px solid #27272a;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: center;
+    }
+    code {
+      display: block;
+      background: #000;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: #38bdf8;
+      margin-top: 24px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="gallery">
+    <header>
+      <h1>Component Library</h1>
+      <p class="desc">Reusable atoms and molecules for the Scribus ecosystem.</p>
+    </header>
+
+    <section id="buttons">
+      <h2>Scribus Button</h2>
+      <p class="desc">A premium interactive button component with support for icons and icon-only modes.</p>
+      <div class="preview">
+        <scribus-button label="Primary Action" primary></scribus-button>
+        <scribus-button label="Secondary Action"></scribus-button>
+        <scribus-button icon="⚡" label="Icon Button"></scribus-button>
+        <scribus-button icon="📂" title="Open File" icon-only></scribus-button>
+        <scribus-button icon="💾" title="Save" icon-only primary></scribus-button>
+      </div>
+      <code>&lt;scribus-button label="Action" primary&gt;&lt;/scribus-button&gt;</code>
+    </section>
+
+    <section id="inputs">
+      <h2>Scribus Input</h2>
+      <p class="desc">A versatile input component supporting various types including numbers and ranges.</p>
+      <div class="preview" style="background: #18181b; padding: 48px; border-radius: 12px;">
+        <scribus-input label="Full Name" placeholder="John Doe"></scribus-input>
+        <scribus-input label="Font Size" type="number" value="24"></scribus-input>
+        <scribus-input label="Opacity" type="range" min="0" max="100" value="80"></scribus-input>
+      </div>
+      <code>&lt;scribus-input label="Label" type="number"&gt;&lt;/scribus-input&gt;</code>
+    </section>
+
+    <section id="font-selector">
+      <h2>Font Selector</h2>
+      <p class="desc">An intelligent dropdown component that dynamically populates itself with professional fonts.</p>
+      <div class="preview">
+        <scribus-font-selector label="Primary Typography" value="EB Garamond"></scribus-font-selector>
+      </div>
+      <code>&lt;scribus-font-selector label="Font" value="EB Garamond"&gt;&lt;/scribus-font-selector&gt;</code>
+    </section>
+  </div>
+
+  <script type="module">
+    import './index.js';
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@ import { selection } from './selection-service.js';
 import { ClipboardService } from './clipboard-service.js';
 import { activeDocument } from './document-model.js';
 import { CommandRegistry, CommandHistory } from './command-manager.js';
-import './components/ui-elements.js';
+import '../../ui-components/index.js';
 import './components/command-palette.js';
 
 
@@ -384,6 +384,16 @@ class UIHelper {
       input.addEventListener('change', (e) => onInput(e.detail, e));
     }
     return input;
+  }
+
+  createFontSelector({ label, value, onChange }) {
+    const selector = document.createElement('scribus-font-selector');
+    if (label) selector.setAttribute('label', label);
+    if (value) selector.setAttribute('value', value);
+    if (onChange) {
+      selector.addEventListener('change', (e) => onChange(e.detail, e));
+    }
+    return selector;
   }
 }
 
