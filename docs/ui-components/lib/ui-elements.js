@@ -100,7 +100,19 @@ export class ScribusInput extends HTMLElement {
 
   set value(v) {
     const input = this.shadowRoot.querySelector('input');
-    if (input) input.value = v;
+    if (input) {
+      input.value = v;
+      this._updateDisplay();
+    }
+  }
+
+  _updateDisplay() {
+    const input = this.shadowRoot.getElementById('input');
+    const display = this.shadowRoot.getElementById('val-display');
+    const type = this.getAttribute('type');
+    if (input && display && type === 'range') {
+      display.textContent = input.value;
+    }
   }
 
   render() {
@@ -193,10 +205,7 @@ export class ScribusInput extends HTMLElement {
     const input = this.shadowRoot.getElementById('input');
     const display = this.shadowRoot.getElementById('val-display');
 
-    const updateDisplay = () => {
-      if (type === 'range') display.textContent = input.value;
-    };
-
+    const updateDisplay = () => this._updateDisplay();
     updateDisplay();
 
     input.addEventListener('input', (e) => {

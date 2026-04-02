@@ -241,6 +241,46 @@ export function replaceRange(story, start, end, text, opts = {}) {
 }
 
 /**
+ * Return rich story fragment (Run[][]) for half-open range [start, end).
+ * @param {Story} story
+ * @param {StoryPos} a
+ * @param {StoryPos} b
+ * @returns {Story}
+ */
+export function getStoryFragment(story, a, b) {
+  const s = normalizeStory(story);
+  const pa = clampPosNormalized(s, a);
+  const pb = clampPosNormalized(s, b);
+  const { start, end } = orderPositions(pa, pb);
+
+  if (comparePositions(start, end) === 0) return [];
+
+  const nextStory = [];
+
+  if (start.paraIndex === end.paraIndex) {
+    const para = s[start.paraIndex];
+    const mid = splitRunAtCharOffset(splitRunAtCharOffset(para, start.charOffset).rightRuns, end.charOffset - start.charOffset).leftRuns;
+    nextStory.push(normalizeParagraph(mid));
+    return normalizeStory(nextStory);
+  }
+
+  // Multi-paragraph fragment
+  const startPara = s[start.paraIndex];
+  const firstMid = splitRunAtCharOffset(startPara, start.charOffset).rightRuns;
+  nextStory.push(normalizeParagraph(firstMid));
+
+  for (let pi = start.paraIndex + 1; pi < end.paraIndex; pi++) {
+    nextStory.push(cloneStory([s[pi]])[0]);
+  }
+
+  const endPara = s[end.paraIndex];
+  const lastMid = splitRunAtCharOffset(endPara, end.charOffset).leftRuns;
+  nextStory.push(normalizeParagraph(lastMid));
+
+  return normalizeStory(nextStory);
+}
+
+/**
  * Return plain text content for half-open range [start, end).
  * Paragraph boundaries are represented as newlines.
  * @param {Story} story
@@ -369,6 +409,64 @@ export function insertText(story, pos, text, opts = {}) {
   return {
     story: normalizeStory(nextStory),
     cursor: { paraIndex: p.paraIndex, charOffset: p.charOffset + toInsert.length },
+  };
+}
+
+/**
+ * @param {Story} story
+ * @param {StoryPos} pos
+ * @param {Story} fragment
+ * @returns {{ story: Story, cursor: StoryPos }}
+ */
+export function insertStoryFragment(story, pos, fragment) {
+  const s = normalizeStory(story);
+  const p = clampPosNormalized(s, pos);
+  if (!fragment || fragment.length === 0) return { story: s, cursor: p };
+
+  const frag = normalizeStory(fragment);
+
+  // Single paragraph fragment - simple insertion
+  if (frag.length === 1) {
+    const para = s[p.paraIndex];
+    const split = splitRunAtCharOffset(para, p.charOffset);
+    const middleRuns = frag[0];
+    const combinedPara = normalizeParagraph([
+      ...split.leftRuns,
+      ...middleRuns,
+      ...split.rightRuns,
+    ]);
+    const nextStory = s.slice();
+    nextStory[p.paraIndex] = combinedPara;
+    return {
+      story: normalizeStory(nextStory),
+      cursor: { paraIndex: p.paraIndex, charOffset: p.charOffset + paraTextLength(frag, 0) },
+    };
+  }
+
+  // Multi-paragraph fragment
+  const para = s[p.paraIndex];
+  const split = splitRunAtCharOffset(para, p.charOffset);
+
+  const startParaMerged = normalizeParagraph([...split.leftRuns, ...frag[0]]);
+  const endParaMerged = normalizeParagraph([...frag[frag.length - 1], ...split.rightRuns]);
+
+  const middleParas = frag.slice(1, -1);
+
+  const nextStory = [
+    ...s.slice(0, p.paraIndex),
+    startParaMerged,
+    ...middleParas,
+    endParaMerged,
+    ...s.slice(p.paraIndex + 1),
+  ];
+
+  const resultStore = normalizeStory(nextStory);
+  return {
+    story: resultStore,
+    cursor: {
+      paraIndex: p.paraIndex + frag.length - 1,
+      charOffset: paraTextLength(frag, frag.length - 1),
+    },
   };
 }
 

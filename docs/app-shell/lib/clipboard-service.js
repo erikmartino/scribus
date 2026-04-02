@@ -7,144 +7,142 @@ export class ClipboardService {
   constructor(shell) {
     this.shell = shell;
     this._localKey = 'scribus_local_clipboard';
+    this._lastPayload = null;
     this._attachListeners();
   }
 
   _attachListeners() {
     window.addEventListener('copy', (e) => this._handleCopy(e));
-    window.addEventListener('cut', (e) => this._handleCopy(e));
+    window.addEventListener('cut', (e) => {
+      this._handleCopy(e);
+      this.shell.dispatchEvent(new CustomEvent('cut-executed', { detail: { type: 'cut' } }));
+    });
     window.addEventListener('paste', (e) => this._handlePaste(e));
   }
 
-  _handleCopy(e) {
-    // If we're focusing on an input, let the browser handle it (plain text)
-    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+  async _handleCopy(e) {
+    // If we're focusing on an input and this is a native event, let the browser handle it
+    if (e && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
-    const items = selection.all;
-    if (items.length === 0) return;
+    // Aggregate all potential serializables
+    const plugins = this.shell.plugins || [];
+    const selectionItems = this.shell.selection ? this.shell.selection.all : [];
+    
+    // Convert to rich data fragments
+    const serializedItems = [...plugins, ...selectionItems]
+      .filter(p => typeof p.serialize === 'function')
+      .map(p => p.serialize())
+      .filter(Boolean);
 
-    // Call serialize() on all items (ADM protocol)
-    const serialized = items.map(item => {
-      // If the item has a serialize/export method, use it
-      return (typeof item.serialize === 'function') ? item.serialize() : item;
-    });
+    if (serializedItems.length === 0) return;
 
     const payload = {
       version: 1,
       source: window.location.origin,
-      items: serialized
+      items: serializedItems
     };
 
     const json = JSON.stringify(payload);
+    this._lastPayload = payload;
 
-    // 1. Write to System Clipboard (text fallback)
-    e.clipboardData.setData('text/plain', json);
-    e.clipboardData.setData('application/json', json);
+    // 1. Write to System Clipboard
+    if (e && e.clipboardData) {
+      e.clipboardData.setData('text/plain', json);
+      e.clipboardData.setData('application/json', json);
+      e.preventDefault();
+    } else {
+      // Manual trigger or shortcut intercepted by JS
+      try {
+        const clipboardItem = new ClipboardItem({
+          'text/plain': new Blob([json], { type: 'text/plain' }),
+          'application/json': new Blob([json], { type: 'application/json' })
+        });
+        await navigator.clipboard.write([clipboardItem]);
+      } catch (err) {
+        // Fallback for browsers with restricted ClipboardItem support for custom types
+        await navigator.clipboard.writeText(json);
+      }
+    }
 
-    // 2. Write to Local Storage (cross-window rich state)
+    // 2. Write to Local Storage (secondary fallback)
     localStorage.setItem(this._localKey, json);
-
-    e.preventDefault();
+    
+    return payload;
   }
 
-  _handlePaste(e) {
-    const types = e.clipboardData.types;
-    let payload = {
-      version: 1,
-      source: 'External',
-      items: []
-    };
+  async _handlePaste(e) {
+    // If we're in an input and this is a native event, let native paste happen
+    if (e && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
-    // 1. Try Scribus-specific JSON from system clipboard FIRST
-    let json = e.clipboardData.getData('application/json');
-    if (json) {
-       try {
-         const data = JSON.parse(json);
-         if (data.items) {
-           this.shell.dispatchEvent(new CustomEvent('paste-received', { detail: data }));
-           return;
-         }
-       } catch (err) { /* ignore and try fallbacks */ }
+    // 1. Try local cache for immediate/synchronous internal paste
+    if (!e && this._lastPayload) {
+      this.shell.dispatchEvent(new CustomEvent('paste-received', { detail: this._lastPayload }));
+      return;
     }
 
-    // 2. Handle Rich Text from External Apps (macOS, Word, etc.)
-    if (types.includes('text/html')) {
-      const html = e.clipboardData.getData('text/html');
-      payload.items.push({
-        type: 'rich-text-fragment',
-        data: html
-      });
-    } else if (types.includes('text/plain')) {
-      const text = e.clipboardData.getData('text/plain');
-      
-      // Check if this text/plain is actually our JSON (some browsers/OSs might strip it)
-      if (text.startsWith('{"version":')) {
-        try {
-          const data = JSON.parse(text);
-          if (data.items) {
-            this.shell.dispatchEvent(new CustomEvent('paste-received', { detail: data }));
-            return;
+    let payload = null;
+
+    // 2. Try System Clipboard
+    try {
+      if (e && e.clipboardData) {
+        // Native event context (Synchronous)
+        const json = e.clipboardData.getData('application/json') || e.clipboardData.getData('text/plain');
+        if (json && (json.startsWith('{"version":') || json.startsWith('{"items":'))) {
+           payload = JSON.parse(json);
+        } else if (json) {
+           payload = { items: [{ type: 'plain-text', data: json }] };
+        }
+      } else {
+        // Manual/Shortcut context (Async)
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          if (item.types.includes('application/json')) {
+            const blob = await item.getType('application/json');
+            payload = JSON.parse(await blob.text());
+          } else if (item.types.includes('text/plain')) {
+            const blob = await item.getType('text/plain');
+            const text = await blob.text();
+            if (text.startsWith('{"version":') || text.startsWith('{"items":')) {
+              payload = JSON.parse(text);
+            } else {
+              payload = { items: [{ type: 'plain-text', data: text }] };
+            }
           }
-        } catch (e) {}
+        }
       }
-
-      payload.items.push({
-        type: 'plain-text',
-        data: text
-      });
+    } catch (err) {
+      console.warn('System clipboard read failed, falling back to localStorage.', err);
     }
-    
-    // 3. Last fallback: localStorage (only if we didn't find anything in the system clipboard)
-    if (payload.items.length === 0) {
+
+    // 2. Fallback to Local Storage
+    if (!payload) {
       const localJson = localStorage.getItem(this._localKey);
       if (localJson) {
         try {
-          const data = JSON.parse(localJson);
-          if (data.items) {
-             this.shell.dispatchEvent(new CustomEvent('paste-received', { detail: data }));
-             return;
-          }
+          payload = JSON.parse(localJson);
         } catch (e) {}
       }
     }
 
-    // 3. Handle Images from External Apps
-    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
-      for (const file of e.clipboardData.files) {
-        if (file.type.startsWith('image/')) {
-          payload.items.push({
-            type: 'image-blob',
-            data: URL.createObjectURL(file), // Provide a blob URL
-            fileName: file.name,
-            mimeType: file.type
-          });
-        }
-      }
-    }
-
-    if (payload.items.length > 0) {
+    if (payload && payload.items) {
+      if (e) e.preventDefault();
       this.shell.dispatchEvent(new CustomEvent('paste-received', { detail: payload }));
     }
   }
 
-  /**
-   * Manual copy trigger
-   */
-  copy() {
-    document.execCommand('copy');
+  async copy() {
+    return await this._handleCopy();
   }
 
-  /**
-   * Manual cut trigger
-   */
-  cut() {
-    document.execCommand('cut');
+  async cut() {
+    const payload = await this._handleCopy();
+    if (payload) {
+      this.shell.dispatchEvent(new CustomEvent('cut-executed', { detail: payload }));
+    }
+    return payload;
   }
 
-  /**
-   * Manual paste trigger
-   */
-  paste() {
-    document.execCommand('paste');
+  async paste() {
+    return await this._handlePaste();
   }
 }

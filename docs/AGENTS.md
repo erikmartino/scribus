@@ -46,9 +46,11 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
    - Do not add new dependencies to `package.json`.
    - Maintain a "no build step" workflow for prototypes and demos.
 
-7. Check Browser Logs for UI Changes.
-   - When modifying UI or browser-side logic, always inspect browser console logs for errors.
-   - Do not rely solely on subagent "success" reports or screenshots; verify that no new console errors or warnings were introduced by the change.
+7. Check Browser Logs and Verify UI via Playwright. (MANDATORY)
+   - When modifying UI or browser-side logic, ALWAYS perform verification using Playwright tests (`app-shell/test/*.spec.js`) rather than manual MCP/browser subagent control.
+   - Playwright tests provide the ONLY reliable way to verify cross-platform keyboard logic (e.g., Mac Command/Meta vs Ctrl) and to audit browser console logs via terminal output.
+   - All tests created or modified during development MUST BE KEPT in the repository to ensure continuous regression-free development.
+   - Your final report for the task MUST explicitly state that Playwright tests were run, confirm that console logs were checked via terminal output, and quote any errors found (or confirm 'No console errors found').
 
 ## Preferred Workflow
 

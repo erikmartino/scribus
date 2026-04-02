@@ -8,6 +8,7 @@ export class ShapesDemoPlugin {
 
     // Wrap initial DOM shapes into AbstractItems
     document.querySelectorAll('.selectable').forEach(el => {
+      el.tabIndex = 0;
       this._registerShape(el);
     });
 
@@ -129,6 +130,7 @@ export class ShapesDemoPlugin {
       } else {
         selection.select(item);
       }
+      el.focus();
     });
 
     // Drag-move logic
@@ -236,6 +238,7 @@ export class ShapesDemoPlugin {
     el.className = `selectable ${data.type}`;
     el.dataset.type = data.type;
     el.dataset.id = data.id || ('pasted-' + Math.random().toString(36).substr(2, 9));
+    el.tabIndex = 0; // Make focusable for native clipboard events
     
     if (data.type === 'triangle') {
       el.style.borderBottomColor = data.color || '#4caf50';

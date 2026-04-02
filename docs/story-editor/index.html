@@ -294,46 +294,15 @@
       const sampleEl = document.getElementById('sample-text');
       const container = document.getElementById('svg-container');
       const defaultFontSize = 22;
-      const editor = new EditorState(extractParagraphs(sampleEl));
+      const story = extractParagraphs(sampleEl);
       const paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
+      const editor = new EditorState(story, paragraphStyles);
       
-      const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles);
+      const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles, container);
       shell.registerPlugin(storyPlugin);
 
       const hasBeforeInput = 'onbeforeinput' in document;
       let prevParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
-
-      function reconcileParagraphStyles(paragraphStylesArr, previousTexts, nextTexts) {
-        if (previousTexts.length === nextTexts.length) return;
-
-        let prefix = 0;
-        while (
-          prefix < previousTexts.length &&
-          prefix < nextTexts.length &&
-          previousTexts[prefix] === nextTexts[prefix]
-        ) {
-          prefix++;
-        }
-
-        let suffix = 0;
-        while (
-          suffix < (previousTexts.length - prefix) &&
-          suffix < (nextTexts.length - prefix) &&
-          previousTexts[previousTexts.length - 1 - suffix] === nextTexts[nextTexts.length - 1 - suffix]
-        ) {
-          suffix++;
-        }
-
-        if (nextTexts.length === previousTexts.length + 1) {
-          const base = paragraphStylesArr[prefix]
-            ?? paragraphStylesArr[Math.max(0, prefix - 1)]
-            ?? defaultParagraphStyle('normal', defaultFontSize);
-          paragraphStylesArr.splice(prefix, 0, { ...base });
-        } else if (nextTexts.length + 1 === previousTexts.length) {
-          const removeAt = previousTexts.length - suffix - 1;
-          if (removeAt >= 0) paragraphStylesArr.splice(removeAt, 1);
-        }
-      }
 
       let cursor = null;
       let selecting = false;
@@ -435,18 +404,18 @@
         const boxWidth = boxWidthInput ? +boxWidthInput.value : 1040;
         const lineHeightPct = lineHeightInput ? +lineHeightInput.value : 140;
 
-        const nextParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
-        reconcileParagraphStyles(paragraphStyles, prevParagraphTexts, nextParagraphTexts);
-        ensureParagraphStylesLength(paragraphStyles, editor.story.length, defaultFontSize);
-        prevParagraphTexts = nextParagraphTexts;
-        
+        // Properties Panel Sync (must wait for shell's requestAnimationFrame)
+        requestAnimationFrame(() => {
+          const fontSizeInput = document.getElementById('font-size');
+          const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
+          const currentStyle = editor.paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', defaultFontSize);
+          
+          if (fontSizeInput && fontSizeInput.value !== String(Math.round(currentStyle.fontSize))) {
+            fontSizeInput.value = String(Math.round(currentStyle.fontSize));
+          }
+        });
+
         const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-        const currentStyle = paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', defaultFontSize);
-        
-        if (fontSizeInput && fontSizeInput.value !== String(Math.round(currentStyle.fontSize))) {
-          fontSizeInput.value = String(Math.round(currentStyle.fontSize));
-        }
-        
         const typingStyle = editor.getTypingStyle();
         
         const currentParaEl = document.getElementById('current-para');
@@ -471,7 +440,7 @@
           { x: box1Width + box2Width + gap * 2, y: 66, width: box3Width, height: 540 },
         ];
 
-        const paragraphLayoutStyles = buildParagraphLayoutStyles(defaultFontSize, paragraphStyles);
+        const paragraphLayoutStyles = buildParagraphLayoutStyles(defaultFontSize, editor.paragraphStyles);
 
         const { svg, lineMap } = await engine.renderToContainer(
           container,
@@ -680,82 +649,7 @@
         e.preventDefault();
       });
 
-      container.addEventListener('copy', (e) => {
-        const text = editor.getSelectedText();
-        if (!text) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Serialize story data for rich clipboard
-        const payload = {
-          version: 1,
-          source: window.location.origin,
-          items: [storyPlugin.storyItem.serialize()]
-        };
-        const json = JSON.stringify(payload);
-        e.clipboardData.setData('text/plain', text);
-        e.clipboardData.setData('application/json', json);
-        localStorage.setItem('scribus_local_clipboard', json);
-      });
-
-      container.addEventListener('cut', async (e) => {
-        const text = editor.getSelectedText();
-        if (!text) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const payload = {
-          version: 1,
-          source: window.location.origin,
-          items: [storyPlugin.storyItem.serialize()]
-        };
-        const json = JSON.stringify(payload);
-        e.clipboardData.setData('text/plain', text);
-        e.clipboardData.setData('application/json', json);
-        localStorage.setItem('scribus_local_clipboard', json);
-
-        storyPlugin.submitAction('Cut', () => {
-          editor.replaceSelectionWithText('');
-        });
-      });
-
-      let _pasteGuard = false;
-      container.addEventListener('paste', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Debounce: shell keydown + native Ctrl+V can fire two paste events
-        if (_pasteGuard) return;
-        _pasteGuard = true;
-        setTimeout(() => { _pasteGuard = false; }, 0);
-
-        // Read from localStorage first (rich clipboard), then system clipboard
-        let json = localStorage.getItem('scribus_local_clipboard');
-        if (!json && e.clipboardData) {
-          json = e.clipboardData.getData('application/json');
-        }
-
-        if (json) {
-          try {
-            const data = JSON.parse(json);
-            if (data.items) {
-              storyPlugin.handlePaste(data);
-              return;
-            }
-          } catch (_) { /* fall through */ }
-        }
-
-        // Fallback: plain text from system clipboard
-        if (e.clipboardData) {
-          const text = e.clipboardData.getData('text/plain');
-          if (text) {
-            storyPlugin.handlePaste({
-              version: 1, source: 'external',
-              items: [{ type: 'plain-text', data: text }]
-            });
-          }
-        }
-      });
+      // Clipboard events are now handled by the StoryEditorPlugin (registered in shell)
 
       window.addEventListener('beforeunload', () => {
         if (cursor) cursor.destroy();

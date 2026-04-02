@@ -13,6 +13,8 @@ import {
   insertParagraphBreak,
   applyStyleRange,
   getStyleAtPos,
+  getStoryFragment,
+  insertStoryFragment,
 } from './story-ops.js';
 import { cloneStyle } from './style.js';
 
@@ -88,12 +90,19 @@ function rightWordBoundary(text, offset) {
 export class EditorState {
   /**
    * @param {Story} story
+   * @param {import('./paragraph-style.js').ParagraphStyle[]} paragraphStyles
    */
-  constructor(story) {
+  constructor(story, paragraphStyles = []) {
     this._story = normalizeStory(story);
+    this._paragraphStyles = [...paragraphStyles];
     this._cursor = { paraIndex: 0, charOffset: 0, lineIndex: 0 };
     this._selection = null;
     this._typingStyle = null;
+  }
+
+  /** @returns {import('./paragraph-style.js').ParagraphStyle[]} */
+  get paragraphStyles() {
+    return this._paragraphStyles;
   }
 
   /** @returns {Story} */
@@ -148,6 +157,7 @@ export class EditorState {
   getState() {
     return {
       story: JSON.parse(JSON.stringify(this._story)),
+      paragraphStyles: JSON.parse(JSON.stringify(this._paragraphStyles)),
       cursor: { ...this._cursor },
       selection: this._selection ? {
         anchor: { ...this._selection.anchor },
@@ -162,6 +172,8 @@ export class EditorState {
    */
   setState(state) {
     this._story = state.story;
+    this._paragraphStyles.length = 0;
+    this._paragraphStyles.push(...state.paragraphStyles);
     this._cursor = { ...state.cursor };
     this._selection = state.selection ? {
       anchor: { ...state.selection.anchor },
@@ -392,6 +404,7 @@ export class EditorState {
       if (this._replaceSelectionIfAny('')) return true;
     }
 
+    const beforeCount = this._story.length;
     const pos = toStoryPos(this._cursor);
     let result = null;
 
@@ -408,6 +421,57 @@ export class EditorState {
     }
 
     this._story = result.story;
+    
+    // Manage paragraph styles synchronization
+    const afterCount = this._story.length;
+    if (afterCount > beforeCount) {
+      // Multiple paragraphs added (likely just +1 for Enter)
+      const added = afterCount - beforeCount;
+      const target = result.cursor.paraIndex;
+      // Use previous paragraph's style as a base for the new one(s)
+      const baseStyle = this._paragraphStyles[Math.max(0, target - 1)] || { fontSize: 22 };
+      const newStyles = Array.from({ length: added }, () => ({ ...baseStyle }));
+      this._paragraphStyles.splice(target, 0, ...newStyles);
+    } else if (afterCount < beforeCount) {
+      // Paragraph deleted/merged
+      const removed = beforeCount - afterCount;
+      const target = pos.paraIndex;
+      this._paragraphStyles.splice(target, removed);
+    }
+
+    this._cursor = {
+      paraIndex: result.cursor.paraIndex,
+      charOffset: result.cursor.charOffset,
+      lineIndex: this._cursor.lineIndex,
+    };
+    this._selection = null;
+    return true;
+  }
+
+  /**
+   * @param {import('./story-ops.js').Story} storyFragment
+   * @param {import('./paragraph-style.js').ParagraphStyle[]} fragmentStyles
+   */
+  insertStory(storyFragment, fragmentStyles = []) {
+    if (!storyFragment || storyFragment.length === 0) return false;
+    
+    // Replace selection if any
+    this._replaceSelectionIfAny('');
+    
+    const beforeCount = this._story.length;
+    const pos = toStoryPos(this._cursor);
+    const result = insertStoryFragment(this._story, pos, storyFragment);
+    
+    this._story = result.story;
+    const addedCount = this._story.length - beforeCount;
+    
+    if (addedCount > 0 && fragmentStyles.length > 0) {
+      // Splice in the new styles (skipping the first one as it's merged)
+      const targetIndex = result.cursor.paraIndex - addedCount + 1;
+      const newStyles = fragmentStyles.slice(1).map(s => ({...s}));
+      this._paragraphStyles.splice(targetIndex, 0, ...newStyles);
+    }
+
     this._cursor = {
       paraIndex: result.cursor.paraIndex,
       charOffset: result.cursor.charOffset,
@@ -489,6 +553,15 @@ export class EditorState {
     const range = this.getSelectionRange();
     if (!range) return '';
     return textInRange(this._story, range.start, range.end);
+  }
+  
+  /**
+   * @returns {import('./story-ops.js').Story}
+   */
+  getRichSelection() {
+    const range = this.getSelectionRange();
+    if (!range) return [];
+    return getStoryFragment(this._story, range.start, range.end);
   }
 
   /**

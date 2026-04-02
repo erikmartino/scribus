@@ -6,13 +6,20 @@ import { AbstractItem } from '../../app-shell/lib/document-model.js';
  * StoryEditorPlugin - Adapts the Story Editor logic to the Scribus App Shell.
  */
 export class StoryEditorPlugin {
-  constructor(editor, updateCallback, paragraphStyles) {
+  constructor(editor, update, initialParagraphStyles, container) {
     this.editor = editor;
-    this.update = updateCallback;
-    this.paragraphStyles = paragraphStyles;
+    this.update = update;
+    this.paragraphStyles = editor.paragraphStyles;
+    this.container = container;
+    
+    // If the editor was initialized without the initial styles, sync them now
+    if (this.paragraphStyles.length === 0 && initialParagraphStyles) {
+      this.paragraphStyles.push(...initialParagraphStyles);
+    }
     
     this._typingGroup = null;
     this._typingTimeout = null;
+    this._lastState = this.editor.getState();
   }
 
   init(shell) {
@@ -20,19 +27,40 @@ export class StoryEditorPlugin {
 
     // Register as an AbstractItem for clipboard / multi-selection services
     const storyItem = new AbstractItem('main-story', 'story');
-    storyItem.serialize = () => ({
-      type: 'story',
-      story: this.editor.story,
-      styles: this.paragraphStyles
-    });
+    storyItem.serialize = () => {
+      const selectedText = this.editor.getSelectedText();
+      const range = this.editor.getSelectionRange();
+      if (selectedText && range) {
+        return {
+          type: 'story',
+          data: selectedText,
+          story: this.editor.getRichSelection(),
+          paragraphStyles: this.paragraphStyles.slice(range.start.paraIndex, range.end.paraIndex + 1).map(s => ({...s}))
+        };
+      }
+      return null;
+    };
     this.storyItem = storyItem;
 
     // Register the story item in the document-model and select it
     this.shell.doc.registerItem(storyItem);
-    this.shell.selection.select(storyItem);
+
+    // Select the story and delay update so Shell can render panels
+    setTimeout(() => {
+      this.shell.selection.select(storyItem);
+      this.update();
+    }, 100);
     
     // Listen for rich paste events
     this.shell.addEventListener('paste-received', (e) => this.handlePaste(e.detail));
+
+    // Handle 'cut' deletion (fired by Shell after successful serialization)
+    this.shell.addEventListener('cut-executed', () => {
+      if (!this.editor.hasSelection()) return;
+      this.submitAction('Cut', () => {
+        this.editor.replaceSelectionWithText('');
+      });
+    });
 
     // Register Commands
     shell.commands.register({
@@ -78,47 +106,34 @@ export class StoryEditorPlugin {
    * Handles grouping for consecutive "insertText" operations.
    */
   submitAction(label, transform, opType = 'generic') {
-    const beforeState = this.editor.getState();
-    const beforeStyles = JSON.parse(JSON.stringify(this.paragraphStyles));
-    
     transform();
     
     const afterState = this.editor.getState();
-    const afterStyles = JSON.parse(JSON.stringify(this.paragraphStyles));
 
     // Grouping logic for typing
     if (opType === 'insertText' && this._typingGroup) {
-      this._typingGroup.after = afterState;
-      this._typingGroup.afterStyles = afterStyles;
+      this._typingGroup.afterState = afterState;
       clearTimeout(this._typingTimeout);
       this._typingTimeout = setTimeout(() => { this._typingGroup = null; }, 1000);
+      this._lastState = afterState;
       this.update();
       return;
     }
 
     const action = {
-      label,
-      before: beforeState,
-      beforeStyles,
-      after: afterState,
-      afterStyles,
+      name: label,
+      beforeState: this._lastState,
+      afterState: afterState,
       execute: () => {
-        this.editor.setState(action.after);
-        // Replace styles contents rather than the reference if possible, 
-        // but since it's an array we can just splice if needed or just reassign if we own the ref.
-        // The common way in these demos is to just reassign the array content.
-        this.paragraphStyles.length = 0;
-        this.paragraphStyles.push(...action.afterStyles);
+        this.editor.setState(action.afterState);
         this.update();
       },
       undo: () => {
-        this.editor.setState(action.before);
-        this.paragraphStyles.length = 0;
-        this.paragraphStyles.push(...action.beforeStyles);
+        this.editor.setState(action.beforeState);
         this.update();
       }
     };
-
+    
     if (opType === 'insertText') {
       this._typingGroup = action;
       this._typingTimeout = setTimeout(() => { this._typingGroup = null; }, 1000);
@@ -126,27 +141,25 @@ export class StoryEditorPlugin {
       this._typingGroup = null;
     }
 
+    this._lastState = afterState;
     this.shell.history.submit(action);
     this.update();
   }
 
   handlePaste(payload) {
+    if (!payload || !payload.items) return;
+    
     // 1. Native Story Data (preferred)
-    const storyItem = payload.items.find(it => it.type === 'story');
-    if (storyItem) {
+    const storyItem = payload.items.find(it => it && it.type === 'story');
+    if (storyItem && storyItem.story) {
       this.submitAction('Paste Story', () => {
-         const text = storyItem.story.map(p => p.map(r => r.text).join('')).join('\n');
-         if (this.editor.hasSelection()) {
-           this.editor.replaceSelectionWithText(text);
-         } else {
-           this.editor.applyOperation('insertText', { text });
-         }
+        this.editor.insertStory(storyItem.story, storyItem.paragraphStyles);
       });
       return;
     }
 
     // 2. Plain Text / Rich Text Fallbacks
-    const textItem = payload.items.find(it => it.type === 'plain-text' || it.type === 'rich-text-fragment');
+    const textItem = payload.items.find(it => it && (it.type === 'plain-text' || it.type === 'rich-text-fragment'));
     if (textItem) {
       this.submitAction('Paste Text', () => {
         // For rich text, we currently just extract text content for simplicity in this demo

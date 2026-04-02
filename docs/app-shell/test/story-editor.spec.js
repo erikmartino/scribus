@@ -100,4 +100,28 @@ test.describe('Story Editor Integration', () => {
         const afterUndoTspans = await page.locator('#svg-container svg text tspan').count();
         expect(afterUndoTspans).toBeLessThan(afterPasteTspans);
     });
+
+    test('font size in properties panel reflects current paragraph style', async ({ page }) => {
+        const editor = page.locator('#svg-container');
+        await editor.focus();
+
+        // 1. Check First Paragraph (Lead style initialized as 30pt)
+        await page.keyboard.press('Home');
+        await page.waitForTimeout(300);
+
+        const fontSizeInput = page.locator('scribus-input#font-size');
+        const firstParaSize = await fontSizeInput.evaluate(el => el.value);
+        expect(Number(firstParaSize)).toBe(30);
+
+        // 2. Move to Second Paragraph (Normal style initialized as 22pt)
+        // Sending multiple ArrowDowns to skip the wrapped lines of the first multi-line paragraph
+        for (let i = 0; i < 5; i++) {
+            await page.keyboard.press('ArrowDown');
+            await page.waitForTimeout(50);
+        }
+        await page.waitForTimeout(300);
+
+        const secondParaSize = await fontSizeInput.evaluate(el => el.value);
+        expect(Number(secondParaSize)).toBe(22);
+    });
 });

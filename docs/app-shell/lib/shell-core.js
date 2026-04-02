@@ -102,16 +102,23 @@ export class AppShell extends EventTarget {
         this.commands.execute('app.redo');
       }
 
-      if (isMod && e.key.toLowerCase() === 'c') {
-        // Only trigger rich copy if not in an input
+      if (isMod && e.key.toLowerCase() === 'x') {
         if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
-          this.clipboard.copy();
+           e.preventDefault();
+           this.clipboard.cut();
+        }
+      }
+
+      if (isMod && e.key.toLowerCase() === 'c') {
+        if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+           e.preventDefault();
+           this.clipboard.copy();
         }
       }
 
       if (isMod && e.key.toLowerCase() === 'v') {
-        // Only trigger rich paste if not in an input
         if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+           e.preventDefault();
            this.clipboard.paste();
         }
       }
@@ -339,9 +346,9 @@ class UIHelper {
 
   /**
    * Creates a button. Can be linked to a command.
-   * @param {Object} options - { label, icon, primary, onClick, commandId, iconOnly }
+   * @param {Object} options - { label, icon, primary, onClick, commandId, iconOnly, active, id }
    */
-  createButton({ label, icon, primary, onClick, commandId, iconOnly }) {
+  createButton({ label, icon, primary, onClick, commandId, iconOnly, active, id }) {
     const btn = document.createElement('scribus-button');
     
     let actualLabel = label;
@@ -366,12 +373,14 @@ class UIHelper {
     if (actualIcon) btn.setAttribute('icon', actualIcon);
     if (primary) btn.setAttribute('primary', '');
     if (iconOnly) btn.setAttribute('icon-only', '');
+    if (active) btn.setAttribute('active', '');
+    if (id) btn.id = id;
     if (actualClick) btn.onclick = actualClick;
     
     return btn;
   }
 
-  createInput({ label, value, onInput, placeholder, type, min, max }) {
+  createInput({ label, value, onInput, placeholder, type, min, max, id }) {
     const input = document.createElement('scribus-input');
     if (label) input.setAttribute('label', label);
     if (value) input.setAttribute('value', value);
@@ -379,6 +388,7 @@ class UIHelper {
     if (type) input.setAttribute('type', type);
     if (min) input.setAttribute('min', min);
     if (max) input.setAttribute('max', max);
+    if (id) input.id = id;
     
     if (onInput) {
       input.addEventListener('change', (e) => onInput(e.detail, e));
@@ -386,10 +396,11 @@ class UIHelper {
     return input;
   }
 
-  createFontSelector({ label, value, onChange }) {
+  createFontSelector({ label, value, onChange, id }) {
     const selector = document.createElement('scribus-font-selector');
     if (label) selector.setAttribute('label', label);
     if (value) selector.setAttribute('value', value);
+    if (id) selector.id = id;
     if (onChange) {
       selector.addEventListener('change', (e) => onChange(e.detail, e));
     }
