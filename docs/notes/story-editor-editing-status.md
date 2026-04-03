@@ -27,8 +27,8 @@ In place:
 3. **Editing features**
    - [x] Rich clipboard support inside the App Shell.
    - [x] Undo/redo transaction history.
-   - [x] Trailing space cursor movement. ([walkthrough](trailing-space-fix-walkthrough.md))
-   - [/] Typing style model is minimal. ([plan](story-editor-typing-style-plan.md))
+   - [x] Trailing space cursor movement.
+   - [/] Typing style model is minimal.
 
 ## Recommended Next Milestone
 
