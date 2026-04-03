@@ -299,6 +299,7 @@
       const editor = new EditorState(story, paragraphStyles);
       
       const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles, container);
+      window.plugin = storyPlugin;
       shell.registerPlugin(storyPlugin);
 
       const hasBeforeInput = 'onbeforeinput' in document;

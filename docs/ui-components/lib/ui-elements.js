@@ -2,7 +2,7 @@
  * ScribusButton - Standard action button for the Scribus ecosystem.
  */
 export class ScribusButton extends HTMLElement {
-  static get observedAttributes() { return ['label', 'primary', 'icon', 'active', 'icon-only']; }
+  static get observedAttributes() { return ['label', 'primary', 'icon', 'active', 'icon-only', 'no-focus']; }
 
   constructor() {
     super();
@@ -67,7 +67,10 @@ export class ScribusButton extends HTMLElement {
           display: ${iconOnly ? 'none' : 'block'};
         }
       </style>
-      <button title="${iconOnly ? label : ''}">
+      <button 
+        title="${iconOnly ? label : ''}" 
+        onmousedown="if (this.parentNode.host.hasAttribute('no-focus')) event.preventDefault()"
+      >
         ${icon ? `<span class="icon">${icon}</span>` : ''}
         <span class="label">${label}</span>
       </button>
@@ -79,7 +82,7 @@ export class ScribusButton extends HTMLElement {
  * ScribusInput - Standard labeled input field.
  */
 export class ScribusInput extends HTMLElement {
-  static get observedAttributes() { return ['label', 'value', 'type', 'placeholder', 'min', 'max']; }
+  static get observedAttributes() { return ['label', 'value', 'placeholder', 'type', 'min', 'max', 'layout', 'no-focus']; }
 
   constructor() {
     super();
@@ -120,8 +123,8 @@ export class ScribusInput extends HTMLElement {
     const value = this.getAttribute('value') || '';
     const type = this.getAttribute('type') || 'text';
     const placeholder = this.getAttribute('placeholder') || '';
-    const min = this.getAttribute('min') || '';
-    const max = this.getAttribute('max') || '';
+    const min = this.getAttribute('min') || null;
+    const max = this.getAttribute('max') || null;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -131,39 +134,42 @@ export class ScribusInput extends HTMLElement {
           gap: 6px;
           font-family: inherit;
         }
-        .header {
-          display: flex;
-          justify-content: space-between;
+        :host([layout="horizontal"]) {
+          flex-direction: row;
           align-items: center;
+          gap: 8px;
         }
         label {
-          font-size: 0.65rem;
-          color: var(--text-dim, #a1a1aa);
+          color: var(--text-dim, #94949b);
+          font-size: 0.75rem;
+          font-weight: 500;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
-          font-weight: 700;
+          letter-spacing: 0.025em;
+          white-space: nowrap;
+        }
+        input {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid var(--border, #2e2e32);
+          color: var(--text-main, #e1e1e6);
+          padding: 8px 12px;
+          border-radius: 6px;
+          font-size: 0.875rem;
+          font-family: inherit;
+          transition: all 0.2s ease;
+          width: 100%;
+          box-sizing: border-box;
+          outline: none;
+        }
+        input:focus {
+          border-color: var(--accent, #bb86fc);
+          background: rgba(255, 255, 255, 0.05);
+          box-shadow: 0 0 0 2px rgba(187, 134, 252, 0.1);
         }
         .val {
           font-size: 0.7rem;
           font-family: 'JetBrains Mono', monospace;
           color: var(--accent, #bb86fc);
           font-weight: bold;
-        }
-        input {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-          color: var(--text-main, #e1e1e6);
-          padding: 8px 12px;
-          border-radius: 6px;
-          font-size: 0.85rem;
-          font-family: inherit;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-          outline: none;
-        }
-        input:focus {
-          border-color: var(--accent, #bb86fc);
-          background: rgba(255, 255, 255, 0.06);
-          box-shadow: 0 0 12px rgba(187, 134, 252, 0.15);
         }
         input[type="range"] {
           -webkit-appearance: none;

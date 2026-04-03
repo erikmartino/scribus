@@ -20,6 +20,11 @@ export class StoryEditorPlugin {
     this._typingGroup = null;
     this._typingTimeout = null;
     this._lastState = this.editor.getState();
+
+    // Initialize state for the ribbon/panels
+    this.state = {
+      typingStyle: this.editor.getTypingStyle()
+    };
   }
 
   init(shell) {
@@ -71,6 +76,7 @@ export class StoryEditorPlugin {
         const style = this.editor.getTypingStyle();
         this.submitAction('Toggle Bold', () => {
           this.editor.applyCharacterStyle({ bold: !style.bold });
+          this.container.focus();
         });
       }
     });
@@ -83,6 +89,7 @@ export class StoryEditorPlugin {
         const style = this.editor.getTypingStyle();
         this.submitAction('Toggle Italic', () => {
           this.editor.applyCharacterStyle({ italic: !style.italic });
+          this.container.focus();
         });
       }
     });
@@ -92,10 +99,7 @@ export class StoryEditorPlugin {
       label: 'Reset Layout',
       execute: () => {
         this.submitAction('Reset Layout', () => {
-          const boxWidthInput = document.getElementById('box-width');
-          const lineHeightInput = document.getElementById('line-height');
-          if (boxWidthInput) boxWidthInput.value = 1040;
-          if (lineHeightInput) lineHeightInput.value = 140;
+          // No-op for removed typography inputs
         });
       }
     });
@@ -106,6 +110,7 @@ export class StoryEditorPlugin {
    * Handles grouping for consecutive "insertText" operations.
    */
   submitAction(label, transform, opType = 'generic') {
+    console.log(`[Plugin] submitAction: ${label} (${opType})`);
     transform();
     
     const afterState = this.editor.getState();
@@ -146,6 +151,18 @@ export class StoryEditorPlugin {
     this.update();
   }
 
+  /**
+   * Updates the current typing style and potentially the selection.
+   */
+  updateTypingStyle(style) {
+    this.submitAction('Update Style', () => {
+      this.editor.applyCharacterStyle(style);
+      // Sync internal state
+      this.state.typingStyle = { ...this.state.typingStyle, ...style };
+      this.container.focus();
+    });
+  }
+
   handlePaste(payload) {
     if (!payload || !payload.items) return;
     
@@ -179,30 +196,14 @@ export class StoryEditorPlugin {
 
   getRibbonSections() {
     return [
-      AppShell.createRibbonSection('Story Editor', (container) => {
-        // Status indicator
-        const status = document.createElement('div');
-        status.style.fontSize = '0.75rem';
-        status.style.padding = '4px 8px';
-        status.style.background = 'rgba(0,255,100,0.1)';
-        status.style.color = 'var(--accent-secondary)';
-        status.style.borderRadius = '4px';
-        status.textContent = 'Ready';
-        container.appendChild(status);
-      }),
-
       AppShell.createRibbonSection('Font', (container) => {
         const selector = this.shell.ui.createFontSelector({
-          label: 'Family',
-          value: 'EB Garamond',
-          onChange: (val) => {
-            this.submitAction('Change Font', () => {
-              const pi = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
-              this.paragraphStyles[pi].fontFamily = val;
-            });
-          }
+          label: '',
+          value: this.state.typingStyle.fontFamily || 'EB Garamond',
+          layout: 'horizontal',
+          onChange: (font) => this.updateTypingStyle({ fontFamily: font }),
+          id: 'font-family-selector'
         });
-        selector.id = 'font-family';
         container.appendChild(selector);
 
         container.appendChild(this.shell.ui.createButton({
@@ -213,28 +214,6 @@ export class StoryEditorPlugin {
         container.appendChild(this.shell.ui.createButton({
           commandId: 'story.italic',
           id: 'toggle-italic'
-        }));
-      }),
-      
-      AppShell.createRibbonSection('Typography', (container) => {
-        container.appendChild(this.shell.ui.createInput({
-          label: 'Width',
-          type: 'range',
-          min: 400,
-          max: 1400,
-          value: 1040,
-          id: 'box-width',
-          onInput: (val) => this.update()
-        }));
-        
-        container.appendChild(this.shell.ui.createInput({
-          label: 'Line Height %',
-          type: 'range',
-          min: 100,
-          max: 250,
-          value: 140,
-          id: 'line-height',
-          onInput: (val) => this.update()
         }));
       })
     ];

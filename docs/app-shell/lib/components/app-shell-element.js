@@ -61,6 +61,11 @@ export class ScribusAppShell extends HTMLElement {
           z-index: 100;
           backdrop-filter: var(--glass);
           box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+          overflow-x: auto;
+          scrollbar-width: none; /* Firefox */
+        }
+        .ribbon::-webkit-scrollbar {
+          display: none; /* Safari/Chrome */
         }
 
         .main-body {
@@ -299,6 +304,8 @@ export class ScribusRibbonSection extends HTMLElement {
           border-right: 1px solid var(--border, #2e2e32);
           padding-right: 1.5rem;
           height: 100%;
+          flex-shrink: 0;
+          white-space: nowrap;
         }
         :host(:last-child) {
           border-right: none;
@@ -309,11 +316,13 @@ export class ScribusRibbonSection extends HTMLElement {
           text-transform: uppercase;
           margin-bottom: 4px;
           letter-spacing: 0.05em;
+          white-space: nowrap;
         }
         .ribbon-content {
           display: flex;
           gap: 0.5rem;
           align-items: center;
+          flex-wrap: nowrap;
         }
       </style>
       <span class="ribbon-label">${label}</span>

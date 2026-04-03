@@ -348,14 +348,12 @@ class UIHelper {
    * Creates a button. Can be linked to a command.
    * @param {Object} options - { label, icon, primary, onClick, commandId, iconOnly, active, id }
    */
-  createButton({ label, icon, primary, onClick, commandId, iconOnly, active, id }) {
+  createButton({ label, primary, icon, commandId, onClick, id, active, iconOnly, noFocus = true }) {
     const btn = document.createElement('scribus-button');
-    
     let actualLabel = label;
     let actualIcon = icon;
     let actualClick = onClick;
 
-    // If a command is provided, use its properties if not overridden
     if (commandId) {
       const cmd = this.shell.commands.get(commandId);
       if (cmd) {
@@ -369,18 +367,21 @@ class UIHelper {
       }
     }
 
-    btn.setAttribute('label', actualLabel || '');
+    if (actualLabel) btn.setAttribute('label', actualLabel);
     if (actualIcon) btn.setAttribute('icon', actualIcon);
     if (primary) btn.setAttribute('primary', '');
-    if (iconOnly) btn.setAttribute('icon-only', '');
     if (active) btn.setAttribute('active', '');
+    if (iconOnly) btn.setAttribute('icon-only', '');
     if (id) btn.id = id;
-    if (actualClick) btn.onclick = actualClick;
+    if (noFocus) btn.setAttribute('no-focus', '');
     
+    if (actualClick) {
+      btn.addEventListener('click', actualClick);
+    }
     return btn;
   }
 
-  createInput({ label, value, onInput, placeholder, type, min, max, id }) {
+  createInput({ label, value, onInput, placeholder, type, min, max, id, layout, noFocus = true }) {
     const input = document.createElement('scribus-input');
     if (label) input.setAttribute('label', label);
     if (value) input.setAttribute('value', value);
@@ -389,6 +390,8 @@ class UIHelper {
     if (min) input.setAttribute('min', min);
     if (max) input.setAttribute('max', max);
     if (id) input.id = id;
+    if (layout) input.setAttribute('layout', layout);
+    if (noFocus) input.setAttribute('no-focus', '');
     
     if (onInput) {
       input.addEventListener('change', (e) => onInput(e.detail, e));
@@ -396,11 +399,13 @@ class UIHelper {
     return input;
   }
 
-  createFontSelector({ label, value, onChange, id }) {
+  createFontSelector({ label, value, onChange, id, layout, noFocus = true }) {
     const selector = document.createElement('scribus-font-selector');
     if (label) selector.setAttribute('label', label);
     if (value) selector.setAttribute('value', value);
     if (id) selector.id = id;
+    if (layout) selector.setAttribute('layout', layout);
+    if (noFocus) selector.setAttribute('no-focus', '');
     if (onChange) {
       selector.addEventListener('change', (e) => onChange(e.detail, e));
     }
