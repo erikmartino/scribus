@@ -6,27 +6,37 @@ test.describe('Focus Preservation Verification', () => {
         page.on('pageerror', err => console.log(`BROWSER ERR: ${err.message}`));
         
         await page.goto('/story-editor/index.html');
+        // Wait for components and initial layout (crucial for WASM engine)
         await page.waitForSelector('scribus-ribbon-section', { timeout: 60000 });
-        await page.waitForFunction(() => window.plugin && window.plugin.editor, { timeout: 60000 });
+        await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
+        await page.waitForFunction(() => window.scribusShell && window.scribusShell.plugins.some(p => p.editor), { timeout: 60000 });
     });
 
     test('verify editor maintains focus after clicking Bold button', async ({ page }) => {
-        // 1. Focus the editor and type something
         const editor = page.locator('#svg-container');
-        await editor.click();
-        await page.keyboard.type('Hello');
+        await editor.focus();
+
+        // 1. Clear existing text to reduce noise
+        await page.keyboard.press('ControlOrMeta+a');
+        await page.keyboard.press('Backspace');
+        await page.waitForTimeout(200);
+
+        // 2. Type initial text
+        await page.keyboard.type('Hello', { delay: 50 });
         
-        // 2. Click the Bold button in the ribbon
+        // 3. Click the Bold button in the ribbon
         const boldBtn = page.locator('#toggle-bold button');
         await boldBtn.click();
         
-        // 3. Type more text immediately without clicking back
-        await page.keyboard.type(' World');
+        // 4. Type more text immediately without clicking back
+        await page.keyboard.type(' World', { delay: 50 });
+        await page.waitForTimeout(500);
         
-        // 4. Verify the text is in the editor
+        // 5. Verify the text is in the editor
         const text = await page.evaluate(() => {
-            const story = window.plugin.editor.story;
-            // First paragraph is at index 0. Each paragraph is an array of runs.
+            const plugin = window.scribusShell.plugins.find(p => p.editor);
+            const story = plugin.editor.story;
+            // Join all runs in the first paragraph
             return story[0].map(run => run.text).join('');
         });
         
@@ -35,20 +45,28 @@ test.describe('Focus Preservation Verification', () => {
     });
 
     test('verify editor maintains focus after changing Font Family', async ({ page }) => {
-        // 1. Focus the editor and type
         const editor = page.locator('#svg-container');
-        await editor.click();
-        await page.keyboard.type('Font');
+        await editor.focus();
+
+        // 1. Clear existing text
+        await page.keyboard.press('ControlOrMeta+a');
+        await page.keyboard.press('Backspace');
+        await page.waitForTimeout(200);
+
+        // 2. Type initial text
+        await page.keyboard.type('Font', { delay: 50 });
         
-        // 2. Change font family in ribbon
+        // 3. Change font family in ribbon
         const selector = page.locator('#font-family-selector select');
         await selector.selectOption('Roboto');
         
-        // 3. Type more text
-        await page.keyboard.type(' Change');
+        // 4. Type more text
+        await page.keyboard.type(' Change', { delay: 50 });
+        await page.waitForTimeout(500);
         
         const text = await page.evaluate(() => {
-            const story = window.plugin.editor.story;
+            const plugin = window.scribusShell.plugins.find(p => p.editor);
+            const story = plugin.editor.story;
             return story[0].map(run => run.text).join('');
         });
         
