@@ -119,11 +119,17 @@ export function buildPositions(entry, baseX) {
     }
   }
 
-  for (let wi = 0; wi < words.length && wi < wordGroups.length; wi++) {
+  let wx = baseX;
+  for (let wi = 0; wi < wordGroups.length; wi++) {
     const word = words[wi];
     const group = wordGroups[wi];
-    let wx = baseX + word.x;
 
+    // If a justified/aligned word exists, snap our wx to its computed start
+    if (word) {
+      wx = baseX + word.x;
+    }
+
+    // Process characters in the word
     for (let gi = 0; gi < group.glyphs.length; gi++) {
       const g = group.glyphs[gi];
       const nextCl = gi + 1 < group.glyphs.length
@@ -142,15 +148,25 @@ export function buildPositions(entry, baseX) {
       }
     }
 
+    // Process the space following this word (or the trailing space itself)
     if (group.spaceGlyph) {
       addPos(hyphToOrig[group.spaceGlyph.cl], wx);
+      
+      // Calculate how much to advance wx after this space
+      // If there's a subsequent word, we should align with its x in the next iteration.
+      // But if there isn't (trailing spaces), we use the space's actual width.
+      const nextWord = words[wi + 1];
+      if (nextWord) {
+        // wx will be recalculated from nextWord.x in the next loop iteration
+      } else {
+        // Just use the space's actual advance
+        wx += group.spaceGlyph.ax;
+      }
     }
   }
 
-  const rawEndX = words.length > 0
-    ? baseX + words[words.length - 1].x + words[words.length - 1].width
-    : baseX;
-  const endX = hyphenated ? rawEndX - (hyphenAdvance || 0) : rawEndX;
+  // The final cursor position (after all text) should be at the final wx
+  const endX = hyphenated ? wx - (hyphenAdvance || 0) : wx;
 
   if (isLastInPara) {
     addPos(origLen, endX);
