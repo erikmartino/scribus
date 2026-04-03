@@ -26,7 +26,7 @@ describe('ClipboardService', () => {
     global.localStorage.store = {};
   });
 
-  it('handles rich paste from localStorage', () => {
+  it('handles rich paste from localStorage', async () => {
     const payload = { version: 1, items: [{ id: '1', type: 'story' }] };
     global.localStorage.setItem('scribus_local_clipboard', JSON.stringify(payload));
 
@@ -34,26 +34,28 @@ describe('ClipboardService', () => {
         clipboardData: {
             types: [],
             getData: () => null
-        }
+        },
+        preventDefault: () => {}
     };
 
-    clipboard._handlePaste(mockEvent);
+    await clipboard._handlePaste(mockEvent);
     
     assert.notEqual(lastDispatchedEvent, null);
     assert.equal(lastDispatchedEvent.type, 'paste-received');
     assert.deepEqual(lastDispatchedEvent.detail, payload);
   });
 
-  it('handles plain text fallback when no rich data is available', () => {
+  it('handles plain text fallback when no rich data is available', async () => {
     const mockEvent = {
         clipboardData: {
             types: ['text/plain'],
             getData: (type) => type === 'text/plain' ? 'Hello World' : null,
             files: []
-        }
+        },
+        preventDefault: () => {}
     };
 
-    clipboard._handlePaste(mockEvent);
+    await clipboard._handlePaste(mockEvent);
     
     assert.notEqual(lastDispatchedEvent, null);
     assert.equal(lastDispatchedEvent.detail.items[0].type, 'plain-text');
