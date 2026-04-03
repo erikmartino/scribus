@@ -27,7 +27,7 @@ In place:
 3. **Editing features**
    - [x] Rich clipboard support inside the App Shell.
    - [x] Undo/redo transaction history.
-   - [ ] Typing style model is minimal.
+   - [/] Typing style model is minimal. ([plan](story-editor-typing-style-plan.md))
 
 ## Recommended Next Milestone
 
