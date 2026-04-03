@@ -55,13 +55,18 @@ export function justifyLine(line, text, innerWidth, hyphenAdvance, isLastLine) {
     }
   }
 
+  let currentGap = 0;
+  let x = 0;
   for (let gi = 0; gi < line.glyphs.length; gi++) {
     const g = line.glyphs[gi];
     const ch = text[g.cl];
+    
     if (ch === ' ') {
       flushFrag(g.cl);
-      flushWord();
-      spaceWidth += g.ax;
+      if (curWord.fragments.length > 0 || curWord.width > 0) {
+        flushWord();
+      }
+      currentGap += g.ax;
     } else if (ch === SHY) {
       curWord.width += g.ax;
     } else {
@@ -71,6 +76,13 @@ export function justifyLine(line, text, innerWidth, hyphenAdvance, isLastLine) {
       if (fragStart < 0) {
         fragStart = g.cl;
         fragStyle = g.style;
+        // This is the start of a word.
+        if (words.length > 0) {
+          words[words.length - 1].gapAfter = currentGap;
+        } else {
+          x = currentGap; // Push the first word's start X
+        }
+        currentGap = 0;
       }
       curWord.width += g.ax;
     }
@@ -83,22 +95,28 @@ export function justifyLine(line, text, innerWidth, hyphenAdvance, isLastLine) {
     curWord.width += hyphenAdvance;
   }
   flushWord();
-
-  // Compute gap width
-  const totalWordWidth = words.reduce((s, w) => s + w.width, 0);
-  const gaps = words.length - 1;
-  let gapWidth;
-  if (!isLastLine && gaps > 0) {
-    gapWidth = (innerWidth - totalWordWidth) / gaps;
-  } else {
-    gapWidth = gaps > 0 ? spaceWidth / gaps : 0;
+  // Handle space after the final word if hyphenated or just trailing
+  if (words.length > 0 && currentGap > 0) {
+    words[words.length - 1].gapAfter = currentGap;
   }
 
-  // Assign x positions
-  let x = 0;
-  for (const word of words) {
+  // Compute individual gap widths for left-aligned lines, or uniform for justified
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
     word.x = x;
-    x += word.width + gapWidth;
+    
+    if (i < words.length - 1) {
+      if (!isLastLine) {
+        // Justified: uniform gap
+        const totalWordWidth = words.reduce((s, w) => s + w.width, 0);
+        const gaps = words.length - 1;
+        const gapWidth = (innerWidth - totalWordWidth) / gaps;
+        x += word.width + gapWidth;
+      } else {
+        // Left-aligned: use the actual space after this word
+        x += word.width + (word.gapAfter || 0);
+      }
+    }
   }
 
   return words;
