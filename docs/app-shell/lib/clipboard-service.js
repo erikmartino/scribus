@@ -111,7 +111,11 @@ export class ClipboardService {
         }
       }
     } catch (err) {
-      console.warn('System clipboard read failed, falling back to localStorage.', err);
+      if (err.name === 'NotAllowedError') {
+        console.info('[Clipboard] System access denied; relying exclusively on internal local storage pasteboard.');
+      } else {
+        console.warn('[Clipboard] Read failed, falling back to local storage:', err.message);
+      }
     }
 
     // 2. Fallback to Local Storage
