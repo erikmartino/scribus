@@ -193,11 +193,37 @@ The codebase already has a strong unit test foundation. The main gap is that som
 - `story-editor/lib/text-interaction.js` — now imports and uses `ClickTracker` instead of inline click counting
 - `spread-editor/app/box-interactions.js` — now imports and uses `DragState` instead of inline state object
 
+### Phase 2: Expand unit test coverage (2026-04-05)
+
+7. **`spread-editor/test/test-box-model.js`** — 36 tests for all 6 exported functions in `box-model.js`:
+   - `createBoxesFromDefaults` (5 tests): default IDs, explicit IDs, default/custom min dimensions, exact coordinate copy
+   - `replaceBox` (3 tests): matching ID replacement, missing ID no-op, immutability
+   - `clampBoxToBounds` (9 tests): within-bounds no-op, left/right/top/bottom clamping, min width/height enforcement, max width cap, non-zero bounds origin
+   - `clampBoxesToBounds` (1 test): array-level clamping
+   - `moveBox` (4 tests): delta application, bounds clamping, negative deltas, dimension preservation
+   - `resizeBox` (14 tests): all 8 compass handles (e/s/w/n/se/nw/ne/sw), min width/height enforcement on east/south/west/north shrink, bounds clamping, custom minWidth
+
+8. **`story-editor/test/test-story-ops.js`** — 15 new tests added:
+   - `getStoryFragment` (7 tests): collapsed range, single-paragraph, mixed-style runs, two paragraphs, three paragraphs, style preservation, reversed positions
+   - `insertStoryFragment` (8 tests): empty fragment, single-paragraph insert, style preservation, multi-paragraph split, three-paragraph insert, start/end insertion, round-trip with `getStoryFragment`
+
+9. **`story-editor/test/test-editor-state.js`** — 12 new tests added:
+   - `selectParagraphAt` (3 tests): selects entire paragraph, clamps out-of-bounds paraIndex, preserves lineIndex
+   - `clearSelection` (2 tests): removes active selection, no-op when no selection
+   - `getRichSelection` (3 tests): empty when no selection, returns fragment for range, works across paragraphs
+   - `insertStory` (4 tests): single-paragraph insert, multi-paragraph insert with paragraphStyles update, replaces selection first, returns false for empty fragment
+
 ### Verification
 
-- All 117 story-editor unit tests pass
+- All 144 story-editor unit tests pass (was 117, +27 new)
+- All 36 box-model unit tests pass (new)
 - All 12 click-tracker unit tests pass
 - All 9 drag-state unit tests pass
 - All 11 app-shell unit tests pass
 - All 26 Playwright tests pass
 - Pre-existing failures in `test-spread-editor-app.js` (3 tests) are unchanged; they are due to stale mocks unrelated to this work.
+
+### Remaining gaps
+
+- `text-interaction.js` and `box-interactions.js` still have DOM-coupled logic not covered by unit tests (pointer event handling, keyboard shortcut dispatch). The extractable state-machine parts (`ClickTracker`, `DragState`) are now covered.
+- `test-spread-editor-app.js` has 3 pre-existing test failures from stale mocks (missing `requestUpdate` and `getRibbonSections` changes). These are unrelated to this work but should be addressed separately.
