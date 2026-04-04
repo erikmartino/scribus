@@ -158,11 +158,7 @@ export class SpreadEditorApp {
         if (this.mode !== 'text' || !args?.fontFamily) return;
         this.submitAction('Change Font', () => {
           if (!this.editor.hasSelection()) {
-            // Apply to the entire current paragraph as requested
-            const p = this.editor.cursor.paraIndex;
-            const text = this.editor.story[p].map(r => r.text).join('');
-            this.editor.setSelection({ paraIndex: p, charOffset: 0 }, { paraIndex: p, charOffset: text.length });
-            this.editor.applyCharacterStyle({ fontFamily: args.fontFamily });
+            this.editor.applyCharacterStyleToCurrentParagraph({ fontFamily: args.fontFamily });
           } else {
             this.editor.applyCharacterStyle({ fontFamily: args.fontFamily });
           }
@@ -516,12 +512,14 @@ export class SpreadEditorApp {
       return [];
     } else {
       const typingStyle = this.editor.getTypingStyle();
+      const paraIndex = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
+      const paraStyle = this.editor.paragraphStyles[paraIndex] || {};
       return [
         TextTools.createTypographySection(this.shell, {
           fontFamily: typingStyle.fontFamily || 'EB Garamond'
         }),
         TextTools.createFormattingSection(this.shell, {
-          fontSize: this._fontSize || 20,
+          fontSize: paraStyle.fontSize || this._fontSize || 20,
           lineHeight: this._lineHeight || 138
         })
       ];

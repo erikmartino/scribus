@@ -634,6 +634,22 @@ export class EditorState {
   }
 
   /**
+   * Apply a character style to the entire current paragraph without
+   * disturbing the cursor position. Used when no text is selected and
+   * the style should affect the whole paragraph (e.g., font-family change).
+   * @param {Partial<import('./style.js').CharacterStyle>} stylePatch
+   */
+  applyCharacterStyleToCurrentParagraph(stylePatch) {
+    const p = this._cursor.paraIndex;
+    const text = this._story[p].map(r => r.text).join('');
+    const savedCursor = { ...this._cursor };
+    this.setSelection({ paraIndex: p, charOffset: 0 }, { paraIndex: p, charOffset: text.length });
+    this.applyCharacterStyle(stylePatch);
+    this.clearSelection();
+    this.moveCursor(savedCursor);
+  }
+
+  /**
    * @returns {import('./style.js').CharacterStyle}
    */
   getTypingStyle() {
