@@ -9,6 +9,7 @@ import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
 import { drawBoxOverlay } from './box-overlay.js';
 import { BoxInteractionController } from './box-interactions.js';
 import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
+import { TextTools } from '../../app-shell/lib/text-tools.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -72,7 +73,10 @@ export class SpreadEditorApp {
       this._lastBoxClickId = null;
 
       this.bindEvents();
-      this.initTypographyUI();
+      
+      // Register Text Commands
+      this._registerCommands(shell);
+
       await this.update();
       this.setMode('object');
       this.setStatus('Ready - spread editor active.', 'ok');
@@ -103,42 +107,90 @@ export class SpreadEditorApp {
     this.shell?.requestUpdate();
   }
 
-  initTypographyUI() {
-    const container = this.root.querySelector('#font-selector-container');
-    if (!container) return;
+  _registerCommands(shell) {
+    shell.commands.register({
+      id: 'text.bold',
+      label: 'Bold',
+      execute: () => {
+        if (this.mode !== 'text') return;
+        const style = this.editor.getTypingStyle();
+        this.submitAction('Toggle Bold', () => {
+          this.editor.applyCharacterStyle({ bold: !style.bold });
+        });
+      }
+    });
 
-    const selector = this.shell.ui.createFontSelector({
-      label: '',
-      value: 'EB Garamond',
-      layout: 'horizontal',
-      onChange: (font) => {
-        if (this.mode === 'text') {
-          this.editor.applyCharacterStyle({ fontFamily: font });
-          this.update();
-        }
+    shell.commands.register({
+      id: 'text.italic',
+      label: 'Italic',
+      execute: () => {
+        if (this.mode !== 'text') return;
+        const style = this.editor.getTypingStyle();
+        this.submitAction('Toggle Italic', () => {
+          this.editor.applyCharacterStyle({ italic: !style.italic });
+        });
+      }
+    });
+
+    shell.commands.register({
+      id: 'text.font-family',
+      label: 'Font Family',
+      execute: (args) => {
+        if (this.mode !== 'text' || !args?.fontFamily) return;
+        this.submitAction('Change Font', () => {
+          this.editor.applyCharacterStyle({ fontFamily: args.fontFamily });
+        });
+      }
+    });
+
+    shell.commands.register({
+      id: 'text.font-size',
+      label: 'Font Size',
+      execute: (args) => {
+        if (this.mode !== 'text' || !args?.fontSize) return;
+        this.submitAction('Change Font Size', () => {
+           // We don't have per-character font size in this demo's story model yet,
+           // so we update the app-level state which affects the whole render.
+           // In a real app, this would be character style.
+           this._fontSize = args.fontSize;
+        });
+      }
+    });
+
+    shell.commands.register({
+      id: 'text.line-height',
+      label: 'Line Height',
+      execute: (args) => {
+        if (this.mode !== 'text' || !args?.lineHeight) return;
+        this.submitAction('Change Line Height', () => {
+           this._lineHeight = args.lineHeight;
+        });
+      }
+    });
+  }
+
+  submitAction(label, fn) {
+    const prevState = {
+      editorState: this.editor.getState(),
+      fontSize: this._fontSize,
+      lineHeight: this._lineHeight
+    };
+
+    const action = {
+      label,
+      execute: () => {
+        fn();
+        this.update();
       },
-      id: 'font-family-selector'
-    });
-    container.appendChild(selector);
-
-    const boldBtn = this.root.querySelector('#toggle-bold');
-    const italicBtn = this.root.querySelector('#toggle-italic');
-
-    boldBtn?.addEventListener('click', () => {
-      if (this.mode === 'text') {
-        const style = this.editor.getTypingStyle();
-        this.editor.applyCharacterStyle({ bold: !style.bold });
+      undo: () => {
+        this.editor.setState(prevState.editorState);
+        this._fontSize = prevState.fontSize;
+        this._lineHeight = prevState.lineHeight;
         this.update();
       }
-    });
+    };
 
-    italicBtn?.addEventListener('click', () => {
-      if (this.mode === 'text') {
-        const style = this.editor.getTypingStyle();
-        this.editor.applyCharacterStyle({ italic: !style.italic });
-        this.update();
-      }
-    });
+    this.shell.history.submit(action);
   }
 
   setStatus(msg, cls = '') {
@@ -261,16 +313,6 @@ export class SpreadEditorApp {
     });
   }
 
-  _bindRibbonEvents() {
-    const update = () => this.update();
-    this.pageWidthInput?.addEventListener('change', update);
-    this.pageHeightInput?.addEventListener('change', update);
-    this.marginInput?.addEventListener('change', update);
-    this.gutterInput?.addEventListener('change', update);
-    this.colGapInput?.addEventListener('change', update);
-    this.fontSizeInput?.addEventListener('change', update);
-    this.lineHeightInput?.addEventListener('change', update);
-  }
 
   async _handleTextClick(e) {
     if (!this.cursor) return;
@@ -335,8 +377,8 @@ export class SpreadEditorApp {
     const margin = 44;
     const gutter = 140;
     const colGap = 18;
-    const fontSize = this.fontSizeInput ? Number(this.fontSizeInput.value) : 20;
-    const lineHeightPct = this.lineHeightInput ? Number(this.lineHeightInput.value) : 138;
+    const fontSize = this._fontSize || 20;
+    const lineHeightPct = this._lineHeight || 138;
 
     const spread = computeSpreadLayout({
       pageWidth,
@@ -416,28 +458,16 @@ export class SpreadEditorApp {
 
   getRibbonSections(selected) {
     if (this.mode === 'object') {
-      return []; // No geometry/status sections in object mode as requested
+      return [];
     } else {
+      const typingStyle = this.editor.getTypingStyle();
       return [
-        AppShell.createRibbonSection('Typography', (container) => {
-          const fontContainer = document.createElement('div');
-          fontContainer.id = 'font-selector-container';
-          container.appendChild(fontContainer);
-          
-          const boldBtn = this.shell.ui.createButton({ label: 'B', id: 'toggle-bold' });
-          const italicBtn = this.shell.ui.createButton({ label: 'I', id: 'toggle-italic' });
-          container.appendChild(boldBtn);
-          container.appendChild(italicBtn);
-          
-          // Re-init typography UI once added to DOM
-          setTimeout(() => this.initTypographyUI(), 0);
+        TextTools.createTypographySection(this.shell, {
+          fontFamily: typingStyle.fontFamily || 'EB Garamond'
         }),
-        AppShell.createRibbonSection('Formatting', (container) => {
-          this.fontSizeInput = this.shell.ui.createInput({ label: 'Size', type: 'range', min: 12, max: 40, value: 20, id: 'font-size' });
-          this.lineHeightInput = this.shell.ui.createInput({ label: 'Line %', type: 'range', min: 105, max: 190, value: 138, id: 'line-height' });
-          container.appendChild(this.fontSizeInput);
-          container.appendChild(this.lineHeightInput);
-          this._bindRibbonEvents();
+        TextTools.createFormattingSection(this.shell, {
+          fontSize: this._fontSize || 20,
+          lineHeight: this._lineHeight || 138
         })
       ];
     }

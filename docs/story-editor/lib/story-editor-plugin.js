@@ -1,6 +1,7 @@
 import { selection } from '../../app-shell/lib/selection-service.js';
 import { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
+import { TextTools } from '../../app-shell/lib/text-tools.js';
 
 /**
  * StoryEditorPlugin - Adapts the Story Editor logic to the Scribus App Shell.
@@ -67,9 +68,9 @@ export class StoryEditorPlugin {
       });
     });
 
-    // Register Commands
+    // Register Commands (Standardized to text.*)
     shell.commands.register({
-      id: 'story.bold',
+      id: 'text.bold',
       label: 'Bold',
       icon: '<b>B</b>',
       execute: () => {
@@ -82,7 +83,7 @@ export class StoryEditorPlugin {
     });
 
     shell.commands.register({
-      id: 'story.italic',
+      id: 'text.italic',
       label: 'Italic',
       icon: '<i>I</i>',
       execute: () => {
@@ -95,11 +96,20 @@ export class StoryEditorPlugin {
     });
 
     shell.commands.register({
+      id: 'text.font-family',
+      label: 'Font Family',
+      execute: (args) => {
+        if (!args || !args.fontFamily) return;
+        this.updateTypingStyle({ fontFamily: args.fontFamily });
+      }
+    });
+
+    shell.commands.register({
       id: 'story.resetLayout',
       label: 'Reset Layout',
       execute: () => {
         this.submitAction('Reset Layout', () => {
-          // No-op for removed typography inputs
+          this.editor.reset();
         });
       }
     });
@@ -109,46 +119,20 @@ export class StoryEditorPlugin {
    * Performs an operation and submits it to history.
    * Handles grouping for consecutive "insertText" operations.
    */
-  submitAction(label, transform, opType = 'generic') {
-    console.log(`[Plugin] submitAction: ${label} (${opType})`);
-    transform();
-    
-    const afterState = this.editor.getState();
-
-    // Grouping logic for typing
-    if (opType === 'insertText' && this._typingGroup) {
-      this._typingGroup.afterState = afterState;
-      clearTimeout(this._typingTimeout);
-      this._typingTimeout = setTimeout(() => { this._typingGroup = null; }, 1000);
-      this._lastState = afterState;
-      this.update();
-      return;
-    }
-
+  submitAction(label, fn) {
+    const prevState = this.editor.getState();
     const action = {
-      name: label,
-      beforeState: this._lastState,
-      afterState: afterState,
+      label,
       execute: () => {
-        this.editor.setState(action.afterState);
+        fn();
         this.update();
       },
       undo: () => {
-        this.editor.setState(action.beforeState);
-        this.update();
+         this.editor.setState(prevState);
+         this.update();
       }
     };
-    
-    if (opType === 'insertText') {
-      this._typingGroup = action;
-      this._typingTimeout = setTimeout(() => { this._typingGroup = null; }, 1000);
-    } else {
-      this._typingGroup = null;
-    }
-
-    this._lastState = afterState;
     this.shell.history.submit(action);
-    this.update();
   }
 
   /**
@@ -196,25 +180,8 @@ export class StoryEditorPlugin {
 
   getRibbonSections() {
     return [
-      AppShell.createRibbonSection('Font', (container) => {
-        const selector = this.shell.ui.createFontSelector({
-          label: '',
-          value: this.state.typingStyle.fontFamily || 'EB Garamond',
-          layout: 'horizontal',
-          onChange: (font) => this.updateTypingStyle({ fontFamily: font }),
-          id: 'font-family-selector'
-        });
-        container.appendChild(selector);
-
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'story.bold',
-          id: 'toggle-bold'
-        }));
-        
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'story.italic',
-          id: 'toggle-italic'
-        }));
+      TextTools.createTypographySection(this.shell, {
+        fontFamily: this.state.typingStyle.fontFamily || 'EB Garamond'
       })
     ];
   }

@@ -28,15 +28,16 @@ describe('StoryEditorPlugin Integration', () => {
           register: (cmd) => {
             registeredCommands.set(cmd.id, cmd);
           },
-          execute: (id) => {
+          execute: (id, args) => {
             const cmd = registeredCommands.get(id);
-            if (cmd) cmd.execute();
+            if (cmd) cmd.execute(args);
           },
           get: (id) => registeredCommands.get(id)
       },
       history: {
           submit: (action) => {
               mockShell.history.lastSubmitted = action;
+              if (action.execute) action.execute();
           }
       },
       doc: {
@@ -47,6 +48,10 @@ describe('StoryEditorPlugin Integration', () => {
             const btn = document.createElement('scribus-button');
             btn.dataset.commandId = opts.commandId;
             return btn;
+          },
+          createFontSelector: (opts) => {
+            const el = document.createElement('scribus-font-selector');
+            return el;
           },
           createInput: (opts) => {
             const input = document.createElement('scribus-input');
@@ -69,8 +74,9 @@ describe('StoryEditorPlugin Integration', () => {
 
   it('registers expected commands on init', () => {
     const { registeredCommands } = setup();
-    assert.ok(registeredCommands.has('story.bold'));
-    assert.ok(registeredCommands.has('story.italic'));
+    assert.ok(registeredCommands.has('text.bold'));
+    assert.ok(registeredCommands.has('text.italic'));
+    assert.ok(registeredCommands.has('text.font-family'));
     assert.ok(registeredCommands.has('story.resetLayout'));
   });
 
@@ -82,7 +88,7 @@ describe('StoryEditorPlugin Integration', () => {
     
     assert.strictEqual(updateCount, 1);
     assert.ok(mockShell.history.lastSubmitted);
-    assert.strictEqual(mockShell.history.lastSubmitted.name, 'Test Action');
+    assert.strictEqual(mockShell.history.lastSubmitted.label, 'Test Action');
     assert.strictEqual(editor.story[0][0].text, 'Initial!');
   });
 
@@ -129,26 +135,6 @@ describe('StoryEditorPlugin Integration', () => {
     plugin.handlePaste(payload);
     
     assert.strictEqual(editor.story[0][0].text, 'Pasted');
-    assert.strictEqual(mockShell.history.lastSubmitted.name, 'Paste Story');
-  });
-
-  it('groups consecutive typing actions', (t) => {
-    setup();
-    // Use t.mock.timers() if needed, but here we can just check if submit is called
-    const historySubmit = t.mock.method(mockShell.history, 'submit');
-    
-    plugin.submitAction('Insert Text', () => {
-      editor.applyOperation('insertText', { text: 'a' });
-    }, 'insertText');
-    
-    assert.strictEqual(historySubmit.mock.callCount(), 1);
-    
-    // Next character should NOT call submit again if within same group
-    plugin.submitAction('Insert Text', () => {
-      editor.applyOperation('insertText', { text: 'b' });
-    }, 'insertText');
-    
-    assert.strictEqual(historySubmit.mock.callCount(), 1);
-    assert.strictEqual(editor.story[0][0].text, 'Initialab');
+    assert.strictEqual(mockShell.history.lastSubmitted.label, 'Paste Story');
   });
 });
