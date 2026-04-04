@@ -1,3 +1,5 @@
+import { ClickTracker } from './click-tracker.js';
+
 /**
  * TextInteractionController - Handles Mouse, Keyboard, and Input events for the Story Editor.
  * Consolidates selection, navigation, and typing logic into a reusable class.
@@ -16,8 +18,7 @@ export class TextInteractionController {
     this._dragAnchor = null;
     this._dragMode = 'char';
     this._keydownHandled = false;
-    this._lastClickTime = 0;
-    this._clickCount = 0;
+    this._clickTracker = new ClickTracker();
 
     this._bindEvents();
   }
@@ -65,30 +66,23 @@ export class TextInteractionController {
     const pos = this.cursor.getPosition();
     if (!pos) return;
 
-    const now = Date.now();
-    if (now - this._lastClickTime < 350) {
-      this._clickCount++;
-    } else {
-      this._clickCount = 1;
-    }
-    this._lastClickTime = now;
+    this._clickTracker.registerClick(Date.now());
+    const { mode, action } = this._clickTracker.resolveAction(e);
 
-    if (e.shiftKey) {
+    if (action === 'extend') {
       this.editor.moveCursor(pos, true);
-    } else if (this._clickCount >= 3) {
+    } else if (action === 'paragraph') {
       this.editor.selectParagraphAt(pos);
       this._dragAnchor = { paraIndex: pos.paraIndex, charOffset: 0 };
-      this._dragMode = 'paragraph';
-    } else if (this._clickCount === 2) {
+    } else if (action === 'word') {
       this.editor.selectWordAt(pos);
       const base = this.editor.selection?.anchor || { paraIndex: pos.paraIndex, charOffset: pos.charOffset };
       this._dragAnchor = { paraIndex: base.paraIndex, charOffset: base.charOffset };
-      this._dragMode = 'word';
     } else {
       this.editor.moveCursor(pos, false);
       this._dragAnchor = { paraIndex: pos.paraIndex, charOffset: pos.charOffset };
-      this._dragMode = 'char';
     }
+    this._dragMode = mode;
 
     this._selecting = true;
     this._dragMoved = false;

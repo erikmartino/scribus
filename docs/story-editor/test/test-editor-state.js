@@ -196,6 +196,46 @@ describe('EditorState', () => {
     ]);
   });
 
+  it('applyCharacterStyleToCurrentParagraph styles whole paragraph without moving cursor', () => {
+    const editor = new EditorState([
+      [{ text: 'hello', style: N }, { text: ' world', style: N }],
+      [{ text: 'second', style: N }],
+    ]);
+    editor.setCursor({ paraIndex: 0, charOffset: 3, lineIndex: 0 });
+
+    editor.applyCharacterStyleToCurrentParagraph({ fontFamily: 'Inter' });
+
+    // Every run in paragraph 0 should have fontFamily: 'Inter'
+    for (const run of editor.story[0]) {
+      assert.equal(run.style.fontFamily, 'Inter');
+    }
+
+    // Paragraph 1 should be unaffected
+    assert.equal(editor.story[1][0].style.fontFamily, '');
+
+    // Cursor should remain where it was
+    assert.deepEqual(editor.cursor, { paraIndex: 0, charOffset: 3, lineIndex: 0 });
+
+    // Selection should be cleared
+    assert.equal(editor.hasSelection(), false);
+  });
+
+  it('applyCharacterStyleToCurrentParagraph preserves existing mixed styles', () => {
+    const B = { bold: true, italic: false, fontFamily: '' };
+    const editor = new EditorState([
+      [{ text: 'ab', style: N }, { text: 'CD', style: B }],
+    ]);
+    editor.setCursor({ paraIndex: 0, charOffset: 1, lineIndex: 0 });
+
+    editor.applyCharacterStyleToCurrentParagraph({ italic: true });
+
+    // Each run should now have italic: true, but bold unchanged
+    assert.deepEqual(editor.story[0].map(r => ({ text: r.text, b: r.style.bold, i: r.style.italic })), [
+      { text: 'ab', b: false, i: true },
+      { text: 'CD', b: true, i: true },
+    ]);
+  });
+
   it('getState/setState snapshots and restores full state', () => {
     const editor = new EditorState([[{ text: 'abc', style: N }]]);
     editor.setSelection({ paraIndex: 0, charOffset: 0 }, { paraIndex: 0, charOffset: 2 });
@@ -218,5 +258,60 @@ describe('EditorState', () => {
     assert.equal(editor.story[0][0].text, 'ab'); // Applied bold to [0,2), so 'abc' became 'ab' (bold) + 'c' (normal)
     assert.deepEqual(editor.cursor, { paraIndex: 0, charOffset: 1, lineIndex: 0 });
     assert.deepEqual(editor.getTypingStyle(), { bold: true, italic: true, fontFamily: '' });
+  });
+
+  it('paragraphStyles tracks per-paragraph fontSize for UI panel binding', () => {
+    const styles = [
+      { fontSize: 30, fontFamily: 'EB Garamond' },
+      { fontSize: 22, fontFamily: 'EB Garamond' },
+    ];
+    const editor = new EditorState([
+      [{ text: 'Lead paragraph', style: N }],
+      [{ text: 'Normal paragraph', style: N }],
+    ], styles);
+
+    // Cursor in first paragraph — UI panel should show 30
+    editor.setCursor({ paraIndex: 0, charOffset: 0, lineIndex: 0 });
+    assert.equal(editor.paragraphStyles[editor.cursor.paraIndex].fontSize, 30);
+
+    // Move cursor to second paragraph — UI panel should show 22
+    editor.setCursor({ paraIndex: 1, charOffset: 0, lineIndex: 1 });
+    assert.equal(editor.paragraphStyles[editor.cursor.paraIndex].fontSize, 22);
+  });
+
+  it('paragraphStyles grows when inserting paragraph breaks', () => {
+    const styles = [
+      { fontSize: 30, fontFamily: 'EB Garamond' },
+    ];
+    const editor = new EditorState([
+      [{ text: 'abc', style: N }],
+    ], styles);
+
+    editor.setCursor({ paraIndex: 0, charOffset: 1, lineIndex: 0 });
+    editor.applyOperation('insertParagraphBreak');
+
+    // Should now have two paragraphs and two styles
+    assert.equal(editor.story.length, 2);
+    assert.equal(editor.paragraphStyles.length, 2);
+    // New paragraph inherits the base style's fontSize
+    assert.equal(editor.paragraphStyles[1].fontSize, 30);
+  });
+
+  it('paragraphStyles shrinks when merging paragraphs via delete', () => {
+    const styles = [
+      { fontSize: 30, fontFamily: 'EB Garamond' },
+      { fontSize: 22, fontFamily: 'EB Garamond' },
+    ];
+    const editor = new EditorState([
+      [{ text: 'abc', style: N }],
+      [{ text: 'def', style: N }],
+    ], styles);
+
+    // Delete backward at start of paragraph 1 merges with paragraph 0
+    editor.setCursor({ paraIndex: 1, charOffset: 0, lineIndex: 1 });
+    editor.applyOperation('deleteBackward');
+
+    assert.equal(editor.story.length, 1);
+    assert.equal(editor.paragraphStyles.length, 1);
   });
 });

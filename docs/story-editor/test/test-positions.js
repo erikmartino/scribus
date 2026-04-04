@@ -128,4 +128,43 @@ describe('buildPositions', () => {
       { charPos: 2, x: 28 },
     ]);
   });
+
+  it('emits a position after trailing space so cursor can advance past it', () => {
+    // Simulates typing "A " — the space at the end must produce a position
+    // beyond the space advance so the cursor visually moves right.
+    const entry = {
+      words: [
+        { fragments: [{ text: 'A', style: STYLE }], width: 10, x: 0 },
+      ],
+      glyphs: [
+        { cl: 0, ax: 10, style: STYLE }, // 'A'
+        { cl: 1, ax: 5, style: STYLE },  // ' ' (trailing space)
+      ],
+      text: 'A ',
+      hyphToOrig: [0, 1],
+      origLen: 2,
+      isLastInPara: true,
+      hyphenated: false,
+      hyphenAdvance: 0,
+      startChar: 0,
+      endChar: 2,
+      paraIndex: 0,
+    };
+
+    const positions = buildPositions(entry, 16);
+
+    // Position 0: start of 'A' at baseX
+    assert.equal(positions[0].charPos, 0);
+    assert.equal(positions[0].x, 16);
+
+    // Position 1: start of space, at baseX + advance of 'A'
+    const spacePos = positions.find(p => p.charPos === 1);
+    assert.ok(spacePos, 'should have a position for the space character');
+    assert.equal(spacePos.x, 26); // 16 + 10
+
+    // Position 2: end (after the space), must be > space position
+    const endPos = positions.find(p => p.charPos === 2);
+    assert.ok(endPos, 'should have an end-of-paragraph position');
+    assert.ok(endPos.x > spacePos.x, 'end position must be past the trailing space');
+  });
 });
