@@ -4,6 +4,8 @@ import {
   TextCursor,
   EditorState,
   TextInteractionController,
+  extractParagraphStyles,
+  buildParagraphLayoutStyles,
 } from '../lib/story-editor-core.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
@@ -53,7 +55,9 @@ export class SpreadEditorApp {
         fontFamily: 'EB Garamond',
         reserveBottom: false,
       });
-      this.editor = new EditorState(extractParagraphs(this.sampleEl));
+      const paragraphs = extractParagraphs(this.sampleEl);
+      const paragraphStyles = extractParagraphStyles(this.sampleEl, this._fontSize);
+      this.editor = new EditorState(paragraphs, paragraphStyles);
       this._interaction = new BoxInteractionController({
         getSvg: () => this._svg,
         getBounds: () => this.currentSpread?.pasteboardRect,
@@ -167,10 +171,8 @@ export class SpreadEditorApp {
       execute: (args) => {
         if (this.mode !== 'text' || !args?.fontSize) return;
         this.submitAction('Change Font Size', () => {
-           // We don't have per-character font size in this demo's story model yet,
-           // so we update the app-level state which affects the whole render.
-           // In a real app, this would be character style.
-           this._fontSize = args.fontSize;
+           const currentParaIndex = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
+           this.editor.paragraphStyles[currentParaIndex].fontSize = args.fontSize;
         });
       }
     });
@@ -366,12 +368,14 @@ export class SpreadEditorApp {
     let lineMap = this._lineMap;
 
     if (isFull || !svg) {
+      const paragraphLayoutStyles = buildParagraphLayoutStyles(this._fontSize, this.editor.paragraphStyles);
       const result = await this.engine.renderToContainer(
         this.container,
         this.editor.story,
         this.boxes,
-        fontSize,
-        lineHeightPct,
+        this._fontSize,
+        this._lineHeight,
+        paragraphLayoutStyles,
       );
       svg = result.svg;
       lineMap = result.lineMap;
