@@ -21,6 +21,16 @@
   padding: 0;
 }
 
+*:not(input):not(textarea) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+svg text {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 body, html {
   width: 100%;
   height: 100%;
