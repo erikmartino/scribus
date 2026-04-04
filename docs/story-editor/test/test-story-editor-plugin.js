@@ -1,4 +1,4 @@
-import './dom-mock.js';
+import '../../app-shell/test/dom-mock.js';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { StoryEditorPlugin } from '../lib/story-editor-plugin.js';

@@ -32,31 +32,58 @@ function handlePosition(box, handle) {
 }
 
 export function drawBoxOverlay(svg, { boxes, selectedBoxId }) {
-  const layer = document.createElementNS(SVG_NS, 'g');
-  layer.setAttribute('data-layer', 'box-overlay');
+  let layer = svg.querySelector('[data-layer="box-overlay"]');
+  if (!layer) {
+    layer = document.createElementNS(SVG_NS, 'g');
+    layer.setAttribute('data-layer', 'box-overlay');
+    svg.appendChild(layer);
+  }
 
+  // 1. Maintain box rectangles
+  let boxesG = layer.querySelector('[data-sublayer="boxes"]');
+  if (!boxesG) {
+    boxesG = document.createElementNS(SVG_NS, 'g');
+    boxesG.setAttribute('data-sublayer', 'boxes');
+    layer.appendChild(boxesG);
+  }
+
+  // Update or create box rects
   for (const box of boxes) {
-    const frame = document.createElementNS(SVG_NS, 'rect');
+    let frame = boxesG.querySelector(`[data-box-id="${box.id}"]`);
+    if (!frame) {
+      frame = document.createElementNS(SVG_NS, 'rect');
+      frame.classList.add('box-rect');
+      frame.dataset.boxId = box.id;
+      frame.dataset.handle = 'body';
+      frame.setAttribute('fill', 'rgba(255,255,255,0.001)');
+      frame.setAttribute('vector-effect', 'non-scaling-stroke');
+      boxesG.appendChild(frame);
+    }
     frame.setAttribute('x', String(box.x));
     frame.setAttribute('y', String(box.y));
     frame.setAttribute('width', String(box.width));
     frame.setAttribute('height', String(box.height));
-    frame.setAttribute('fill', 'rgba(255,255,255,0.001)');
     frame.setAttribute('stroke', box.id === selectedBoxId ? '#2f6ea4' : '#7b7568');
     frame.setAttribute('stroke-width', box.id === selectedBoxId ? '1.8' : '1.1');
     frame.setAttribute('stroke-dasharray', box.id === selectedBoxId ? '5 3' : '4 4');
-    frame.setAttribute('vector-effect', 'non-scaling-stroke');
-    frame.style.cursor = 'move';
-    frame.dataset.boxId = box.id;
-    frame.dataset.handle = 'body';
-    layer.appendChild(frame);
   }
 
+  // Remove any frames for boxes that no longer exist
+  const currentIds = new Set(boxes.map(b => b.id));
+  boxesG.querySelectorAll('.box-rect').forEach(frame => {
+    if (!currentIds.has(frame.dataset.boxId)) frame.remove();
+  });
+
+  // 2. Maintain handles (can be destructive as they are only for selection)
+  let handlesG = layer.querySelector('[data-sublayer="handles"]');
+  if (handlesG) handlesG.remove();
+
   const selected = boxes.find((box) => box.id === selectedBoxId);
-  if (!selected) {
-    svg.appendChild(layer);
-    return;
-  }
+  if (!selected) return;
+
+  handlesG = document.createElementNS(SVG_NS, 'g');
+  handlesG.setAttribute('data-sublayer', 'handles');
+  layer.appendChild(handlesG);
 
   for (const handle of HANDLES) {
     const pos = handlePosition(selected, handle);
@@ -74,8 +101,6 @@ export function drawBoxOverlay(svg, { boxes, selectedBoxId }) {
     grip.style.cursor = HANDLE_CURSOR[handle];
     grip.dataset.boxId = selected.id;
     grip.dataset.handle = handle;
-    layer.appendChild(grip);
+    handlesG.appendChild(grip);
   }
-
-  svg.appendChild(layer);
 }

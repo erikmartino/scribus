@@ -71,11 +71,11 @@ function decorateSpread(svg, spread) {
 
 async function main() {
   const engine = await LayoutEngine.create({
-    hbWasmUrl: 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hb.wasm',
-    hbJsUrl: 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hbjs.js',
-    hyphenUrl: 'https://cdn.jsdelivr.net/npm/hyphen@1.10.4/en/+esm',
-    fontUrl: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf',
-    fontItalicUrl: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf',
+    hbWasmUrl: '/vendor/harfbuzzjs/hb.wasm',
+    hbJsUrl: '/vendor/harfbuzzjs/hbjs.js',
+    hyphenUrl: '/vendor/hyphen/en.js',
+    fontUrl: '/vendor/fonts/EBGaramond.ttf',
+    fontItalicUrl: '/vendor/fonts/EBGaramond-Italic.ttf',
     fontFamily: 'EB Garamond',
     reserveBottom: false,
   });

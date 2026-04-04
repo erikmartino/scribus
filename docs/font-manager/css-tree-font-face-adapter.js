@@ -6,7 +6,7 @@
  * @returns {Promise<any>}
  */
 export async function loadCssTreeFromCdn() {
-  const mod = await import('https://cdn.jsdelivr.net/npm/css-tree@2.3.1/+esm');
+  const mod = await import('/vendor/css-tree/index.js');
   return mod.default || mod;
 }
 

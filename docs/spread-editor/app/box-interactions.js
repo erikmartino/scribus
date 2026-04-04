@@ -18,8 +18,6 @@ export class BoxInteractionController {
     const box = this._getBoxes().find((b) => b.id === boxId);
     if (!box) return false;
 
-    event.preventDefault();
-
     const start = this._toSvgPoint(event);
     if (!start) return false;
 

@@ -25,13 +25,34 @@
 
     #svg-container {
       background: var(--pasteboard);
-      cursor: crosshair;
+      cursor: default;
       user-select: none;
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 100%;
       outline: none;
+    }
+
+    /* Object Selection Mode Cursor Styles */
+    [data-mode="object"] #svg-container {
+      cursor: default;
+    }
+    [data-mode="object"] #svg-container .box-rect {
+      cursor: move;
+    }
+
+    /* Text Edit Mode Cursor Styles */
+    [data-mode="text"] #svg-container {
+      cursor: text;
+    }
+
+    /* Mode-based Ribbon Visibility */
+    [data-mode="object"] [data-only-mode="text"] {
+      display: none !important;
+    }
+    [data-mode="text"] [data-only-mode="object"] {
+      display: none !important;
     }
 
     #svg-container svg {
@@ -56,24 +77,17 @@
 </head>
 
 <body>
-  <scribus-app-shell>
+  <scribus-app-shell data-mode="object">
     <div slot="ribbon" class="ribbon-controls">
-      <scribus-ribbon-section label="Spread Layout">
-        <div id="status" class="ok" style="font-size: 0.75rem; padding: 4px 8px; margin: 0; border: none; background: rgba(0,255,100,0.1); color: var(--accent-secondary); border-radius: 4px;">Ready</div>
+
+      <!-- Text Edit Mode Sections -->
+      <scribus-ribbon-section label="Typography" data-only-mode="text">
+        <div id="font-selector-container"></div>
+        <scribus-button id="toggle-bold" label="B" style="font-weight: bold;"></scribus-button>
+        <scribus-button id="toggle-italic" label="I" style="font-style: italic;"></scribus-button>
       </scribus-ribbon-section>
 
-      <scribus-ribbon-section label="Geometry">
-        <scribus-input type="range" id="page-width" label="Width" min="300" max="680" value="420" style="width: 80px;"></scribus-input>
-        <scribus-input type="range" id="page-height" label="Height" min="380" max="840" value="560" style="width: 80px;"></scribus-input>
-        <scribus-input type="range" id="margin" label="Margin" min="20" max="90" value="44" style="width: 60px;"></scribus-input>
-      </scribus-ribbon-section>
-
-      <scribus-ribbon-section label="Spread">
-        <scribus-input type="range" id="gutter" label="Pasteboard" min="40" max="320" value="140" style="width: 80px;"></scribus-input>
-        <scribus-input type="range" id="col-gap" label="Col Gap" min="8" max="44" value="18" style="width: 60px;"></scribus-input>
-      </scribus-ribbon-section>
-
-      <scribus-ribbon-section label="Typography">
+      <scribus-ribbon-section label="Formatting" data-only-mode="text">
         <scribus-input type="range" id="font-size" label="Size" min="12" max="40" value="20" style="width: 70px;"></scribus-input>
         <scribus-input type="range" id="line-height" label="Line %" min="105" max="190" value="138" style="width: 70px;"></scribus-input>
       </scribus-ribbon-section>
@@ -103,12 +117,14 @@
     </div>
 
     <div slot="panels" style="padding: 1.5rem;">
-      <h3 style="margin-bottom: 1rem; color: var(--accent);">Properties</h3>
-      <div class="info-card">
-        <p>This spread demo reuses `story-editor/lib` modules and coordinates layout across facing pages.</p>
-      </div>
-      <div class="info-card">
-        <p>Currently affecting <strong>2</strong> Pages.</p>
+      <h3 id="panel-title" style="margin-bottom: 1rem; color: var(--accent);">Properties</h3>
+      <div id="properties-view">
+        <div class="info-card">
+          <p>This spread demo reuses `story-editor/lib` modules and coordinates layout across facing pages.</p>
+        </div>
+        <div class="info-card">
+          <p>Currently affecting <strong>2</strong> Pages.</p>
+        </div>
       </div>
     </div>
   </scribus-app-shell>
@@ -119,7 +135,5 @@
     import './app/main.js';
   </script>
 </body>
-
-</html>
 
 </html>

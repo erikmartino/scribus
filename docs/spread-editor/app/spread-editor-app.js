@@ -8,24 +8,13 @@ import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
 import { drawBoxOverlay } from './box-overlay.js';
 import { BoxInteractionController } from './box-interactions.js';
+import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export class SpreadEditorApp {
   constructor(root) {
     this.root = root;
-    this.statusEl = root.querySelector('#status');
-    this.container = root.querySelector('#svg-container');
-    this.sampleEl = root.querySelector('#sample-text');
-
-    this.pageWidthInput = root.querySelector('#page-width');
-    this.pageHeightInput = root.querySelector('#page-height');
-    this.marginInput = root.querySelector('#margin');
-    this.gutterInput = root.querySelector('#gutter');
-    this.colGapInput = root.querySelector('#col-gap');
-    this.fontSizeInput = root.querySelector('#font-size');
-    this.lineHeightInput = root.querySelector('#line-height');
-
     this.engine = null;
     this.editor = null;
     this.cursor = null;
@@ -35,17 +24,25 @@ export class SpreadEditorApp {
     this.currentSpread = null;
     this._svg = null;
     this._interaction = null;
+    this.mode = 'object';
+    this.shell = shell;
+    this._ribbonSections = null; // Cache sections
   }
 
-  async init() {
+  async init(shell) {
+    if (shell) this.shell = shell;
+
+    this.container = this.root.querySelector('#svg-container');
+    this.sampleEl = this.root.querySelector('#sample-text');
+
     this.setStatus('Loading HarfBuzz, fonts, and hyphenation...');
     try {
       this.engine = await LayoutEngine.create({
-        hbWasmUrl: 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hb.wasm',
-        hbJsUrl: 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hbjs.js',
-        hyphenUrl: 'https://cdn.jsdelivr.net/npm/hyphen@1.10.4/en/+esm',
-        fontUrl: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf',
-        fontItalicUrl: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf',
+        hbWasmUrl: '/vendor/harfbuzzjs/hb.wasm',
+        hbJsUrl: '/vendor/harfbuzzjs/hbjs.js',
+        hyphenUrl: '/vendor/hyphen/en.js',
+        fontUrl: '/vendor/fonts/EBGaramond.ttf',
+        fontItalicUrl: '/vendor/fonts/EBGaramond-Italic.ttf',
         fontFamily: 'EB Garamond',
         reserveBottom: false,
       });
@@ -61,58 +58,147 @@ export class SpreadEditorApp {
         onSelectBox: (boxId) => {
           this.selectedBoxId = boxId;
         },
-        onBodyClick: (event) => {
-          this._handleTextClick(event);
+        onBodyClick: (event, boxId) => {
+          if (this.mode === 'text') {
+            this._handleTextClick(event);
+          } else if (this.selectedBoxId !== boxId) {
+            this.selectedBoxId = boxId;
+            this.update({ full: false });
+          }
         },
       });
+
+      this._lastBoxClickTime = 0;
+      this._lastBoxClickId = null;
+
       this.bindEvents();
+      this.initTypographyUI();
       await this.update();
+      this.setMode('object');
       this.setStatus('Ready - spread editor active.', 'ok');
     } catch (err) {
-      this.setStatus(`Error: ${err.message}`, 'error');
-      throw err;
+      this.setStatus('Error loading layout engine: ' + err.message, 'error');
+      console.error(err);
+      return;
     }
   }
 
+  setMode(mode) {
+    this.mode = mode;
+    const shellEl = this.root.querySelector('scribus-app-shell');
+    if (shellEl) {
+      shellEl.setAttribute('data-mode', mode);
+    }
+    
+    if (mode === 'text' && this.container) {
+      this.container.focus();
+    }
+    
+    // Update cursor visibility
+    if (this.cursor) {
+      this.cursor.setVisible(mode === 'text' && !this.editor.hasSelection());
+    }
+    
+    this.update({ full: false });
+    this.shell?.requestUpdate();
+  }
+
+  initTypographyUI() {
+    const container = this.root.querySelector('#font-selector-container');
+    if (!container) return;
+
+    const selector = this.shell.ui.createFontSelector({
+      label: '',
+      value: 'EB Garamond',
+      layout: 'horizontal',
+      onChange: (font) => {
+        if (this.mode === 'text') {
+          this.editor.applyCharacterStyle({ fontFamily: font });
+          this.update();
+        }
+      },
+      id: 'font-family-selector'
+    });
+    container.appendChild(selector);
+
+    const boldBtn = this.root.querySelector('#toggle-bold');
+    const italicBtn = this.root.querySelector('#toggle-italic');
+
+    boldBtn?.addEventListener('click', () => {
+      if (this.mode === 'text') {
+        const style = this.editor.getTypingStyle();
+        this.editor.applyCharacterStyle({ bold: !style.bold });
+        this.update();
+      }
+    });
+
+    italicBtn?.addEventListener('click', () => {
+      if (this.mode === 'text') {
+        const style = this.editor.getTypingStyle();
+        this.editor.applyCharacterStyle({ italic: !style.italic });
+        this.update();
+      }
+    });
+  }
+
   setStatus(msg, cls = '') {
-    this.statusEl.textContent = msg;
-    this.statusEl.className = cls;
+    if (this.statusEl) {
+      this.statusEl.textContent = msg;
+      this.statusEl.className = cls;
+    }
   }
 
   bindEvents() {
-    const update = () => this.update();
-    this.pageWidthInput.addEventListener('change', update);
-    this.pageHeightInput.addEventListener('change', update);
-    this.marginInput.addEventListener('change', update);
-    this.gutterInput.addEventListener('change', update);
-    this.colGapInput.addEventListener('change', update);
-    this.fontSizeInput.addEventListener('change', update);
-    this.lineHeightInput.addEventListener('change', update);
-
     this.container.addEventListener('pointerdown', async (e) => {
       if (!this._svg) return;
 
       const target = e.target;
       const boxId = target?.dataset?.boxId;
       const handle = target?.dataset?.handle;
-      if (boxId && handle && this._interaction.pointerDown(e, boxId, handle)) {
+
+      // If not clicking a box or handle, it's a background click
+      if (!boxId && !handle) {
+        if (this.mode === 'text' || this.selectedBoxId) {
+          this.selectedBoxId = null;
+          this.setMode('object');
+        }
         return;
       }
 
-      if (target?.tagName === 'svg') {
-        this.selectedBoxId = null;
-        await this.update();
+      if (boxId) {
+        const now = Date.now();
+        const doubleClick = (boxId === this._lastBoxClickId && (now - this._lastBoxClickTime) < 350);
+        
+        this._lastBoxClickTime = now;
+        this._lastBoxClickId = boxId;
+
+        if (doubleClick) {
+          this.selectedBoxId = boxId;
+          this.setMode('text');
+          return;
+        }
+
+        if (handle && this._interaction.pointerDown(e, boxId, handle)) {
+          return;
+        }
       }
     });
 
     this.container.addEventListener('click', async (e) => {
       const target = e.target;
-      if (target?.dataset?.boxId) return;
-      await this._handleTextClick(e);
+      const boxId = target?.dataset?.boxId;
+      
+      if (this.mode === 'text') {
+        await this._handleTextClick(e);
+      } else if (boxId) {
+        // Just selecting a box in object mode
+        this.selectedBoxId = boxId;
+        await this.update();
+      }
     });
 
     this.container.addEventListener('keydown', async (e) => {
-      if (!this.cursor) return;
+      if (this.mode !== 'text' || !this.cursor) return;
 
       const mod = e.metaKey || e.ctrlKey;
       if (mod && (e.key === 'a' || e.key === 'A')) {
@@ -139,13 +225,14 @@ export class SpreadEditorApp {
     });
 
     this.container.addEventListener('beforeinput', async (e) => {
-      if (!this.cursor) return;
+      if (this.mode !== 'text' || !this.cursor) return;
       if (!this.editor.handleBeforeInput(e)) return;
       e.preventDefault();
       await this.update();
     });
 
     this.container.addEventListener('copy', (e) => {
+      if (this.mode !== 'text') return;
       const text = this.editor.getSelectedText();
       if (!text || !e.clipboardData) return;
       e.preventDefault();
@@ -153,6 +240,7 @@ export class SpreadEditorApp {
     });
 
     this.container.addEventListener('cut', async (e) => {
+      if (this.mode !== 'text') return;
       const text = this.editor.getSelectedText();
       if (!text || !e.clipboardData) return;
       e.preventDefault();
@@ -161,21 +249,27 @@ export class SpreadEditorApp {
     });
 
     this.container.addEventListener('paste', async (e) => {
-      if (!e.clipboardData) return;
-      const text = e.clipboardData.getData('text/plain');
-      if (typeof text !== 'string') return;
+      if (this.mode !== 'text') return;
+      const text = e.clipboardData?.getData('text/plain');
+      if (!text) return;
       e.preventDefault();
-      if (this.editor.hasSelection()) {
-        this.editor.replaceSelectionWithText(text);
-      } else {
-        this.editor.applyOperation('insertText', { text });
-      }
-      await this.update();
+      if (this.editor.replaceSelectionWithText(text)) await this.update();
     });
 
     window.addEventListener('beforeunload', () => {
       if (this.cursor) this.cursor.destroy();
     });
+  }
+
+  _bindRibbonEvents() {
+    const update = () => this.update();
+    this.pageWidthInput?.addEventListener('change', update);
+    this.pageHeightInput?.addEventListener('change', update);
+    this.marginInput?.addEventListener('change', update);
+    this.gutterInput?.addEventListener('change', update);
+    this.colGapInput?.addEventListener('change', update);
+    this.fontSizeInput?.addEventListener('change', update);
+    this.lineHeightInput?.addEventListener('change', update);
   }
 
   async _handleTextClick(e) {
@@ -232,15 +326,17 @@ export class SpreadEditorApp {
     svg.insertBefore(spine, svg.firstChild.nextSibling);
   }
 
-  async update() {
+  async update(options = { full: true }) {
+    const isFull = options.full !== false;
 
-    const pageWidth = Number(this.pageWidthInput.value);
-    const pageHeight = Number(this.pageHeightInput.value);
-    const margin = Number(this.marginInput.value);
-    const gutter = Number(this.gutterInput.value);
-    const colGap = Number(this.colGapInput.value);
-    const fontSize = Number(this.fontSizeInput.value);
-    const lineHeightPct = Number(this.lineHeightInput.value);
+    // Use fallbacks if inputs aren't rendered yet
+    const pageWidth = this.pageWidthInput ? Number(this.pageWidthInput.value) : 420;
+    const pageHeight = this.pageHeightInput ? Number(this.pageHeightInput.value) : 560;
+    const margin = this.marginInput ? Number(this.marginInput.value) : 44;
+    const gutter = this.gutterInput ? Number(this.gutterInput.value) : 140;
+    const colGap = this.colGapInput ? Number(this.colGapInput.value) : 18;
+    const fontSize = this.fontSizeInput ? Number(this.fontSizeInput.value) : 20;
+    const lineHeightPct = this.lineHeightInput ? Number(this.lineHeightInput.value) : 138;
 
     const spread = computeSpreadLayout({
       pageWidth,
@@ -270,14 +366,22 @@ export class SpreadEditorApp {
     }
     this.boxes = clampBoxesToBounds(this.boxes, spread.pasteboardRect);
 
-    const { svg, lineMap } = await this.engine.renderToContainer(
-      this.container,
-      this.editor.story,
-      this.boxes,
-      fontSize,
-      lineHeightPct,
-    );
-    this._svg = svg;
+    let svg = this._svg;
+    let lineMap = this._lineMap;
+
+    if (isFull || !svg) {
+      const result = await this.engine.renderToContainer(
+        this.container,
+        this.editor.story,
+        this.boxes,
+        fontSize,
+        lineHeightPct,
+      );
+      svg = result.svg;
+      lineMap = result.lineMap;
+      this._svg = svg;
+      this._lineMap = lineMap;
+    }
 
     this.decorateSpread(svg, spread.pageRects, spread);
     drawBoxOverlay(svg, {
@@ -295,11 +399,71 @@ export class SpreadEditorApp {
       this.cursor.setStory(this.editor.story);
       this.cursor.updateLayout(svg, lineMap, fontSize);
       this.cursor.moveTo(this.editor.cursor);
-      this.cursor.setVisible(!this.editor.hasSelection());
+      this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
     } else {
       this.cursor = new TextCursor(svg, this.editor.story, lineMap, fontSize);
       this.cursor.moveTo(this.editor.cursor);
-      this.cursor.setVisible(!this.editor.hasSelection());
+      this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
+    }
+
+    // Update style buttons
+    const typingStyle = this.editor.getTypingStyle();
+    const boldBtn = this.root.querySelector('#toggle-bold');
+    const italicBtn = this.root.querySelector('#toggle-italic');
+    boldBtn?.toggleAttribute('active', !!typingStyle.bold);
+    italicBtn?.toggleAttribute('active', !!typingStyle.italic);
+  }
+
+  getRibbonSections(selected) {
+    if (this.mode === 'object') {
+      return [
+        AppShell.createRibbonSection('Status', (container) => {
+          this.statusEl = document.createElement('div');
+          this.statusEl.id = 'status';
+          this.statusEl.className = 'ok';
+          this.statusEl.style.cssText = 'font-size: 0.75rem; padding: 4px 8px; margin: 0; border: none; background: rgba(0,255,100,0.1); color: var(--accent-secondary); border-radius: 4px;';
+          this.statusEl.textContent = 'Ready';
+          container.appendChild(this.statusEl);
+        }),
+        AppShell.createRibbonSection('Geometry', (container) => {
+          this.pageWidthInput = this.shell.ui.createInput({ label: 'Width', type: 'range', min: 300, max: 680, value: 420, id: 'page-width' });
+          this.pageHeightInput = this.shell.ui.createInput({ label: 'Height', type: 'range', min: 380, max: 840, value: 560, id: 'page-height' });
+          this.marginInput = this.shell.ui.createInput({ label: 'Margin', type: 'range', min: 20, max: 90, value: 44, id: 'margin' });
+          container.appendChild(this.pageWidthInput);
+          container.appendChild(this.pageHeightInput);
+          container.appendChild(this.marginInput);
+        }),
+        AppShell.createRibbonSection('Spread', (container) => {
+          this.gutterInput = this.shell.ui.createInput({ label: 'Pasteboard', type: 'range', min: 40, max: 320, value: 140, id: 'gutter' });
+          this.colGapInput = this.shell.ui.createInput({ label: 'Col Gap', type: 'range', min: 8, max: 44, value: 18, id: 'col-gap' });
+          container.appendChild(this.gutterInput);
+          container.appendChild(this.colGapInput);
+          this._bindRibbonEvents();
+        })
+      ];
+    } else {
+      return [
+        AppShell.createRibbonSection('Typography', (container) => {
+          const fontContainer = document.createElement('div');
+          fontContainer.id = 'font-selector-container';
+          container.appendChild(fontContainer);
+          
+          const boldBtn = this.shell.ui.createButton({ label: 'B', id: 'toggle-bold' });
+          const italicBtn = this.shell.ui.createButton({ label: 'I', id: 'toggle-italic' });
+          container.appendChild(boldBtn);
+          container.appendChild(italicBtn);
+          
+          // Re-init typography UI once added to DOM
+          setTimeout(() => this.initTypographyUI(), 0);
+        }),
+        AppShell.createRibbonSection('Formatting', (container) => {
+          this.fontSizeInput = this.shell.ui.createInput({ label: 'Size', type: 'range', min: 12, max: 40, value: 20, id: 'font-size' });
+          this.lineHeightInput = this.shell.ui.createInput({ label: 'Line %', type: 'range', min: 105, max: 190, value: 138, id: 'line-height' });
+          container.appendChild(this.fontSizeInput);
+          container.appendChild(this.lineHeightInput);
+          this._bindRibbonEvents();
+        })
+      ];
     }
   }
 }

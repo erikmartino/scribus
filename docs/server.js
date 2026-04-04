@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import http from 'node:http';
+import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
@@ -24,6 +25,16 @@ const MIME = {
   '.webp': 'image/webp',
   '.wasm': 'application/wasm',
   '.txt': 'text/plain; charset=utf-8',
+};
+
+const VENDOR_MAP = {
+  '/vendor/harfbuzzjs/hb.wasm': 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hb.wasm',
+  '/vendor/harfbuzzjs/hbjs.js': 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hbjs.js',
+  '/vendor/hyphen/en.js': 'https://cdn.jsdelivr.net/npm/hyphen@1.10.4/en/+esm',
+  '/vendor/fonts/EBGaramond.ttf': 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf',
+  '/vendor/fonts/EBGaramond-Italic.ttf': 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf',
+  '/vendor/wasm-vips/vips-es6.js': 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js',
+  '/vendor/css-tree/index.js': 'https://cdn.jsdelivr.net/npm/css-tree@2.3.1/+esm',
 };
 
 function setIsolationHeaders(res) {
@@ -71,6 +82,55 @@ function serveFile(filePath, res) {
     res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
     res.end(data);
   });
+}
+
+function handleVendorRequest(pathname, filePath, res) {
+  const cdnUrl = VENDOR_MAP[pathname];
+  if (!cdnUrl) {
+    sendError(res, 404, 'Not Found');
+    return;
+  }
+
+  // Ensure directory exists
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+
+  const fetchVendor = (url, depth = 0) => {
+    if (depth > 5) {
+      sendError(res, 508, 'Too Many Redirects');
+      return;
+    }
+
+    console.log(`[VENDOR] ${depth === 0 ? 'Fetching' : 'Redirect to'} ${url}`);
+    
+    https.get(url, (cdnRes) => {
+      if (cdnRes.statusCode === 301 || cdnRes.statusCode === 302) {
+        const redirectUrl = cdnRes.headers.location;
+        if (!redirectUrl) {
+          sendError(res, 502, 'Bad Gateway: Missing Location Header');
+          return;
+        }
+        fetchVendor(redirectUrl, depth + 1);
+        return;
+      }
+
+      if (cdnRes.statusCode !== 200) {
+        sendError(res, cdnRes.statusCode, `CDN Fetch Failed: ${cdnRes.statusCode}`);
+        return;
+      }
+
+      const chunks = [];
+      cdnRes.on('data', chunk => chunks.push(chunk));
+      cdnRes.on('end', () => {
+        const data = Buffer.concat(chunks);
+        fs.writeFileSync(filePath, data);
+        serveFile(filePath, res);
+      });
+    }).on('error', (err) => {
+      sendError(res, 500, `CDN Fetch Error: ${err.message}`);
+    });
+  };
+
+  fetchVendor(cdnUrl);
 }
 
 function serveDirectoryListing(dirPath, requestPath, res) {
@@ -136,6 +196,10 @@ const server = http.createServer((req, res) => {
 
     fs.stat(filePath, (statErr, stat) => {
       if (statErr) {
+        if (pathname.startsWith('/vendor/')) {
+          handleVendorRequest(pathname, filePath, res);
+          return;
+        }
         sendError(res, 404, 'Not Found');
         return;
       }
