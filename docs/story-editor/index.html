@@ -265,6 +265,7 @@
       defaultParagraphStyle,
       buildParagraphLayoutStyles,
     } from './lib/paragraph-style-render.js';
+    import { TextInteractionController } from './lib/text-interaction.js';
 
     function updateStatus(msg, isOk = true) {
       console.log(`[Status] ${msg}`);
@@ -302,78 +303,16 @@
       const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles, container);
       shell.registerPlugin(storyPlugin);
 
-      const hasBeforeInput = 'onbeforeinput' in document;
-      let prevParagraphTexts = editor.story.map((paragraph) => paragraph.map((run) => run.text).join(''));
-
       let cursor = null;
-      let selecting = false;
-      let dragMoved = false;
-      let dragAnchor = null;
-      let dragMode = 'char';
-
-      function xAtChar(line, charPos) {
-        const positions = line.positions;
-        if (!positions || positions.length === 0) return 0;
-
-        for (let i = 0; i < positions.length; i++) {
-          if (positions[i].charPos === charPos) return positions[i].x;
-        }
-
-        if (charPos <= positions[0].charPos) return positions[0].x;
-        for (let i = 0; i < positions.length - 1; i++) {
-          if (charPos >= positions[i].charPos && charPos <= positions[i + 1].charPos) {
-            return positions[i].x;
-          }
-        }
-        return positions[positions.length - 1].x;
-      }
-
-
-      function lineBoundaryForCursor(lineMap, cursorPos, side) {
-        const line = lineMap[cursorPos.lineIndex] || lineMap.find((l) => l.paraIndex === cursorPos.paraIndex);
-        if (!line || !line.positions || line.positions.length === 0) return null;
-        const startChar = line.positions[0].charPos;
-        const endChar = line.positions[line.positions.length - 1].charPos;
-        return {
-          paraIndex: line.paraIndex,
-          charOffset: side === 'start' ? startChar : endChar,
-          lineIndex: line.lineIndex,
-        };
-      }
-
-      async function deleteToLineBoundary(side) {
-        if (editor.hasSelection()) {
-          storyPlugin.submitAction('Delete Selection', () => {
-            editor.replaceSelectionWithText('');
-          });
-          if (cursor) cursor.moveTo(editor.cursor);
-          return true;
-        }
-
-        if (!cursor) return false;
-        const boundary = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, side);
-        if (!boundary) return false;
-
-        storyPlugin.submitAction('Delete to Boundary', () => {
-          const from = { paraIndex: editor.cursor.paraIndex, charOffset: editor.cursor.charOffset };
-          const to = { paraIndex: boundary.paraIndex, charOffset: boundary.charOffset };
-          editor.setSelection(from, to);
-          editor.replaceSelectionWithText('');
-        });
-        
-        cursor.moveTo(editor.cursor);
-        return true;
-      }
 
       async function update() {
         const boxWidthInput = document.getElementById('box-width');
         const lineHeightInput = document.getElementById('line-height');
-        const fontSizeInput = document.getElementById('font-size');
 
         const boxWidth = boxWidthInput ? +boxWidthInput.value : 1040;
         const lineHeightPct = lineHeightInput ? +lineHeightInput.value : 140;
 
-        // Properties Panel Sync (must wait for shell's requestAnimationFrame)
+        // Properties Panel Sync
         requestAnimationFrame(() => {
           const fontSizeInput = document.getElementById('font-size');
           const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
@@ -393,6 +332,7 @@
         const selectionStatusEl = document.getElementById('selection-status');
         if (selectionStatusEl) selectionStatusEl.textContent = editor.hasSelection() ? 'Active' : 'None';
 
+        // Update Ribbon active states (some might be handled by shell, but font buttons need this)
         const toggleBoldBtn = document.getElementById('toggle-bold');
         const toggleItalicBtn = document.getElementById('toggle-italic');
         if (toggleBoldBtn) toggleBoldBtn.toggleAttribute('active', !!typingStyle.bold);
@@ -431,200 +371,17 @@
           cursor.updateSelection(editor.getSelectionRange());
           cursor.moveTo(editor.cursor);
           cursor.setVisible(!editor.hasSelection());
+
+          // Initialize interaction controller once cursor exists
+          new TextInteractionController({
+            container,
+            editor,
+            cursor,
+            update: () => update(),
+            submitAction: (label, fn, opType) => storyPlugin.submitAction(label, fn, opType)
+          });
         }
       }
-
-      container.addEventListener('mousedown', async (e) => {
-        if (!cursor || e.button !== 0) return;
-        e.preventDefault();
-        container.focus();
-
-        cursor.handleClick(e);
-        const pos = cursor.getPosition();
-        if (!pos) return;
-
-        if (e.shiftKey) {
-          editor.moveCursor(pos, true);
-        } else if (e.detail >= 3) {
-          editor.selectParagraphAt(pos);
-          dragAnchor = { paraIndex: pos.paraIndex, charOffset: 0 };
-          dragMode = 'paragraph';
-        } else if (e.detail === 2) {
-          editor.selectWordAt(pos);
-          const base = editor.selection?.anchor || { paraIndex: pos.paraIndex, charOffset: pos.charOffset };
-          dragAnchor = { paraIndex: base.paraIndex, charOffset: base.charOffset };
-          dragMode = 'word';
-        } else {
-          editor.moveCursor(pos, false);
-          dragAnchor = { paraIndex: pos.paraIndex, charOffset: pos.charOffset };
-          dragMode = 'char';
-        }
-
-        selecting = true;
-        dragMoved = false;
-        await update();
-      });
-
-      document.addEventListener('mousemove', async (e) => {
-        if (!selecting || !cursor || !dragAnchor) return;
-
-        cursor.handleClick(e);
-        const pos = cursor.getPosition();
-        if (!pos) return;
-
-        if (dragMode === 'paragraph') {
-          const endLen = editor.story[pos.paraIndex].reduce((sum, run) => sum + run.text.length, 0);
-          const focus = pos.paraIndex >= dragAnchor.paraIndex
-            ? { paraIndex: pos.paraIndex, charOffset: endLen }
-            : { paraIndex: pos.paraIndex, charOffset: 0 };
-          editor.moveCursor({ paraIndex: focus.paraIndex, charOffset: focus.charOffset, lineIndex: pos.lineIndex }, false);
-          editor.setSelection(dragAnchor, focus);
-        } else if (dragMode === 'word') {
-          editor.selectWordAt(pos);
-          const sel = editor.selection;
-          if (sel) {
-            const focus = pos.charOffset < dragAnchor.charOffset ? sel.anchor : sel.focus;
-            editor.moveCursor({ paraIndex: focus.paraIndex, charOffset: focus.charOffset, lineIndex: pos.lineIndex }, false);
-            editor.setSelection(dragAnchor, focus);
-          }
-        } else {
-          editor.moveCursor(pos, false);
-          editor.setSelection(dragAnchor, { paraIndex: pos.paraIndex, charOffset: pos.charOffset });
-        }
-        dragMoved = true;
-        await update();
-      });
-
-      document.addEventListener('mouseup', () => {
-        selecting = false;
-        dragAnchor = null;
-      });
-
-      container.addEventListener('click', async (e) => {
-        if (dragMoved) {
-          dragMoved = false;
-          return;
-        }
-        if (e.shiftKey || !cursor) return;
-        cursor.handleClick(e);
-        const pos = cursor.getPosition();
-        if (!pos) return;
-        editor.moveCursor(pos, false);
-        await update();
-      });
-
-      container.addEventListener('keydown', async (e) => {
-        if (!cursor) return;
-        const mod = e.metaKey || e.ctrlKey;
-
-        if (mod && (e.key === 'b' || e.key === 'B')) {
-          e.preventDefault();
-          shell.commands.execute('text.bold');
-          return;
-        }
-        if (mod && (e.key === 'i' || e.key === 'I')) {
-          e.preventDefault();
-          shell.commands.execute('text.italic');
-          return;
-        }
-        if (mod && (e.key === 'i' || e.key === 'I')) {
-          e.preventDefault();
-          shell.commands.execute('story.italic');
-          return;
-        }
-
-        if (mod && (e.key === 'a' || e.key === 'A')) {
-          e.preventDefault();
-          editor.selectAll();
-          await update();
-          return;
-        }
-
-        if (e.metaKey && e.key === 'Backspace') {
-          e.preventDefault();
-          deleteToLineBoundary('start');
-          return;
-        }
-
-        if (e.key === 'Home' || e.key === 'End') {
-          e.preventDefault();
-          const side = e.key === 'Home' ? 'start' : 'end';
-          const target = lineBoundaryForCursor(cursor.getLineMap() || [], editor.cursor, side);
-          if (target) {
-            editor.moveCursor(target, e.shiftKey);
-            cursor.moveTo(editor.cursor);
-            await update();
-          }
-          return;
-        }
-
-        const wordMoveMod = e.altKey || (e.ctrlKey && !e.metaKey);
-        if (wordMoveMod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-          e.preventDefault();
-          editor.moveCursorByWord(e.key === 'ArrowLeft' ? 'left' : 'right', e.shiftKey);
-          if (cursor) cursor.moveTo(editor.cursor);
-          await update();
-          return;
-        }
-
-        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-          cursor.handleKeydown(e);
-          const pos = cursor.getPosition();
-          if (pos) editor.moveCursor(pos, e.shiftKey);
-          await update();
-          return;
-        }
-
-        // Handle character input, Backspace, Delete, Enter directly via keydown.
-        // The container is not contenteditable so beforeinput does not fire for
-        // regular keyboard input — keydown is the primary input path.
-        //
-        // Determine if this key is an editor action WITHOUT calling handleKeydown
-        // (which mutates state).  handleKeydown is called exactly once, inside the
-        // submitAction transform.
-        const isMod = (e.ctrlKey || e.metaKey);
-        const wordDel = (e.altKey || (e.ctrlKey && !e.metaKey));
-        const isEditorKey = !e.isComposing && (
-          e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter' ||
-          (wordDel && (e.key === 'Backspace' || e.key === 'Delete')) ||
-          (isMod && (e.key === 'a' || e.key === 'b' || e.key === 'i')) ||
-          (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1)
-        );
-
-        if (isEditorKey) {
-          e.preventDefault();
-          const opType = e.key === 'Backspace' || e.key === 'Delete' ? 'deleteContent' : 'insertText';
-          storyPlugin.submitAction('Keyboard ' + (e.key.length === 1 ? 'Type' : e.key), () => {
-            editor.handleKeydown(e);
-          }, opType);
-          if (cursor) cursor.moveTo(editor.cursor);
-        }
-      });
-
-      // beforeinput may fire from IME composition or browser-level input on
-      // some platforms.  Guard against double-handling when keydown already
-      // processed the same key by tracking a flag.
-      let _keydownHandled = false;
-      const origKeydown = container.onkeydown;
-      container.addEventListener('keydown', (e) => {
-        // Mark that keydown will handle this key (single characters, Backspace, etc.)
-        _keydownHandled = (!e.ctrlKey && !e.metaKey && !e.altKey &&
-          (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter'));
-        // Reset on next tick in case beforeinput never fires
-        if (_keydownHandled) setTimeout(() => { _keydownHandled = false; }, 0);
-      }, true); // capture phase — runs before the main keydown handler above
-
-      container.addEventListener('beforeinput', async (e) => {
-        if (!cursor) return;
-        if (_keydownHandled) { _keydownHandled = false; return; }
-        const label = e.inputType.replace(/([A-Z])/g, ' $1').trim();
-        storyPlugin.submitAction(label, () => {
-          editor.handleBeforeInput(e);
-        }, e.inputType);
-        e.preventDefault();
-      });
-
-      // Clipboard events are now handled by the StoryEditorPlugin (registered in shell)
 
       window.addEventListener('beforeunload', () => {
         if (cursor) cursor.destroy();

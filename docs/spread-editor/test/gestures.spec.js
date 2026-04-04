@@ -13,8 +13,13 @@ test.describe('Spread Editor Interaction Gestures', () => {
     const boxBounds = await box.boundingBox();
     if (!boxBounds) throw new Error('Box not found');
 
-    // Double click to enter text mode
-    await box.dblclick();
+    // 0. Deselect initially selected box (box-1 is selected by default)
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+
+    // Enter text mode
+    await box.click();
+    await box.click();
 
     const shell = page.locator('scribus-app-shell');
     await expect(shell).toHaveAttribute('data-mode', 'text');
@@ -26,7 +31,12 @@ test.describe('Spread Editor Interaction Gestures', () => {
 
   test('double clicking a word while in text mode should select it', async ({ page }) => {
     const box = page.locator('.box-rect').first();
-    await box.dblclick();
+    // 0. Deselect initially selected box
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+
+    await box.click();
+    await box.click();
     
     const boxBounds = await box.boundingBox();
     if (!boxBounds) throw new Error('Box not found');
@@ -42,7 +52,12 @@ test.describe('Spread Editor Interaction Gestures', () => {
 
   test('dragging text should create a selection', async ({ page }) => {
     const box = page.locator('.box-rect').first();
-    await box.dblclick();
+    // 0. Deselect initially selected box
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+
+    await box.click();
+    await box.click();
 
     const boxBounds = await box.boundingBox();
     if (!boxBounds) throw new Error('Box not found');
@@ -62,7 +77,12 @@ test.describe('Spread Editor Interaction Gestures', () => {
 
   test('changing font family without selection should apply to whole paragraph', async ({ page }) => {
     const box = page.locator('.box-rect').first();
-    await box.dblclick();
+    // 0. Deselect initially selected box
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+
+    await box.click();
+    await box.click();
 
     const boxBounds = await box.boundingBox();
     if (!boxBounds) throw new Error('Box not found');

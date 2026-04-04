@@ -4,10 +4,11 @@ test.describe('Spread Editor Selection Modes', () => {
     test.beforeEach(async ({ page }) => {
         // Pipe browser console logs to terminal
         page.on('console', msg => {
-            console.log(`BROWSER [${msg.type()}]: ${msg.text()}`);
+            const loc = msg.location();
+            console.log(`BROWSER [${msg.type()}] ${loc.url}:${loc.lineNumber}:${loc.columnNumber}: ${msg.text()}`);
         });
         page.on('pageerror', err => {
-            console.error(`BROWSER [error]: ${err.message}`);
+            console.error(`BROWSER [error stack]: ${err.stack}`);
         });
         
         await page.goto('/spread-editor/index.html');
@@ -29,6 +30,10 @@ test.describe('Spread Editor Selection Modes', () => {
         // Initial state: Object mode
         await expect(shell).toHaveAttribute('data-mode', 'object');
         
+        // 0. Deselect initially selected box (box-1 is selected by default)
+        const canvas = page.locator('#svg-container');
+        await canvas.click({ position: { x: 10, y: 10 } });
+
         // 1. Click box to select
         await box.click();
         await expect(shell).toHaveAttribute('data-mode', 'object');
@@ -54,6 +59,9 @@ test.describe('Spread Editor Selection Modes', () => {
         const shell = page.locator('scribus-app-shell');
         const canvas = page.locator('#svg-container');
 
+        // 0. Deselect initially selected box (box-1 is selected by default)
+        await canvas.click({ position: { x: 10, y: 10 } });
+
         // Enter text mode
         await box.click();
         await box.click();
@@ -74,6 +82,11 @@ test.describe('Spread Editor Selection Modes', () => {
         const box = page.locator('.box-rect').first();
         const shell = page.locator('scribus-app-shell');
         
+        const canvas = page.locator('#svg-container');
+        
+        // 0. Deselect initially selected box (box-1 is selected by default)
+        await canvas.click({ position: { x: 10, y: 10 } });
+
         // Enter text mode
         await box.click();
         await box.click();

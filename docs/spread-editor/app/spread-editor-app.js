@@ -3,6 +3,7 @@ import {
   extractParagraphs,
   TextCursor,
   EditorState,
+  TextInteractionController,
 } from '../lib/story-editor-core.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
@@ -38,6 +39,7 @@ export class SpreadEditorApp {
     if (shell) this.shell = shell;
 
     this.container = this.root.querySelector('#svg-container');
+    this.statusEl = this.root.querySelector('#status');
     this.sampleEl = this.root.querySelector('#sample-text');
 
     this.setStatus('Loading HarfBuzz, fonts, and hyphenation...');
@@ -63,10 +65,13 @@ export class SpreadEditorApp {
         onSelectBox: (boxId) => {
           this.selectedBoxId = boxId;
         },
-        onBodyClick: (event, boxId) => {
-          if (this.mode === 'text') {
-            this._handleTextClick(event);
-          } else if (this.selectedBoxId !== boxId) {
+        onBodyClick: async (event, boxId, wasAlreadySelected) => {
+          if (this.mode === 'object' && wasAlreadySelected) {
+            this.setMode('text');
+            if (this._textInteraction) {
+              await this._textInteraction._handlePointerDown(event);
+            }
+          } else if (this.mode !== 'text' && this.selectedBoxId !== boxId) {
             this.selectedBoxId = boxId;
             this.update({ full: false });
           }
@@ -190,15 +195,15 @@ export class SpreadEditorApp {
 
     const action = {
       label,
-      execute: () => {
+      execute: async () => {
         fn();
-        this.update();
+        await this.update();
       },
-      undo: () => {
+      undo: async () => {
         this.editor.setState(prevState.editorState);
         this._fontSize = prevState.fontSize;
         this._lineHeight = prevState.lineHeight;
-        this.update();
+        await this.update();
       }
     };
 
@@ -225,40 +230,28 @@ export class SpreadEditorApp {
         if (this.mode === 'text' || this.selectedBoxId) {
           this.selectedBoxId = null;
           this.setMode('object');
+          await this.update();
         }
         return;
       }
 
       if (boxId) {
-        const now = Date.now();
-        const doubleClick = (boxId === this._lastBoxClickId && (now - this._lastBoxClickTime) < 350);
-        
-        this._lastBoxClickTime = now;
-        this._lastBoxClickId = boxId;
+        e.wasAlreadySelected = (this.selectedBoxId === boxId);
 
-        if (doubleClick) {
-          this.selectedBoxId = boxId;
-          this.setMode('text');
-          // Immediately place cursor on the second click of entry
-          await this._handleTextClick(e);
+        // Prevent dragging the box body when in text mode
+        // (TextInteractionController handles internal text dragging instead)
+        if (this.mode === 'text' && handle === 'body') {
           return;
         }
 
         if (handle && this._interaction.pointerDown(e, boxId, handle)) {
           return;
         }
-
-        if (this.mode === 'text') {
-            this._isDragging = true;
-            await this._handleTextClick(e);
-        }
       }
     });
 
     this.container.addEventListener('pointermove', async (e) => {
-        if (this._isDragging && this.mode === 'text') {
-            await this._handleTextDrag(e);
-        }
+      // Box dragging is handled by _interaction
     });
 
     this.container.addEventListener('pointerup', () => {
@@ -269,108 +262,20 @@ export class SpreadEditorApp {
       const target = e.target;
       const boxId = target?.dataset?.boxId;
       
-      if (this.mode === 'text') {
-        await this._handleTextClick(e);
-      } else if (boxId) {
+      if (this.mode !== 'text' && boxId) {
         // Just selecting a box in object mode
         this.selectedBoxId = boxId;
         await this.update();
       }
     });
 
-    this.container.addEventListener('keydown', async (e) => {
-      if (this.mode !== 'text' || !this.cursor) return;
-
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && (e.key === 'a' || e.key === 'A')) {
-        e.preventDefault();
-        this.editor.selectAll();
-        await this.update();
-        return;
-      }
-
-      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-        this.cursor.handleKeydown(e);
-        const pos = this.cursor.getPosition();
-        if (pos) this.editor.moveCursor(pos, e.shiftKey);
-        await this.update();
-        return;
-      }
-
-      if (this.hasBeforeInput) return;
-
-      if (this.editor.handleKeydown(e)) {
-        e.preventDefault();
-        await this.update();
-      }
-    });
-
-    this.container.addEventListener('beforeinput', async (e) => {
-      if (this.mode !== 'text' || !this.cursor) return;
-      if (!this.editor.handleBeforeInput(e)) return;
-      e.preventDefault();
-      await this.update();
-    });
-
-    this.container.addEventListener('copy', (e) => {
-      if (this.mode !== 'text') return;
-      const text = this.editor.getSelectedText();
-      if (!text || !e.clipboardData) return;
-      e.preventDefault();
-      e.clipboardData.setData('text/plain', text);
-    });
-
-    this.container.addEventListener('cut', async (e) => {
-      if (this.mode !== 'text') return;
-      const text = this.editor.getSelectedText();
-      if (!text || !e.clipboardData) return;
-      e.preventDefault();
-      e.clipboardData.setData('text/plain', text);
-      if (this.editor.replaceSelectionWithText('')) await this.update();
-    });
-
-    this.container.addEventListener('paste', async (e) => {
-      if (this.mode !== 'text') return;
-      const text = e.clipboardData?.getData('text/plain');
-      if (!text) return;
-      e.preventDefault();
-      if (this.editor.replaceSelectionWithText(text)) await this.update();
-    });
-
     window.addEventListener('beforeunload', () => {
       if (this.cursor) this.cursor.destroy();
+      if (this._textInteraction) this._textInteraction.destroy();
     });
   }
 
 
-  async _handleTextClick(e) {
-    if (!this.cursor) return;
-    this.container.focus();
-    
-    const now = Date.now();
-    const isDoubleClick = (now - this._lastTextClickTime < 350);
-    this._lastTextClickTime = now;
-
-    this.cursor.handleClick(e);
-    const pos = this.cursor.getPosition();
-    if (!pos) return;
-
-    if (isDoubleClick) {
-      this.editor.selectWordAt(pos);
-    } else {
-      this.editor.moveCursor(pos, e.shiftKey);
-    }
-    await this.update();
-  }
-
-  async _handleTextDrag(e) {
-    if (!this.cursor) return;
-    this.cursor.handleClick(e); // reused for coord mapping
-    const pos = this.cursor.getPosition();
-    if (!pos) return;
-    this.editor.moveCursor(pos, true);
-    await this.update();
-  }
 
   decorateSpread(svg, pageRects, spread) {
     const bg = document.createElementNS(SVG_NS, 'rect');
@@ -491,12 +396,37 @@ export class SpreadEditorApp {
       this.cursor.updateSelection(this.editor.getSelectionRange());
       this.cursor.moveTo(this.editor.cursor);
       this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
+      
+      if (!this._textInteraction) {
+        this._textInteraction = new TextInteractionController({
+          container: this.container,
+          editor: this.editor,
+          cursor: this.cursor,
+          update: () => this.update(),
+          enabled: () => this.mode === 'text',
+          submitAction: (label, fn) => {
+            this.submitAction(label, fn);
+          }
+        });
+      } else {
+        this._textInteraction.setCursor(this.cursor);
+      }
     } else {
-      this.cursor = new TextCursor(svg, this.editor.story, lineMap, fontSize);
-      this.cursor.updateLayout(svg, lineMap, fontSize);
+      this.cursor = new TextCursor(svg, this.editor.story, lineMap, this._fontSize);
       this.cursor.updateSelection(this.editor.getSelectionRange());
       this.cursor.moveTo(this.editor.cursor);
       this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
+
+      this._textInteraction = new TextInteractionController({
+        container: this.container,
+        editor: this.editor,
+        cursor: this.cursor,
+        update: () => this.update(),
+        enabled: () => this.mode === 'text',
+        submitAction: (label, fn) => {
+          this.submitAction(label, fn);
+        }
+      });
     }
 
     // Update style buttons
