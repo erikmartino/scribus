@@ -89,8 +89,9 @@ export class SpreadEditorApp {
 
       this.bindEvents();
       
-      // Register Text Commands
+      // Register Text Commands & Clipboard Integration
       this._registerCommands(shell);
+      this._initClipboard(shell);
 
       await this.update();
       this.setMode('object');
@@ -136,33 +137,6 @@ export class SpreadEditorApp {
           this.editor.applyCharacterStyle({ bold: !style.bold });
         });
       }
-    });
-
-    const storyItem = new AbstractItem('spread-story', 'story');
-    storyItem.serialize = () => {
-      if (this.mode !== 'text' && !this.selectedBoxId) return null;
-      const selectedText = this.editor.getSelectedText();
-      const range = this.editor.getSelectionRange();
-      if (selectedText && range) {
-        return {
-          type: 'story',
-          data: selectedText,
-          story: this.editor.getRichSelection(),
-          paragraphStyles: this.editor.paragraphStyles.slice(range.start.paraIndex, range.end.paraIndex + 1).map(s => ({...s}))
-        };
-      }
-      return null;
-    };
-    this.shell.doc.registerItem(storyItem);
-    this.storyItem = storyItem;
-
-    this.shell.addEventListener('paste-received', (e) => this.handlePaste(e.detail));
-    
-    this.shell.addEventListener('cut-executed', () => {
-      if (this.mode !== 'text' || !this.editor.hasSelection()) return;
-      this.submitAction('Cut', () => {
-        this.editor.replaceSelectionWithText('');
-      });
     });
 
     shell.commands.register({
@@ -217,6 +191,39 @@ export class SpreadEditorApp {
            this._lineHeight = args.lineHeight;
         });
       }
+    });
+  }
+
+  /**
+   * Register as an AbstractItem for clipboard serialization
+   * and wire up paste-received / cut-executed event handlers.
+   */
+  _initClipboard(shell) {
+    const storyItem = new AbstractItem('spread-story', 'story');
+    storyItem.serialize = () => {
+      if (this.mode !== 'text' && !this.selectedBoxId) return null;
+      const selectedText = this.editor.getSelectedText();
+      const range = this.editor.getSelectionRange();
+      if (selectedText && range) {
+        return {
+          type: 'story',
+          data: selectedText,
+          story: this.editor.getRichSelection(),
+          paragraphStyles: this.editor.paragraphStyles.slice(range.start.paraIndex, range.end.paraIndex + 1).map(s => ({...s}))
+        };
+      }
+      return null;
+    };
+    shell.doc.registerItem(storyItem);
+    this.storyItem = storyItem;
+
+    shell.addEventListener('paste-received', (e) => this.handlePaste(e.detail));
+
+    shell.addEventListener('cut-executed', () => {
+      if (this.mode !== 'text' || !this.editor.hasSelection()) return;
+      this.submitAction('Cut', () => {
+        this.editor.replaceSelectionWithText('');
+      });
     });
   }
 
