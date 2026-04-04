@@ -329,12 +329,12 @@ export class SpreadEditorApp {
   async update(options = { full: true }) {
     const isFull = options.full !== false;
 
-    // Use fallbacks if inputs aren't rendered yet
-    const pageWidth = this.pageWidthInput ? Number(this.pageWidthInput.value) : 420;
-    const pageHeight = this.pageHeightInput ? Number(this.pageHeightInput.value) : 560;
-    const margin = this.marginInput ? Number(this.marginInput.value) : 44;
-    const gutter = this.gutterInput ? Number(this.gutterInput.value) : 140;
-    const colGap = this.colGapInput ? Number(this.colGapInput.value) : 18;
+    // Hardcoded A4 geometry in points
+    const pageWidth = 595.28;  // A4 Width
+    const pageHeight = 841.89; // A4 Height
+    const margin = 44;
+    const gutter = 140;
+    const colGap = 18;
     const fontSize = this.fontSizeInput ? Number(this.fontSizeInput.value) : 20;
     const lineHeightPct = this.lineHeightInput ? Number(this.lineHeightInput.value) : 138;
 
@@ -416,31 +416,7 @@ export class SpreadEditorApp {
 
   getRibbonSections(selected) {
     if (this.mode === 'object') {
-      return [
-        AppShell.createRibbonSection('Status', (container) => {
-          this.statusEl = document.createElement('div');
-          this.statusEl.id = 'status';
-          this.statusEl.className = 'ok';
-          this.statusEl.style.cssText = 'font-size: 0.75rem; padding: 4px 8px; margin: 0; border: none; background: rgba(0,255,100,0.1); color: var(--accent-secondary); border-radius: 4px;';
-          this.statusEl.textContent = 'Ready';
-          container.appendChild(this.statusEl);
-        }),
-        AppShell.createRibbonSection('Geometry', (container) => {
-          this.pageWidthInput = this.shell.ui.createInput({ label: 'Width', type: 'range', min: 300, max: 680, value: 420, id: 'page-width' });
-          this.pageHeightInput = this.shell.ui.createInput({ label: 'Height', type: 'range', min: 380, max: 840, value: 560, id: 'page-height' });
-          this.marginInput = this.shell.ui.createInput({ label: 'Margin', type: 'range', min: 20, max: 90, value: 44, id: 'margin' });
-          container.appendChild(this.pageWidthInput);
-          container.appendChild(this.pageHeightInput);
-          container.appendChild(this.marginInput);
-        }),
-        AppShell.createRibbonSection('Spread', (container) => {
-          this.gutterInput = this.shell.ui.createInput({ label: 'Pasteboard', type: 'range', min: 40, max: 320, value: 140, id: 'gutter' });
-          this.colGapInput = this.shell.ui.createInput({ label: 'Col Gap', type: 'range', min: 8, max: 44, value: 18, id: 'col-gap' });
-          container.appendChild(this.gutterInput);
-          container.appendChild(this.colGapInput);
-          this._bindRibbonEvents();
-        })
-      ];
+      return []; // No geometry/status sections in object mode as requested
     } else {
       return [
         AppShell.createRibbonSection('Typography', (container) => {

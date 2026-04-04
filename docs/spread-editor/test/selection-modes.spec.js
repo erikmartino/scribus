@@ -17,19 +17,11 @@ test.describe('Spread Editor Selection Modes', () => {
     await expect(shell).toHaveAttribute('data-mode', 'object');
     
     // Check ribbon visibility
-    // Debug: list all ribbon sections
-    const sections = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('scribus-ribbon-section')).map(s => ({
-        label: s.getAttribute('label'),
-        visible: getComputedStyle(s).display !== 'none'
-      }));
-    });
-    console.log('Detected ribbon sections:', JSON.stringify(sections, null, 2));
-
     const objectSection = page.locator('scribus-ribbon-section[label="Geometry"]');
     const textSection = page.locator('scribus-ribbon-section[label="Typography"]');
 
-    await expect(objectSection).toBeVisible();
+    // In Object mode, both should be hidden/absent according to new UI rules
+    await expect(objectSection).not.toBeVisible();
     await expect(textSection).not.toBeVisible();
   });
 
@@ -59,9 +51,16 @@ test.describe('Spread Editor Selection Modes', () => {
     // Check ribbon visibility
     const objectSection = page.locator('scribus-ribbon-section[label="Geometry"]');
     const textSection = page.locator('scribus-ribbon-section[label="Typography"]');
-    
-    await expect(objectSection).not.toBeVisible();
     await expect(textSection).toBeVisible();
+    
+    // Check for specific typography controls
+    const boldBtn = page.locator('#toggle-bold');
+    const italicBtn = page.locator('#toggle-italic');
+    const fontSelector = page.locator('#font-family-selector');
+    
+    await expect(boldBtn).toBeVisible();
+    await expect(italicBtn).toBeVisible();
+    await expect(fontSelector).toBeVisible();
     
     // Check cursor
     const container = page.locator('#svg-container');
