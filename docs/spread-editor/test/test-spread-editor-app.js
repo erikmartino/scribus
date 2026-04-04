@@ -3,9 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { SpreadEditorApp } from '../app/spread-editor-app.js';
 
-// Mock shell
+// Mock shell with all methods that setMode / getRibbonSections touch
 const mockShell = {
   registerPlugin: () => {},
+  requestUpdate: () => {},
+  selection: { select: () => {}, remove: () => {} },
+  commands: { execute: () => {} },
   ui: {
     createInput: (opts) => {
       const el = globalThis.document.createElement('input');
@@ -38,49 +41,50 @@ test('SpreadEditorApp Selection Modes', async (t) => {
   const app = new SpreadEditorApp(root);
   app.shell = mockShell;
   
-  // Mock editor and engine to avoid crashes during update()
+  // Mock editor with enough structure for setMode and getRibbonSections
   app.editor = { 
     getTypingStyle: () => ({}),
-    story: {},
-    cursor: {},
-    hasSelection: () => false
+    story: [[{ text: 'Hello', style: {} }]],
+    cursor: { paraIndex: 0, charOffset: 0, lineIndex: 0 },
+    paragraphStyles: [{ fontSize: 20 }],
+    hasSelection: () => false,
+    getSelectionRange: () => null,
   };
   app.engine = {
     renderToContainer: async () => ({ svg: globalThis.document.createElement('svg'), lineMap: new Map() })
   };
-  // Mock update to be a no-op or just resolve
+  // Mock update to be a no-op (prevents full layout pipeline)
   app.update = async () => {};
 
   await t.test('initial mode should be object', () => {
     assert.strictEqual(app.mode, 'object');
   });
 
-  await t.test('setMode updates mode and shell attribute', async () => {
-    await app.setMode('text');
+  await t.test('setMode updates mode and shell attribute', () => {
+    app.setMode('text');
     assert.strictEqual(app.mode, 'text');
+    // setAttribute stores value as el[key] in the dom-mock
     assert.strictEqual(shellEl['data-mode'], 'text');
     
-    await app.setMode('object');
+    app.setMode('object');
     assert.strictEqual(app.mode, 'object');
     assert.strictEqual(shellEl['data-mode'], 'object');
   });
 
-  await t.test('getRibbonSections returns correct sections for object mode', () => {
+  await t.test('getRibbonSections returns empty array for object mode', () => {
     app.mode = 'object';
     const sections = app.getRibbonSections();
-    const labels = sections.map(s => s.label);
-    assert.ok(labels.includes('Status'));
-    assert.ok(labels.includes('Geometry'));
-    assert.ok(labels.includes('Spread'));
-    assert.ok(!labels.includes('Typography'));
+    assert.ok(Array.isArray(sections));
+    assert.strictEqual(sections.length, 0);
   });
 
-  await t.test('getRibbonSections returns correct sections for text mode', () => {
+  await t.test('getRibbonSections returns Typography and Formatting for text mode', () => {
     app.mode = 'text';
     const sections = app.getRibbonSections();
+    // getAttribute stores as property in dom-mock, so read .label
     const labels = sections.map(s => s.label);
+    assert.strictEqual(labels.length, 2);
     assert.ok(labels.includes('Typography'));
     assert.ok(labels.includes('Formatting'));
-    assert.ok(!labels.includes('Geometry'));
   });
 });

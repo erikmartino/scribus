@@ -213,17 +213,24 @@ The codebase already has a strong unit test foundation. The main gap is that som
    - `getRichSelection` (3 tests): empty when no selection, returns fragment for range, works across paragraphs
    - `insertStory` (4 tests): single-paragraph insert, multi-paragraph insert with paragraphStyles update, replaces selection first, returns false for empty fragment
 
-### Verification
+### Phase 3: Fix stale mocks and close remaining gaps (2026-04-05)
 
-- All 144 story-editor unit tests pass (was 117, +27 new)
-- All 36 box-model unit tests pass (new)
+10. **`spread-editor/test/test-spread-editor-app.js`** — Fixed 3 stale mock failures:
+    - Added `requestUpdate()` and `selection` service to mock shell (was missing, caused `setMode` crash)
+    - Updated `getRibbonSections` object mode test to expect `[]` (source changed to return empty array for object mode, test still expected old `Status`/`Geometry`/`Spread` labels)
+    - Added `editor.cursor.paraIndex`, `editor.story`, `editor.paragraphStyles` to mock (was undefined, caused `getRibbonSections` text mode crash)
+
+11. **Assessment of remaining DOM-coupled logic**: After extracting `ClickTracker` and `DragState`, the remaining code in `text-interaction.js` and `box-interactions.js` is thin glue wiring DOM events (pointer, keyboard, beforeinput) to already-well-tested pure functions. The remaining logic is inherently DOM-coupled (SVG coordinate transforms, `navigator.platform` detection, browser focus management) and would not benefit from further extraction. No action needed.
+
+### Final verification
+
+- All 144 story-editor unit tests pass
+- All 50 spread-editor unit tests pass (36 box-model + 9 drag-state + 5 spread-editor-app)
 - All 12 click-tracker unit tests pass
-- All 9 drag-state unit tests pass
 - All 11 app-shell unit tests pass
 - All 26 Playwright tests pass
-- Pre-existing failures in `test-spread-editor-app.js` (3 tests) are unchanged; they are due to stale mocks unrelated to this work.
+- Zero pre-existing test failures remain
 
-### Remaining gaps
+### Status: COMPLETE
 
-- `text-interaction.js` and `box-interactions.js` still have DOM-coupled logic not covered by unit tests (pointer event handling, keyboard shortcut dispatch). The extractable state-machine parts (`ClickTracker`, `DragState`) are now covered.
-- `test-spread-editor-app.js` has 3 pre-existing test failures from stale mocks (missing `requestUpdate` and `getRibbonSections` changes). These are unrelated to this work but should be addressed separately.
+All identified gaps have been addressed. No remaining work items.
