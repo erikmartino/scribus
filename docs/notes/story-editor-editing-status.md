@@ -11,9 +11,12 @@
 - [x] **Shared UI**: Centralized `Typography` and `Formatting` ribbon sections used by both Story and Spread editors.
 - [x] **App Shell Integration**: 
     - [x] Integrated undo/redo transactions via `CommandHistory`.
-    - [x] Rich clipboard service (Story item format).
+    - [x] Rich clipboard service (Story item format) with localStorage fallback.
     - [x] Native keyboard shortcuts (Select All, Bold/Italic).
+    - [x] Cut/copy/paste verified with Playwright (both system clipboard and localStorage paths).
 - [x] **Cross-Demo Sharing**: `spread-editor` now consumes `story-editor/lib` via `story-editor-core.js`.
+- [x] **Character Styling**: Bold, italic, and font family applied per-run within paragraphs.
+- [x] **Paragraph Styling**: Font size applied per-paragraph via `paragraphStyles`.
 
 ## Remaining Gaps
 
@@ -27,8 +30,8 @@
    - **Complex Scripts**: BiDi and script-specific justification rules are currently out of scope.
 
 3. **Editing Features**
-   - [ ] **Character Styling**: Support for multiple font families or sizes within the same paragraph (currently paragraph-level).
    - [ ] **Tab Handling**: Native tab key behavior (indentation vs focus).
+   - [ ] **Shift+Click Range Selection**: Extend selection by holding Shift during click.
 
 ## Recommended Next Milestone
 

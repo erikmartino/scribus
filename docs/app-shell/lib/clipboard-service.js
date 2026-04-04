@@ -60,7 +60,12 @@ export class ClipboardService {
         await navigator.clipboard.write([clipboardItem]);
       } catch (err) {
         // Fallback for browsers with restricted ClipboardItem support for custom types
-        await navigator.clipboard.writeText(json);
+        try {
+          await navigator.clipboard.writeText(json);
+        } catch (writeErr) {
+          // System clipboard entirely unavailable; localStorage fallback below will handle it
+          console.info('[Clipboard] System clipboard write denied; using local storage only.');
+        }
       }
     }
 

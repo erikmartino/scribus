@@ -115,4 +115,98 @@ test.describe('Spread Editor Interaction Gestures', () => {
     // Verify properties on the host element as well
     await expect(fontSelector).toHaveAttribute('value', 'Inter');
   });
+
+  test('cut, copy, and paste text works in text mode', async ({ page, context }) => {
+    // 1. Grant clipboard permissions
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    const box = page.locator('.box-rect').first();
+    // 0. Deselect initially selected box
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+
+    // Enter text mode
+    await box.click();
+    await box.click();
+
+    // Verify enter text mode
+    const shell = page.locator('scribus-app-shell');
+    await expect(shell).toHaveAttribute('data-mode', 'text');
+
+    // Select all text in paragraph
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.waitForTimeout(300);
+
+    // Initial content
+    const initialText = await page.textContent('#svg-container');
+    expect(initialText.replace(/\s+/g, "").replace(/-/g, "")).toContain('Thespreadprototypetreatsanentirestory');
+
+    // Copy to system clipboard
+    await page.keyboard.press('ControlOrMeta+c');
+    await page.waitForTimeout(500);
+
+    // The clipboard contains a JSON envelope; verify the story data field has the text
+    const clipboardContent = await page.evaluate(async () => {
+      return await navigator.clipboard.readText();
+    });
+    const clipPayload = JSON.parse(clipboardContent);
+    expect(clipPayload.items).toBeDefined();
+    expect(clipPayload.items[0].data.replace(/\s+/g, "").replace(/-/g, "")).toContain('Thespreadprototypetreatsanentirestory');
+
+    // Cut from DOM
+    await page.keyboard.press('ControlOrMeta+x');
+    await page.waitForTimeout(500);
+
+    const afterCutText = await page.textContent('#svg-container');
+    expect(afterCutText.replace(/\s+/g, "").replace(/-/g, "")).not.toContain('Thespreadprototypetreatsanentirestory');
+
+    // Paste back into DOM
+    await page.keyboard.press('ControlOrMeta+v');
+    await page.waitForTimeout(1000);
+
+    const afterPasteText = await page.textContent('#svg-container');
+    expect(afterPasteText.replace(/\s+/g, "").replace(/-/g, "")).toContain('Thespreadprototypetreatsanentirestory');
+  });
+
+  test('cut, copy, and paste text relies on local storage when clipboard is denied', async ({ page, context }) => {
+    // 1. Explicitly clean permissions
+    await context.clearPermissions();
+
+    const box = page.locator('.box-rect').first();
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+
+    await box.click();
+    await box.click();
+
+    // Select all text in paragraph
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.waitForTimeout(300);
+
+    // Initial content
+    const initialText = await page.textContent('#svg-container');
+    expect(initialText.replace(/\s+/g, "").replace(/-/g, "")).toContain('Thespreadprototypetreatsanentirestory');
+
+    // Copy
+    await page.keyboard.press('ControlOrMeta+c');
+    await page.waitForTimeout(500);
+
+    // Verify localStorage fallback holds the serialized data
+    const localJSON = await page.evaluate(() => localStorage.getItem('scribus_local_clipboard')) || '';
+    expect(localJSON.replace(/\s+/g, "")).toContain('Thespreadprototype');
+
+    // Cut from DOM
+    await page.keyboard.press('ControlOrMeta+x');
+    await page.waitForTimeout(500);
+
+    const afterCutText = await page.textContent('#svg-container');
+    expect(afterCutText.replace(/\s+/g, "").replace(/-/g, "")).not.toContain('Thespreadprototypetreatsanentirestory');
+
+    // Paste back into DOM
+    await page.keyboard.press('ControlOrMeta+v');
+    await page.waitForTimeout(1000);
+
+    const afterPasteText = await page.textContent('#svg-container');
+    expect(afterPasteText.replace(/\s+/g, "").replace(/-/g, "")).toContain('Thespreadprototypetreatsanentirestory');
+  });
 });

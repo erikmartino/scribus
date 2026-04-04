@@ -12,6 +12,7 @@ import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
 import { drawBoxOverlay } from './box-overlay.js';
 import { BoxInteractionController } from './box-interactions.js';
 import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
+import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -110,6 +111,9 @@ export class SpreadEditorApp {
     
     if (mode === 'text' && this.container) {
       this.container.focus();
+      if (this.storyItem) this.shell?.selection?.select(this.storyItem);
+    } else if (mode === 'object') {
+      if (this.storyItem) this.shell?.selection?.remove(this.storyItem);
     }
     
     // Update cursor visibility
@@ -132,6 +136,33 @@ export class SpreadEditorApp {
           this.editor.applyCharacterStyle({ bold: !style.bold });
         });
       }
+    });
+
+    const storyItem = new AbstractItem('spread-story', 'story');
+    storyItem.serialize = () => {
+      if (this.mode !== 'text' && !this.selectedBoxId) return null;
+      const selectedText = this.editor.getSelectedText();
+      const range = this.editor.getSelectionRange();
+      if (selectedText && range) {
+        return {
+          type: 'story',
+          data: selectedText,
+          story: this.editor.getRichSelection(),
+          paragraphStyles: this.editor.paragraphStyles.slice(range.start.paraIndex, range.end.paraIndex + 1).map(s => ({...s}))
+        };
+      }
+      return null;
+    };
+    this.shell.doc.registerItem(storyItem);
+    this.storyItem = storyItem;
+
+    this.shell.addEventListener('paste-received', (e) => this.handlePaste(e.detail));
+    
+    this.shell.addEventListener('cut-executed', () => {
+      if (this.mode !== 'text' || !this.editor.hasSelection()) return;
+      this.submitAction('Cut', () => {
+        this.editor.replaceSelectionWithText('');
+      });
     });
 
     shell.commands.register({
@@ -211,6 +242,37 @@ export class SpreadEditorApp {
     };
 
     this.shell.history.submit(action);
+  }
+
+  handlePaste(payload) {
+    if (this.mode !== 'text') return;
+    if (!payload || !payload.items) return;
+    
+    // 1. Native Story Data (preferred)
+    const storyItem = payload.items.find(it => it && it.type === 'story');
+    if (storyItem && storyItem.story) {
+      this.submitAction('Paste Story', () => {
+        this.editor.insertStory(storyItem.story, storyItem.paragraphStyles);
+      });
+      return;
+    }
+
+    // 2. Plain Text / Rich Text Fallbacks
+    const textItem = payload.items.find(it => it && (it.type === 'plain-text' || it.type === 'rich-text-fragment'));
+    if (textItem) {
+      this.submitAction('Paste Text', () => {
+        const raw = textItem.data;
+        const text = textItem.type === 'rich-text-fragment' 
+          ? raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ') 
+          : raw;
+        
+        if (this.editor.hasSelection()) {
+          this.editor.replaceSelectionWithText(text);
+        } else {
+          this.editor.applyOperation('insertText', { text });
+        }
+      });
+    }
   }
 
   setStatus(msg, cls = '') {
