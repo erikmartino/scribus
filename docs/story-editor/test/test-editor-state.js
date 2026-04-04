@@ -314,4 +314,143 @@ describe('EditorState', () => {
     assert.equal(editor.story.length, 1);
     assert.equal(editor.paragraphStyles.length, 1);
   });
+
+  it('selectParagraphAt selects entire paragraph and moves cursor to end', () => {
+    const editor = new EditorState([
+      [{ text: 'first', style: N }],
+      [{ text: 'second', style: N }],
+      [{ text: 'third', style: N }],
+    ]);
+
+    editor.selectParagraphAt({ paraIndex: 1 });
+
+    assert.equal(editor.hasSelection(), true);
+    const range = editor.getSelectionRange();
+    assert.deepEqual(range.start, { paraIndex: 1, charOffset: 0 });
+    assert.deepEqual(range.end, { paraIndex: 1, charOffset: 6 });
+    assert.equal(editor.getSelectedText(), 'second');
+    assert.deepEqual(editor.cursor, { paraIndex: 1, charOffset: 6, lineIndex: 0 });
+  });
+
+  it('selectParagraphAt clamps out-of-bounds paraIndex', () => {
+    const editor = new EditorState([
+      [{ text: 'only', style: N }],
+    ]);
+
+    editor.selectParagraphAt({ paraIndex: 99 });
+    assert.equal(editor.getSelectedText(), 'only');
+    assert.deepEqual(editor.cursor, { paraIndex: 0, charOffset: 4, lineIndex: 0 });
+  });
+
+  it('selectParagraphAt preserves lineIndex from pos', () => {
+    const editor = new EditorState([
+      [{ text: 'hello', style: N }],
+    ]);
+    editor.selectParagraphAt({ paraIndex: 0, lineIndex: 5 });
+    assert.equal(editor.cursor.lineIndex, 5);
+  });
+
+  it('clearSelection removes active selection', () => {
+    const editor = new EditorState([[{ text: 'abc', style: N }]]);
+    editor.setSelection({ paraIndex: 0, charOffset: 0 }, { paraIndex: 0, charOffset: 3 });
+    assert.equal(editor.hasSelection(), true);
+
+    editor.clearSelection();
+    assert.equal(editor.hasSelection(), false);
+    assert.equal(editor.selection, null);
+  });
+
+  it('clearSelection is a no-op when no selection exists', () => {
+    const editor = new EditorState([[{ text: 'abc', style: N }]]);
+    assert.equal(editor.hasSelection(), false);
+    editor.clearSelection(); // should not throw
+    assert.equal(editor.hasSelection(), false);
+  });
+
+  it('getRichSelection returns empty array when no selection', () => {
+    const editor = new EditorState([[{ text: 'abc', style: N }]]);
+    assert.deepEqual(editor.getRichSelection(), []);
+  });
+
+  it('getRichSelection returns story fragment for selected range', () => {
+    const B = { bold: true, italic: false, fontFamily: '' };
+    const editor = new EditorState([
+      [{ text: 'ab', style: N }, { text: 'CD', style: B }],
+    ]);
+    editor.setSelection({ paraIndex: 0, charOffset: 1 }, { paraIndex: 0, charOffset: 3 });
+
+    const frag = editor.getRichSelection();
+    assert.equal(frag.length, 1);
+    assert.equal(frag[0][0].text, 'b');
+    assert.deepEqual(frag[0][0].style, N);
+    assert.equal(frag[0][1].text, 'C');
+    assert.deepEqual(frag[0][1].style, B);
+  });
+
+  it('getRichSelection works across paragraphs', () => {
+    const editor = new EditorState([
+      [{ text: 'abc', style: N }],
+      [{ text: 'DEF', style: N }],
+      [{ text: 'ghi', style: N }],
+    ]);
+    editor.setSelection({ paraIndex: 0, charOffset: 2 }, { paraIndex: 2, charOffset: 1 });
+
+    const frag = editor.getRichSelection();
+    assert.equal(frag.length, 3);
+    assert.equal(frag[0][0].text, 'c');
+    assert.equal(frag[1][0].text, 'DEF');
+    assert.equal(frag[2][0].text, 'g');
+  });
+
+  it('insertStory inserts a single-paragraph fragment', () => {
+    const B = { bold: true, italic: false, fontFamily: '' };
+    const editor = new EditorState([
+      [{ text: 'abcd', style: N }],
+    ]);
+    editor.setCursor({ paraIndex: 0, charOffset: 2, lineIndex: 0 });
+
+    const result = editor.insertStory([[{ text: 'XY', style: B }]]);
+    assert.equal(result, true);
+    assert.equal(editor.story.length, 1);
+    const text = editor.story[0].map(r => r.text).join('');
+    assert.equal(text, 'abXYcd');
+    assert.deepEqual(editor.cursor, { paraIndex: 0, charOffset: 4, lineIndex: 0 });
+    assert.equal(editor.hasSelection(), false);
+  });
+
+  it('insertStory inserts a multi-paragraph fragment and updates paragraphStyles', () => {
+    const styles = [{ fontSize: 30, fontFamily: 'EB Garamond' }];
+    const editor = new EditorState([
+      [{ text: 'abcd', style: N }],
+    ], styles);
+    editor.setCursor({ paraIndex: 0, charOffset: 2, lineIndex: 0 });
+
+    const frag = [[{ text: 'X', style: N }], [{ text: 'Y', style: N }]];
+    const fragStyles = [{ fontSize: 24, fontFamily: 'Inter' }, { fontSize: 18, fontFamily: 'Inter' }];
+    editor.insertStory(frag, fragStyles);
+
+    assert.equal(editor.story.length, 2);
+    assert.equal(editor.story[0].map(r => r.text).join(''), 'abX');
+    assert.equal(editor.story[1].map(r => r.text).join(''), 'Ycd');
+    assert.deepEqual(editor.cursor, { paraIndex: 1, charOffset: 1, lineIndex: 0 });
+    // Should have spliced in the second fragment style
+    assert.equal(editor.paragraphStyles.length, 2);
+  });
+
+  it('insertStory replaces existing selection first', () => {
+    const editor = new EditorState([
+      [{ text: 'abcdef', style: N }],
+    ]);
+    editor.setSelection({ paraIndex: 0, charOffset: 2 }, { paraIndex: 0, charOffset: 4 });
+
+    editor.insertStory([[{ text: 'XY', style: N }]]);
+    const text = editor.story[0].map(r => r.text).join('');
+    assert.equal(text, 'abXYef');
+  });
+
+  it('insertStory returns false for empty fragment', () => {
+    const editor = new EditorState([[{ text: 'abc', style: N }]]);
+    assert.equal(editor.insertStory([]), false);
+    assert.equal(editor.insertStory(null), false);
+  });
 });
