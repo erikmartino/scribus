@@ -70,6 +70,7 @@ export class SpreadEditorApp {
             this.setMode('text');
             if (this._textInteraction) {
               await this._textInteraction._handlePointerDown(event);
+              this._textInteraction._handlePointerUp(event);
             }
           } else if (this.mode !== 'text' && this.selectedBoxId !== boxId) {
             this.selectedBoxId = boxId;
