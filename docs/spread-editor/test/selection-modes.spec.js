@@ -1,82 +1,94 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Spread Editor Selection Modes', () => {
-  test.beforeEach(async ({ page }) => {
-    // Setup: log console and errors
-    page.on('console', msg => console.log(`BROWSER [${msg.type()}]: ${msg.text()}`));
-    page.on('pageerror', err => console.log(`BROWSER ERR: ${err.message}`));
-    
-    await page.goto('/spread-editor/index.html');
-    // Wait for initial layout
-    await page.waitForSelector('scribus-app-shell', { timeout: 30000 });
-    await page.waitForSelector('#svg-container svg', { timeout: 30000 });
-  });
-
-  test('initial mode should be object selection', async ({ page }) => {
-    const shell = page.locator('scribus-app-shell');
-    await expect(shell).toHaveAttribute('data-mode', 'object');
-    
-    // Check ribbon visibility
-    const objectSection = page.locator('scribus-ribbon-section[label="Geometry"]');
-    const textSection = page.locator('scribus-ribbon-section[label="Typography"]');
-
-    // In Object mode, both should be hidden/absent according to new UI rules
-    await expect(objectSection).not.toBeVisible();
-    await expect(textSection).not.toBeVisible();
-  });
-
-  test('clicking a box should select it', async ({ page }) => {
-    // Click the first box
-    const box = page.locator('.box-rect').first();
-    await box.click();
-    
-    // Verify it's selected (it should have a specific stroke in the overlay, 
-    // but checking internal state is more reliable)
-    const selectedId = await page.evaluate(() => {
-        // We need a way to access the app instance. 
-        // In main.js it's not global. Let's try to find it.
-        // Actually, let's just check the attribute/UI for now.
-        return document.querySelector('scribus-app-shell').getAttribute('data-mode');
+    test.beforeEach(async ({ page }) => {
+        // Pipe browser console logs to terminal
+        page.on('console', msg => {
+            console.log(`BROWSER [${msg.type()}]: ${msg.text()}`);
+        });
+        page.on('pageerror', err => {
+            console.error(`BROWSER [error]: ${err.message}`);
+        });
+        
+        await page.goto('/spread-editor/index.html');
+        const statusEl = page.locator('#status');
+        await expect(statusEl).toBeVisible({ timeout: 15000 });
+        await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
     });
-    expect(selectedId).toBe('object');
-  });
 
-  test('double clicking a box should enter text edit mode', async ({ page }) => {
-    const box = page.locator('.box-rect').first();
-    await box.dblclick();
-    
-    const shell = page.locator('scribus-app-shell');
-    await expect(shell).toHaveAttribute('data-mode', 'text');
-    
-    // Check ribbon visibility
-    const objectSection = page.locator('scribus-ribbon-section[label="Geometry"]');
-    const textSection = page.locator('scribus-ribbon-section[label="Typography"]');
-    await expect(textSection).toBeVisible();
-    
-    // Check for specific typography controls
-    const boldBtn = page.locator('#toggle-bold');
-    const italicBtn = page.locator('#toggle-italic');
-    const fontSelector = page.locator('#font-family-selector');
-    
-    await expect(boldBtn).toBeVisible();
-    await expect(italicBtn).toBeVisible();
-    await expect(fontSelector).toBeVisible();
-    
-    // Check cursor
-    const container = page.locator('#svg-container');
-    const cursorStyle = await container.evaluate(el => getComputedStyle(el).cursor);
-    expect(cursorStyle).toBe('text');
-  });
+    test('should have system text selection disabled', async ({ page }) => {
+        const bodyValue = await page.evaluate(() => getComputedStyle(document.body).userSelect);
+        // Note: some browsers return 'none', some '-webkit-none'
+        expect(bodyValue).toMatch(/none/);
+    });
 
-  test('clicking background in text mode should return to object mode', async ({ page }) => {
-    // Enter text mode
-    const box = page.locator('.box-rect').first();
-    await box.dblclick();
-    await expect(page.locator('scribus-app-shell')).toHaveAttribute('data-mode', 'text');
-    
-    // Click background (SVG element but not a box)
-    await page.click('#svg-container', { position: { x: 5, y: 5 } });
-    
-    await expect(page.locator('scribus-app-shell')).toHaveAttribute('data-mode', 'object');
-  });
+    test('should enter edit mode only after selection', async ({ page }) => {
+        const box = page.locator('.box-rect').first();
+        const shell = page.locator('scribus-app-shell');
+        
+        // Initial state: Object mode
+        await expect(shell).toHaveAttribute('data-mode', 'object');
+        
+        // 1. Click box to select
+        await box.click();
+        await expect(shell).toHaveAttribute('data-mode', 'object');
+        
+        // Typography section should NOT be visible yet
+        const typography = page.locator('scribus-ribbon-section[label="Typography"]');
+        await expect(typography).not.toBeVisible();
+        
+        // 2. Click again to enter text mode
+        await box.click();
+        await expect(shell).toHaveAttribute('data-mode', 'text');
+        
+        // Typography section SHOULD be visible
+        await expect(typography).toBeVisible();
+        
+        // Cursor should be attached (it blinks, so visibility check is flaky)
+        const cursor = page.locator('#text-cursor');
+        await expect(cursor).toBeAttached();
+    });
+
+    test('should exit both modes on background click', async ({ page }) => {
+        const box = page.locator('.box-rect').first();
+        const shell = page.locator('scribus-app-shell');
+        const canvas = page.locator('#svg-container');
+
+        // Enter text mode
+        await box.click();
+        await box.click();
+        await expect(shell).toHaveAttribute('data-mode', 'text');
+
+        // Click background (canvas)
+        // We use click with position to ensure it's outside the box
+        await canvas.click({ position: { x: 10, y: 10 } });
+        
+        // Should be back to object mode with no selection
+        await expect(shell).toHaveAttribute('data-mode', 'object');
+        // Note: selectedBoxId is internal, but we can check if the overlay rect has no selected-box
+        const selectedOverlay = page.locator('.box-rect[stroke="var(--accent)"]');
+        await expect(selectedOverlay).not.toBeVisible();
+    });
+
+    test('dragging text should create a selection', async ({ page }) => {
+        const box = page.locator('.box-rect').first();
+        const shell = page.locator('scribus-app-shell');
+        
+        // Enter text mode
+        await box.click();
+        await box.click();
+
+        // Drag to select
+        const boxBounds = await box.boundingBox();
+        if (!boxBounds) throw new Error('Box bounds not found');
+        
+        await page.mouse.move(boxBounds.x + 50, boxBounds.y + 50);
+        await page.mouse.down();
+        await page.mouse.move(boxBounds.x + 200, boxBounds.y + 100);
+        await page.mouse.up();
+
+        // Check for selection highlights in the selection group
+        const selectionBoxes = page.locator('scribus-app-shell .text-selection rect');
+        await expect(selectionBoxes.count()).resolves.toBeGreaterThan(0);
+    });
 });

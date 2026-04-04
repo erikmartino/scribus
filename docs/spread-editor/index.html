@@ -73,6 +73,20 @@
     #sample-text {
       display: none;
     }
+    .status-bar {
+      position: absolute;
+      bottom: 0px;
+      left: 0px;
+      padding: 4px 12px;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      background: rgba(0,0,0,0.4);
+      z-index: 2000;
+      border-top-right-radius: 8px;
+      backdrop-filter: blur(4px);
+    }
+    .status-bar.ok { color: var(--accent-secondary); }
+    .status-bar.error { color: #ff5555; }
   </style>
 </head>
 
@@ -94,6 +108,7 @@
     </div>
 
     <div id="svg-container" tabindex="0" contenteditable="true" spellcheck="false"></div>
+    <div id="status" class="status-bar">Ready</div>
 
     <div id="sample-text">
       <p>

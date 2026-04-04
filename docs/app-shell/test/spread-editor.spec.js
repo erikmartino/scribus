@@ -15,7 +15,7 @@ test.describe('Spread Editor', () => {
       errors.push(`${request.url()} failed: ${request.failure()?.errorText}`);
     });
 
-    await page.goto('http://localhost:8081/spread-editor/');
+    await page.goto('/spread-editor/index.html');
 
 
     // Wait for the status element to show "Ready"

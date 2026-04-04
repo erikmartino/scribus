@@ -96,6 +96,7 @@
       </div>
     </div>
   </scribus-app-shell>
+  <div id="status" class="status-bar">Ready</div>
 
   <!-- Sample text as HTML — the DOM tree is the style source -->
   <div id="sample-text">
@@ -327,38 +328,6 @@
         return positions[positions.length - 1].x;
       }
 
-      function renderSelection(svg, lineMap, selection, fontSize) {
-        if (!selection) return;
-        const range = editor.getSelectionRange();
-        if (!range) return;
-
-        for (const line of lineMap) {
-          if (line.paraIndex < range.start.paraIndex || line.paraIndex > range.end.paraIndex) continue;
-          if (!line.positions || line.positions.length === 0) continue;
-
-          const lineStart = line.positions[0].charPos;
-          const lineEnd = line.positions[line.positions.length - 1].charPos;
-          const selStart = line.paraIndex === range.start.paraIndex ? range.start.charOffset : lineStart;
-          const selEnd = line.paraIndex === range.end.paraIndex ? range.end.charOffset : lineEnd;
-          const from = Math.max(selStart, lineStart);
-          const to = Math.min(selEnd, lineEnd);
-          if (to <= from) continue;
-
-          const x1 = xAtChar(line, from);
-          const x2 = xAtChar(line, to);
-          if (x2 <= x1) continue;
-
-          const lineFontSize = line.fontSize ?? fontSize;
-
-          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          rect.setAttribute('x', x1.toFixed(2));
-          rect.setAttribute('y', (line.y - lineFontSize * 0.8).toFixed(2));
-          rect.setAttribute('width', (x2 - x1).toFixed(2));
-          rect.setAttribute('height', (lineFontSize * 1.2).toFixed(2));
-          rect.setAttribute('fill', 'rgba(187, 134, 252, 0.15)');
-          svg.appendChild(rect);
-        }
-      }
 
       function lineBoundaryForCursor(lineMap, cursorPos, side) {
         const line = lineMap[cursorPos.lineIndex] || lineMap.find((l) => l.paraIndex === cursorPos.paraIndex);
@@ -451,16 +420,15 @@
           paragraphLayoutStyles,
         );
         
-        svg.setAttribute('style', 'user-select:none');
-        renderSelection(svg, lineMap, editor.selection, defaultFontSize);
-
         if (cursor) {
           cursor.setStory(editor.story);
           cursor.updateLayout(svg, lineMap, defaultFontSize);
+          cursor.updateSelection(editor.getSelectionRange());
           cursor.moveTo(editor.cursor);
           cursor.setVisible(!editor.hasSelection());
         } else {
           cursor = new TextCursor(svg, editor.story, lineMap, defaultFontSize);
+          cursor.updateSelection(editor.getSelectionRange());
           cursor.moveTo(editor.cursor);
           cursor.setVisible(!editor.hasSelection());
         }
@@ -551,7 +519,12 @@
 
         if (mod && (e.key === 'b' || e.key === 'B')) {
           e.preventDefault();
-          shell.commands.execute('story.bold');
+          shell.commands.execute('text.bold');
+          return;
+        }
+        if (mod && (e.key === 'i' || e.key === 'I')) {
+          e.preventDefault();
+          shell.commands.execute('text.italic');
           return;
         }
         if (mod && (e.key === 'i' || e.key === 'I')) {
@@ -609,10 +582,12 @@
         // Determine if this key is an editor action WITHOUT calling handleKeydown
         // (which mutates state).  handleKeydown is called exactly once, inside the
         // submitAction transform.
+        const isMod = (e.ctrlKey || e.metaKey);
         const wordDel = (e.altKey || (e.ctrlKey && !e.metaKey));
         const isEditorKey = !e.isComposing && (
           e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter' ||
           (wordDel && (e.key === 'Backspace' || e.key === 'Delete')) ||
+          (isMod && (e.key === 'a' || e.key === 'b' || e.key === 'i')) ||
           (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1)
         );
 

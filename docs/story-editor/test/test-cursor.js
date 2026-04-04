@@ -7,6 +7,23 @@ function makeNode(tagName) {
     tagName,
     attributes: {},
     children: [],
+    classList: {
+      add(cls) {
+        if (!this._owner) return;
+        if (!this._owner.attributes['class']) this._owner.attributes['class'] = '';
+        const classes = this._owner.attributes['class'].split(' ').filter(Boolean);
+        if (!classes.includes(cls)) {
+          classes.push(cls);
+          this._owner.attributes['class'] = classes.join(' ');
+        }
+      },
+      remove(cls) {
+        if (!this._owner) return;
+        const classes = (this._owner.attributes['class'] || '').split(' ').filter(Boolean);
+        const filtered = classes.filter(c => c !== cls);
+        this._owner.attributes['class'] = filtered.join(' ');
+      }
+    },
     parentNode: null,
     setAttribute(name, value) {
       this.attributes[name] = String(value);
@@ -24,6 +41,8 @@ function makeNode(tagName) {
       child.parentNode = null;
     },
   };
+  node.classList._owner = node;
+  return node;
 }
 
 function makeSvg() {

@@ -8,7 +8,7 @@ test.describe('Ribbon Cleanup Verification', () => {
 
     test('verify ribbon sections and redundant labels are removed', async ({ page }) => {
         await page.setViewportSize({ width: 800, height: 600 });
-        await page.waitForSelector('scribus-ribbon-section[label="Font"]', { timeout: 60000 });
+        await page.waitForSelector('scribus-ribbon-section[label="Typography"]', { timeout: 60000 });
         
         const sections = page.locator('scribus-ribbon-section');
         const count = await sections.count();
@@ -22,7 +22,7 @@ test.describe('Ribbon Cleanup Verification', () => {
             console.log(`Found section: "${cleanLabel}"`);
             
             if (cleanLabel === 'Story Editor') foundStoryEditor = true;
-            if (cleanLabel === 'Font') {
+            if (cleanLabel === 'Typography') {
                 foundFont = true;
                 const fontSelector = sections.nth(i).locator('scribus-font-selector');
                 

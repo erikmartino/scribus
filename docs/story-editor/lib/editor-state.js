@@ -538,7 +538,26 @@ export class EditorState {
     if (event.key === 'Delete') return this.applyOperation('deleteForward');
     if (event.key === 'Enter') return this.applyOperation('insertParagraphBreak');
 
-    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    const key = event.key;
+    if (event.ctrlKey || event.metaKey) {
+      if (key.toLowerCase() === 'a') {
+        event.preventDefault();
+        this.selectAll();
+        return true;
+      }
+      if (key.toLowerCase() === 'b') {
+        event.preventDefault();
+        this.applyCharacterStyle({ bold: !this.getTypingStyle().bold });
+        return true;
+      }
+      if (key.toLowerCase() === 'i') {
+        event.preventDefault();
+        this.applyCharacterStyle({ italic: !this.getTypingStyle().italic });
+        return true;
+      }
+      return false;
+    }
+    if (event.altKey) return false;
     if (event.key.length === 1) {
       return this.applyOperation('insertText', { text: event.key });
     }

@@ -140,7 +140,18 @@ export class StoryEditorPlugin {
    */
   updateTypingStyle(style) {
     this.submitAction('Update Style', () => {
-      this.editor.applyCharacterStyle(style);
+      if (!this.editor.hasSelection() && style.fontFamily) {
+        // Apply to the entire current paragraph
+        const p = this.editor.cursor.paraIndex;
+        const text = this.editor.story[p].map(r => r.text).join('');
+        const oldPos = { ...this.editor.cursor };
+        this.editor.setSelection({ paraIndex: p, charOffset: 0 }, { paraIndex: p, charOffset: text.length });
+        this.editor.applyCharacterStyle(style);
+        this.editor.clearSelection();
+        this.editor.moveCursor(oldPos);
+      } else {
+        this.editor.applyCharacterStyle(style);
+      }
       // Sync internal state
       this.state.typingStyle = { ...this.state.typingStyle, ...style };
       this.container.focus();

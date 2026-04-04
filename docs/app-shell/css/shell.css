@@ -28,6 +28,8 @@ body, html {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-main);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 scribus-app-shell:not(:defined) {

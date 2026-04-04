@@ -48,9 +48,18 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
 
 7. Check Browser Logs and Verify UI via Playwright. (MANDATORY)
    - When modifying UI or browser-side logic, ALWAYS perform verification using Playwright tests (`app-shell/test/*.spec.js`) rather than manual MCP/browser subagent control.
-   - Playwright tests provide the ONLY reliable way to verify cross-platform keyboard logic (e.g., Mac Command/Meta vs Ctrl) and to audit browser console logs via terminal output.
+   - Playwright tests provide the ONLY reliable way to verify cross-platform keyboard logic (e.g., Mac Command/Meta vs Ctrl). Ensure your test setup includes:
+     ```javascript
+     page.on('console', msg => {
+         console.log(`BROWSER [${msg.type()}]: ${msg.text()}`);
+     });
+     page.on('pageerror', err => {
+         console.error(`BROWSER [error]: ${err.message}`);
+     });
+     ```
    - All tests created or modified during development MUST BE KEPT in the repository to ensure continuous regression-free development.
    - Your final report for the task MUST explicitly state that Playwright tests were run, confirm that console logs were checked via terminal output, and quote any errors found (or confirm 'No console errors found').
+   - **TROUBLESHOOTING**: If an initial visibility/readiness check (e.g., `toBeVisible()`) fails, search the terminal output specifically for `BROWSER [error]` or `SyntaxError`. Do not assume the issue is in the E2E test logic until browser-side crashes have been ruled out.
 
 ## Preferred Workflow
 

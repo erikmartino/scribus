@@ -24,10 +24,14 @@ export class SpreadEditorApp {
     this.selectedBoxId = null;
     this.currentSpread = null;
     this._svg = null;
-    this._interaction = null;
     this.mode = 'object';
+    this._isDragging = false;
+    this._lastClickTime = 0;
     this.shell = shell;
     this._ribbonSections = null; // Cache sections
+    
+    this._fontSize = 20;
+    this._lineHeight = 138;
   }
 
   async init(shell) {
@@ -138,7 +142,15 @@ export class SpreadEditorApp {
       execute: (args) => {
         if (this.mode !== 'text' || !args?.fontFamily) return;
         this.submitAction('Change Font', () => {
-          this.editor.applyCharacterStyle({ fontFamily: args.fontFamily });
+          if (!this.editor.hasSelection()) {
+            // Apply to the entire current paragraph as requested
+            const p = this.editor.cursor.paraIndex;
+            const text = this.editor.story[p].map(r => r.text).join('');
+            this.editor.setSelection({ paraIndex: p, charOffset: 0 }, { paraIndex: p, charOffset: text.length });
+            this.editor.applyCharacterStyle({ fontFamily: args.fontFamily });
+          } else {
+            this.editor.applyCharacterStyle({ fontFamily: args.fontFamily });
+          }
         });
       }
     });
@@ -227,13 +239,30 @@ export class SpreadEditorApp {
         if (doubleClick) {
           this.selectedBoxId = boxId;
           this.setMode('text');
+          // Immediately place cursor on the second click of entry
+          await this._handleTextClick(e);
           return;
         }
 
         if (handle && this._interaction.pointerDown(e, boxId, handle)) {
           return;
         }
+
+        if (this.mode === 'text') {
+            this._isDragging = true;
+            await this._handleTextClick(e);
+        }
       }
+    });
+
+    this.container.addEventListener('pointermove', async (e) => {
+        if (this._isDragging && this.mode === 'text') {
+            await this._handleTextDrag(e);
+        }
+    });
+
+    this.container.addEventListener('pointerup', () => {
+        this._isDragging = false;
     });
 
     this.container.addEventListener('click', async (e) => {
@@ -317,10 +346,29 @@ export class SpreadEditorApp {
   async _handleTextClick(e) {
     if (!this.cursor) return;
     this.container.focus();
+    
+    const now = Date.now();
+    const isDoubleClick = (now - this._lastTextClickTime < 350);
+    this._lastTextClickTime = now;
+
     this.cursor.handleClick(e);
     const pos = this.cursor.getPosition();
     if (!pos) return;
-    this.editor.moveCursor(pos, e.shiftKey);
+
+    if (isDoubleClick) {
+      this.editor.selectWordAt(pos);
+    } else {
+      this.editor.moveCursor(pos, e.shiftKey);
+    }
+    await this.update();
+  }
+
+  async _handleTextDrag(e) {
+    if (!this.cursor) return;
+    this.cursor.handleClick(e); // reused for coord mapping
+    const pos = this.cursor.getPosition();
+    if (!pos) return;
+    this.editor.moveCursor(pos, true);
     await this.update();
   }
 
@@ -440,10 +488,13 @@ export class SpreadEditorApp {
     if (this.cursor) {
       this.cursor.setStory(this.editor.story);
       this.cursor.updateLayout(svg, lineMap, fontSize);
+      this.cursor.updateSelection(this.editor.getSelectionRange());
       this.cursor.moveTo(this.editor.cursor);
       this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
     } else {
       this.cursor = new TextCursor(svg, this.editor.story, lineMap, fontSize);
+      this.cursor.updateLayout(svg, lineMap, fontSize);
+      this.cursor.updateSelection(this.editor.getSelectionRange());
       this.cursor.moveTo(this.editor.cursor);
       this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
     }

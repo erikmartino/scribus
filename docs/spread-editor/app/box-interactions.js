@@ -28,6 +28,7 @@ export class BoxInteractionController {
       start,
       startBox: { ...box },
       moved: false,
+      wasAlreadySelected: !!event.wasAlreadySelected
     };
 
     window.addEventListener('pointermove', this._boundMove);
@@ -62,6 +63,7 @@ export class BoxInteractionController {
 
     const clickThrough = this._state.handle === 'body' && !this._state.moved;
     const boxId = this._state.boxId;
+    const wasAlreadySelected = this._state.wasAlreadySelected;
 
     this._state = null;
     window.removeEventListener('pointermove', this._boundMove);
@@ -69,7 +71,7 @@ export class BoxInteractionController {
     window.removeEventListener('pointercancel', this._boundUp);
 
     if (clickThrough) {
-      this._onBodyClick(event, boxId);
+      this._onBodyClick(event, boxId, wasAlreadySelected);
     }
   }
 

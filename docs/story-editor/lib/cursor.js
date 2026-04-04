@@ -28,15 +28,30 @@ export class TextCursor {
     this._pos = null;    // { paraIndex, charOffset, lineIndex }
     this._stickyX = null; // offset from line's left text edge for up/down
 
+    // Selection rendering
+    this._selectionGroup = document.createElementNS(SVG_NS, 'g');
+    this._selectionGroup.classList.add('text-selection');
+    this._selectionGroup.setAttribute('id', 'text-selection');
+    this._svg.appendChild(this._selectionGroup);
+
     this._cursorEl = document.createElementNS(SVG_NS, 'line');
+    this._cursorEl.classList.add('text-cursor');
+    this._cursorEl.setAttribute('id', 'text-cursor');
     this._cursorEl.setAttribute('stroke', '#1a1a1a');
     this._cursorEl.setAttribute('stroke-width', '1.5');
     this._cursorEl.setAttribute('visibility', 'hidden');
     this._svg.appendChild(this._cursorEl);
 
+    this._blinkingEnabled = false;
     this._visible = false;
     this._blinkInterval = setInterval(() => {
-      if (!this._pos) return;
+      // Only blink if specifically enabled AND we have a position
+      if (!this._blinkingEnabled || !this._pos) {
+        if (this._cursorEl.getAttribute('visibility') !== 'hidden') {
+          this._cursorEl.setAttribute('visibility', 'hidden');
+        }
+        return;
+      }
       this._visible = !this._visible;
       this._cursorEl.setAttribute('visibility', this._visible ? 'visible' : 'hidden');
     }, BLINK_MS);
@@ -51,6 +66,58 @@ export class TextCursor {
     this._pos = { paraIndex: pos.paraIndex, charOffset: pos.charOffset, lineIndex };
     const pt = positionToPoint(this._pos, this._lineMap, this._fontSize);
     if (pt) this._draw(pt.x, pt.y, pt.height);
+  }
+
+  /**
+   * Render selection rectangles for the given range.
+   * @param {{ start: CursorPos, end: CursorPos }|null} range
+   */
+  updateSelection(range) {
+    this._selectionGroup.innerHTML = '';
+    if (!range) return;
+
+    for (const line of this._lineMap) {
+      if (line.paraIndex < range.start.paraIndex || line.paraIndex > range.end.paraIndex) continue;
+      if (!line.positions || line.positions.length === 0) continue;
+
+      const lineStart = line.positions[0].charPos;
+      const lineEnd = line.positions[line.positions.length - 1].charPos;
+      const from = line.paraIndex === range.start.paraIndex ? Math.max(range.start.charOffset, lineStart) : lineStart;
+      const to = line.paraIndex === range.end.paraIndex ? Math.min(range.end.charOffset, lineEnd) : lineEnd;
+      
+      if (to <= from) continue;
+
+      const x1 = this._xAtChar(line, from);
+      const x2 = this._xAtChar(line, to);
+      if (x2 <= x1) continue;
+
+      const lineFontSize = line.fontSize ?? this._fontSize;
+      const rect = document.createElementNS(SVG_NS, 'rect');
+      rect.setAttribute('x', x1.toFixed(2));
+      rect.setAttribute('y', (line.y - lineFontSize * 0.8).toFixed(2));
+      rect.setAttribute('width', (x2 - x1).toFixed(2));
+      rect.setAttribute('height', (lineFontSize * 1.2).toFixed(2));
+      rect.setAttribute('fill', 'rgba(0, 120, 215, 0.25)');
+      this._selectionGroup.appendChild(rect);
+    }
+  }
+
+  _xAtChar(line, charPos) {
+    const positions = line.positions;
+    if (!positions || positions.length === 0) return 0;
+    
+    // Find exact match
+    for (let i = 0; i < positions.length; i++) {
+        if (positions[i].charPos === charPos) return positions[i].x;
+    }
+
+    if (charPos <= positions[0].charPos) return positions[0].x;
+    for (let i = 0; i < positions.length - 1; i++) {
+        if (charPos >= positions[i].charPos && charPos <= positions[i+1].charPos) {
+            return positions[i].x;
+        }
+    }
+    return positions[positions.length - 1].x;
   }
 
   /**
@@ -89,8 +156,9 @@ export class TextCursor {
   }
 
   setVisible(visible) {
-    this._visible = !!visible;
-    this._cursorEl.setAttribute('visibility', this._visible ? 'visible' : 'hidden');
+    this._blinkingEnabled = !!visible;
+    this._visible = this._blinkingEnabled;
+    this._cursorEl.setAttribute('visibility', this._blinkingEnabled ? 'visible' : 'hidden');
   }
 
   /** @param {MouseEvent} event */
@@ -164,6 +232,8 @@ export class TextCursor {
   updateLayout(svg, lineMap, fontSize) {
     if (this._svg !== svg) {
       if (this._cursorEl.parentNode) this._cursorEl.parentNode.removeChild(this._cursorEl);
+      if (this._selectionGroup.parentNode) this._selectionGroup.parentNode.removeChild(this._selectionGroup);
+      svg.appendChild(this._selectionGroup);
       svg.appendChild(this._cursorEl);
       this._svg = svg;
     }
@@ -181,5 +251,6 @@ export class TextCursor {
   destroy() {
     clearInterval(this._blinkInterval);
     if (this._cursorEl.parentNode) this._cursorEl.parentNode.removeChild(this._cursorEl);
+    if (this._selectionGroup.parentNode) this._selectionGroup.parentNode.removeChild(this._selectionGroup);
   }
 }
