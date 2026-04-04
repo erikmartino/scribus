@@ -2,41 +2,37 @@
 
 ## Current State
 
-`docs/story-editor` now includes an implemented editing model (not just render-only).
+`docs/story-editor` includes a fully implemented editing model shared with the Spread Editor.
 
-- [x] pure story mutation operations,
-- [x] central editor state,
-- [x] beforeinput + keydown fallback editing loop,
-- [x] selection + rich clipboard service,
-- [x] cursor/navigation tied to line-map positions,
-- [x] integrated undo/redo transaction history via App Shell,
-- [x] native keyboard shortcuts (Select All, Bold, Italic),
-- [x] unit tests for story ops, editor state, cursor/positions, and layout integration.
+- [x] **Core Model**: Pure story mutation + central editor state.
+- [x] **Editing Loop**: `beforeinput` + `keydown` fallback for precise typing control.
+- [x] **Selection**: Mouse drag-to-select, double-click for words, and triple-click for paragraphs.
+- [x] **Navigation**: Grapheme-boundary-aware cursor tied to line-map positions.
+- [x] **Shared UI**: Centralized `Typography` and `Formatting` ribbon sections used by both Story and Spread editors.
+- [x] **App Shell Integration**: 
+    - [x] Integrated undo/redo transactions via `CommandHistory`.
+    - [x] Rich clipboard service (Story item format).
+    - [x] Native keyboard shortcuts (Select All, Bold/Italic).
+- [x] **Cross-Demo Sharing**: `spread-editor` now consumes `story-editor/lib` via `story-editor-core.js`.
 
 ## Remaining Gaps
 
 1. **Performance**
    - Full-document relayout/rerender still happens per edit.
-   - Paragraph shaping cache is now implemented in `layout-engine`, but line breaking/justification/rendering are still global.
+   - Paragraph shaping cache is implemented in `layout-engine`, but line breaking and justification are still global per paragraph group.
 
-2. **Text correctness depth**
-   - No explicit grapheme-cluster-aware movement/deletion.
-   - IME/composition behavior not deeply validated.
-   - BiDi/complex-script editing behavior not fully addressed.
+2. **Text Correctness**
+   - **Grapheme Clusters**: Basic movement is safe, but explicit cluster-aware deletion (e.g., complex emojis/accents) needs more validation.
+   - **IME/Composition**: Composition events are not deeply tested; composition text should be bypassed or handled natively during the typing session.
+   - **Complex Scripts**: BiDi and script-specific justification rules are currently out of scope.
 
-3. **Editing features**
-   - [x] Rich clipboard support inside the App Shell.
-   - [x] Undo/redo transaction history.
-   - [x] Trailing space cursor movement.
-   - [x] Shared Typography and Formatting UI.
-   - [ ] Multiple font families in the same paragraph (Paragraph-level font for now).
-   - [x] Drag-to-select range.
-   - [x] Double-click for word selection.
+3. **Editing Features**
+   - [ ] **Character Styling**: Support for multiple font families or sizes within the same paragraph (currently paragraph-level).
+   - [ ] **Tab Handling**: Native tab key behavior (indentation vs focus).
 
 ## Recommended Next Milestone
 
 Focus on production-oriented reliability:
-- incremental line layout/render on top of existing shaping cache,
-- [x] integrated undo/redo history,
-- [ ] grapheme-aware cursor/delete semantics,
-- [ ] IME test coverage and handling notes.
+- [ ] Incremental line layout/render on top of existing shaping cache.
+- [ ] Grapheme-aware cursor/delete semantics for all edge cases.
+- [ ] IME test coverage (using Playwright to simulate composition).
