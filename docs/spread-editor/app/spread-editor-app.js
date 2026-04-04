@@ -318,10 +318,6 @@ export class SpreadEditorApp {
       }
     });
 
-    this.container.addEventListener('pointermove', async (e) => {
-      // Box dragging is handled by _interaction
-    });
-
     this.container.addEventListener('pointerup', () => {
         this._isDragging = false;
     });
