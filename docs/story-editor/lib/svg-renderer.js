@@ -63,6 +63,16 @@ export class SvgRenderer {
     return this._padding;
   }
 
+  /** Create a fresh SVG <text> element with standard attributes. */
+  _createTextEl(y, fontSize) {
+    const textEl = document.createElementNS(SVG_NS, 'text');
+    textEl.setAttribute('y', y.toFixed(1));
+    textEl.setAttribute('font-size', fontSize);
+    textEl.setAttribute('fill', '#222');
+    textEl.setAttribute('style', 'user-select:none;pointer-events:none');
+    return textEl;
+  }
+
   /**
    * Render lines into arbitrarily placed boxes.
    *
@@ -117,15 +127,34 @@ export class SvgRenderer {
         const { words, isLastInPara } = entry;
         if (i > 0 && lines[i - 1].isLastInPara) y += paraSpacing;
 
-        const textEl = document.createElementNS(SVG_NS, 'text');
-        textEl.setAttribute('y', y.toFixed(1));
-        textEl.setAttribute('font-size', entryFontSize);
-        textEl.setAttribute('fill', '#222');
-        textEl.setAttribute('style', 'user-select:none;pointer-events:none');
+        let textEl = this._createTextEl(y, entryFontSize);
 
         for (const word of words) {
           for (let fi = 0; fi < word.fragments.length; fi++) {
             const frag = word.fragments[fi];
+
+            // Inline image: render <image> instead of <tspan>
+            if (frag.style && frag.style.inlineImage) {
+              // Flush any pending text element
+              if (textEl.childNodes.length > 0) {
+                svg.appendChild(textEl);
+                textEl = this._createTextEl(y, entryFontSize);
+              }
+              const imgSize = entryFontSize * 3;
+              const imgX = box.x + this._padding + word.x;
+              const imgY = y - entryFontSize;
+              const imgEl = document.createElementNS(SVG_NS, 'image');
+              imgEl.setAttribute('href', frag.style.inlineImage);
+              imgEl.setAttribute('x', imgX.toFixed(2));
+              imgEl.setAttribute('y', imgY.toFixed(2));
+              imgEl.setAttribute('width', String(imgSize));
+              imgEl.setAttribute('height', String(imgSize));
+              imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+              imgEl.setAttribute('style', 'pointer-events:none');
+              svg.appendChild(imgEl);
+              continue;
+            }
+
             const tspan = document.createElementNS(SVG_NS, 'tspan');
             if (fi === 0) tspan.setAttribute('x', (box.x + this._padding + word.x).toFixed(2));
             const attrs = svgAttrsForStyle(frag.style, entryFontFamily);

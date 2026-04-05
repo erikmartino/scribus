@@ -6,6 +6,7 @@ import {
   TextInteractionController,
   extractParagraphStyles,
   buildParagraphLayoutStyles,
+  parseHtmlToStory,
 } from '../lib/story-editor-core.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
@@ -247,11 +248,29 @@ export class SpreadEditorApp {
     this.shell.history.submit(action);
   }
 
-  handlePaste(payload) {
-    if (this.mode !== 'text') return;
+  async handlePaste(payload) {
     if (!payload || !payload.items) return;
-    
-    // 1. Native Story Data (preferred)
+
+    // 1. Image paste
+    const imageItem = payload.items.find(it => it && it.type === 'image');
+    if (imageItem) {
+      const dataUrl = await this._blobToDataUrl(imageItem.data);
+      if (this.mode === 'text') {
+        // Insert inline image placeholder in text flow
+        this.submitAction('Paste Inline Image', () => {
+          const run = { text: '\uFFFC', style: { bold: false, italic: false, inlineImage: dataUrl } };
+          this.editor.insertStory([[run]]);
+        });
+      } else {
+        // Object mode: place image box on the pasteboard
+        this._placeImageBox(dataUrl);
+      }
+      return;
+    }
+
+    if (this.mode !== 'text') return;
+
+    // 2. Native Story Data (preferred)
     const storyItem = payload.items.find(it => it && it.type === 'story');
     if (storyItem && storyItem.story) {
       this.submitAction('Paste Story', () => {
@@ -260,7 +279,19 @@ export class SpreadEditorApp {
       return;
     }
 
-    // 2. Plain Text / Rich Text Fallbacks
+    // 3. Rich text (HTML from external sources)
+    const htmlItem = payload.items.find(it => it && it.type === 'text/html');
+    if (htmlItem) {
+      const story = parseHtmlToStory(htmlItem.data);
+      if (story.length > 0) {
+        this.submitAction('Paste Rich Text', () => {
+          this.editor.insertStory(story);
+        });
+        return;
+      }
+    }
+
+    // 4. Plain Text fallback
     const textItem = payload.items.find(it => it && (it.type === 'plain-text' || it.type === 'rich-text-fragment'));
     if (textItem) {
       this.submitAction('Paste Text', () => {
@@ -276,6 +307,46 @@ export class SpreadEditorApp {
         }
       });
     }
+  }
+
+  /** Convert a Blob or File to a data URL string. */
+  _blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /** Place an image box on the pasteboard centered in the current view. */
+  _placeImageBox(dataUrl) {
+    if (!this._svg || !this.currentSpread) return;
+    const img = new Image();
+    img.onload = () => {
+      // Size the box proportionally, capped at 300px wide
+      const maxW = 300;
+      const scale = Math.min(1, maxW / img.width);
+      const w = img.width * scale;
+      const h = img.height * scale;
+
+      // Place near center of the first page
+      const page = this.currentSpread.pageRects[0];
+      const x = page.x + (page.width - w) / 2;
+      const y = page.y + (page.height - h) / 2;
+
+      // Render the image directly into the SVG as a positioned element
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const imgEl = document.createElementNS(SVG_NS, 'image');
+      imgEl.setAttribute('href', dataUrl);
+      imgEl.setAttribute('x', String(x));
+      imgEl.setAttribute('y', String(y));
+      imgEl.setAttribute('width', String(w));
+      imgEl.setAttribute('height', String(h));
+      imgEl.setAttribute('data-image-box', 'true');
+      this._svg.appendChild(imgEl);
+    };
+    img.src = dataUrl;
   }
 
   setStatus(msg, cls = '') {

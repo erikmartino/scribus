@@ -94,24 +94,58 @@ export class ClipboardService {
         const json = e.clipboardData.getData('application/json') || e.clipboardData.getData('text/plain');
         if (json && (json.startsWith('{"version":') || json.startsWith('{"items":'))) {
            payload = JSON.parse(json);
-        } else if (json) {
-           payload = { items: [{ type: 'plain-text', data: json }] };
+        } else {
+          // Build items array from available clipboard data
+          const items = [];
+          const html = e.clipboardData.getData('text/html');
+          if (html) items.push({ type: 'text/html', data: html });
+          if (json) items.push({ type: 'plain-text', data: json });
+          // Check for pasted images (files on the clipboard)
+          for (const file of (e.clipboardData.files || [])) {
+            if (file.type.startsWith('image/')) {
+              items.push({ type: 'image', data: file, mimeType: file.type });
+            }
+          }
+          if (items.length > 0) payload = { items };
         }
       } else {
         // Manual/Shortcut context (Async)
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
+        const clipItems = await navigator.clipboard.read();
+        for (const item of clipItems) {
           if (item.types.includes('application/json')) {
             const blob = await item.getType('application/json');
             payload = JSON.parse(await blob.text());
-          } else if (item.types.includes('text/plain')) {
+            break;
+          }
+
+          const items = [];
+
+          // Check for image types
+          const imageType = item.types.find(t => t.startsWith('image/'));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            items.push({ type: 'image', data: blob, mimeType: imageType });
+          }
+
+          // Check for HTML
+          if (item.types.includes('text/html')) {
+            const blob = await item.getType('text/html');
+            items.push({ type: 'text/html', data: await blob.text() });
+          }
+
+          // Check for plain text
+          if (item.types.includes('text/plain')) {
             const blob = await item.getType('text/plain');
             const text = await blob.text();
             if (text.startsWith('{"version":') || text.startsWith('{"items":')) {
               payload = JSON.parse(text);
-            } else {
-              payload = { items: [{ type: 'plain-text', data: text }] };
+              break;
             }
+            items.push({ type: 'plain-text', data: text });
+          }
+
+          if (!payload && items.length > 0) {
+            payload = { items };
           }
         }
       }

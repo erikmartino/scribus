@@ -2,6 +2,7 @@ import { selection } from '../../app-shell/lib/selection-service.js';
 import { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
+import { parseHtmlToStory } from './html-paste-parser.js';
 
 /**
  * StoryEditorPlugin - Adapts the Story Editor logic to the Scribus App Shell.
@@ -151,10 +152,21 @@ export class StoryEditorPlugin {
     });
   }
 
-  handlePaste(payload) {
+  async handlePaste(payload) {
     if (!payload || !payload.items) return;
-    
-    // 1. Native Story Data (preferred)
+
+    // 1. Image paste — insert inline image placeholder
+    const imageItem = payload.items.find(it => it && it.type === 'image');
+    if (imageItem) {
+      const dataUrl = await this._blobToDataUrl(imageItem.data);
+      this.submitAction('Paste Inline Image', () => {
+        const run = { text: '\uFFFC', style: { bold: false, italic: false, inlineImage: dataUrl } };
+        this.editor.insertStory([[run]]);
+      });
+      return;
+    }
+
+    // 2. Native Story Data (preferred)
     const storyItem = payload.items.find(it => it && it.type === 'story');
     if (storyItem && storyItem.story) {
       this.submitAction('Paste Story', () => {
@@ -163,11 +175,22 @@ export class StoryEditorPlugin {
       return;
     }
 
-    // 2. Plain Text / Rich Text Fallbacks
+    // 3. Rich text (HTML from external sources)
+    const htmlItem = payload.items.find(it => it && it.type === 'text/html');
+    if (htmlItem) {
+      const story = parseHtmlToStory(htmlItem.data);
+      if (story.length > 0) {
+        this.submitAction('Paste Rich Text', () => {
+          this.editor.insertStory(story);
+        });
+        return;
+      }
+    }
+
+    // 4. Plain Text fallback
     const textItem = payload.items.find(it => it && (it.type === 'plain-text' || it.type === 'rich-text-fragment'));
     if (textItem) {
       this.submitAction('Paste Text', () => {
-        // For rich text, we currently just extract text content for simplicity in this demo
         const raw = textItem.data;
         const text = textItem.type === 'rich-text-fragment' 
           ? raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ') 
@@ -180,6 +203,16 @@ export class StoryEditorPlugin {
         }
       });
     }
+  }
+
+  /** Convert a Blob or File to a data URL string. */
+  _blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
   }
 
   getRibbonSections() {

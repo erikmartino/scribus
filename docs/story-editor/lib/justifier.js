@@ -70,7 +70,8 @@ export function justifyLine(line, text, innerWidth, hyphenAdvance, isLastLine) {
     } else if (ch === SHY) {
       curWord.width += g.ax;
     } else {
-      if (fragStyle && (g.style.bold !== fragStyle.bold || g.style.italic !== fragStyle.italic)) {
+      if (fragStyle && (g.style.bold !== fragStyle.bold || g.style.italic !== fragStyle.italic ||
+          (g.style.inlineImage || '') !== (fragStyle.inlineImage || ''))) {
         flushFrag(g.cl);
       }
       if (fragStart < 0) {
