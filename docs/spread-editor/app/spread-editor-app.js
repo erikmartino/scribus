@@ -293,8 +293,30 @@ export class SpreadEditorApp {
       const boxId = target?.dataset?.boxId;
       const handle = target?.dataset?.handle;
 
-      // If not clicking a box or handle, it's a background click
+      // If not clicking a box or handle, it might be a background click
+      // or a click on text/selection/cursor elements inside the text frame.
       if (!boxId && !handle) {
+        // In text mode, check if the click is inside a text box before
+        // treating it as a background click. Text content (<text>, <tspan>),
+        // selection highlights (#text-selection), and the cursor line
+        // (#text-cursor) don't carry data-box-id, but clicks on them
+        // should stay in text mode and be handled by TextInteractionController.
+        if (this.mode === 'text') {
+          const isTextContent = target?.closest &&
+            (target.closest('#text-selection') || target.closest('#text-cursor') ||
+             target.closest('text'));
+          if (isTextContent) return;
+
+          // Check if click point is geometrically inside a text box
+          const pt = this._interaction._toSvgPoint(e);
+          if (pt) {
+            const inBox = this.boxes.some(b =>
+              pt.x >= b.x && pt.x <= b.x + b.width &&
+              pt.y >= b.y && pt.y <= b.y + b.height
+            );
+            if (inBox) return;
+          }
+        }
         if (this.mode === 'text' || this.selectedBoxId) {
           this.selectedBoxId = null;
           this.setMode('object');

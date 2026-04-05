@@ -41,6 +41,14 @@ describe('ClickTracker', () => {
     assert.equal(tracker.registerClick(1200), 1); // 150ms > 100ms
   });
 
+  it('threshold getter returns the configured threshold', () => {
+    const defaultTracker = new ClickTracker();
+    assert.equal(defaultTracker.threshold, 350);
+
+    const customTracker = new ClickTracker(200);
+    assert.equal(customTracker.threshold, 200);
+  });
+
   it('reset clears state', () => {
     const tracker = new ClickTracker();
     tracker.registerClick(1000);

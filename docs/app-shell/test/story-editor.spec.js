@@ -1,7 +1,18 @@
 import { test, expect } from '@playwright/test';
 
+/** Wire up browser console/error forwarding for diagnostics. */
+function forwardBrowserLogs(page) {
+    page.on('console', msg => {
+        console.log(`BROWSER [${msg.type()}]: ${msg.text()}`);
+    });
+    page.on('pageerror', err => {
+        console.error(`BROWSER [error]: ${err.message}`);
+    });
+}
+
 test.describe('Story Editor Integration', () => {
     test.beforeEach(async ({ page, context }) => {
+        forwardBrowserLogs(page);
         await context.grantPermissions(['clipboard-read', 'clipboard-write']);
         await page.goto('/story-editor/index.html');
         await page.waitForSelector('#svg-container', { timeout: 60000 });
@@ -123,5 +134,46 @@ test.describe('Story Editor Integration', () => {
 
         const secondParaSize = await fontSizeInput.evaluate(el => el.value);
         expect(Number(secondParaSize)).toBe(22);
+    });
+
+    test('double-click on existing selection narrows to word', async ({ page }) => {
+        const editor = page.locator('#svg-container');
+        await editor.focus();
+
+        // Select all text first to create a large selection
+        await page.keyboard.press('ControlOrMeta+a');
+        await page.waitForTimeout(300);
+
+        // Verify we have a selection (selection rects should be present)
+        const selRectsBeforeCount = await page.locator('#svg-container svg #text-selection rect').count();
+        expect(selRectsBeforeCount).toBeGreaterThan(0);
+
+        // Find the bounding box of the first <text> element (first line of text)
+        const firstTextBBox = await page.evaluate(() => {
+            const textEl = document.querySelector('#svg-container svg text');
+            if (!textEl) return null;
+            const svg = textEl.closest('svg');
+            const ctm = svg.getScreenCTM();
+            const bbox = textEl.getBBox();
+            // Convert SVG coords to screen coords
+            const pt = svg.createSVGPoint();
+            // Click roughly in the middle of the first line, horizontally
+            pt.x = bbox.x + bbox.width * 0.3;
+            pt.y = bbox.y + bbox.height * 0.5;
+            const screenPt = pt.matrixTransform(ctm);
+            return { x: screenPt.x, y: screenPt.y };
+        });
+        expect(firstTextBBox).toBeTruthy();
+
+        // Double-click on the text (within the existing select-all selection)
+        await page.mouse.dblclick(firstTextBBox.x, firstTextBBox.y);
+        await page.waitForTimeout(500);
+
+        // After double-click, selection should exist but be narrower (a word, not all text)
+        const selRectsAfterCount = await page.locator('#svg-container svg #text-selection rect').count();
+        // A word selection should produce fewer highlight rects than select-all
+        // (select-all covers many lines, word selection covers at most 1 line)
+        expect(selRectsAfterCount).toBeGreaterThan(0);
+        expect(selRectsAfterCount).toBeLessThan(selRectsBeforeCount);
     });
 });

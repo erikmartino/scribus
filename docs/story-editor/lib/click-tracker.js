@@ -21,6 +21,11 @@ export class ClickTracker {
     return this._clickCount;
   }
 
+  /** @returns {number} the multi-click threshold in ms */
+  get threshold() {
+    return this._threshold;
+  }
+
   /**
    * Register a click at the given timestamp.
    * @param {number} now — timestamp in ms (e.g. Date.now())

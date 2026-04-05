@@ -75,6 +75,47 @@ test.describe('Spread Editor Interaction Gestures', () => {
     await expect(selection.first()).toBeVisible({ timeout: 10000 });
   });
 
+  test('clicking on selected text stays in text mode and places cursor', async ({ page }) => {
+    const box = page.locator('.box-rect').first();
+    // 0. Deselect initially selected box
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+
+    // Enter text mode
+    await box.click();
+    await box.click();
+
+    const shell = page.locator('scribus-app-shell');
+    await expect(shell).toHaveAttribute('data-mode', 'text');
+
+    // Select all text
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.waitForTimeout(300);
+
+    // Verify selection exists
+    const selectionRects = page.locator('.text-selection rect');
+    await expect(selectionRects.first()).toBeVisible({ timeout: 5000 });
+
+    // Click on the selected text — should stay in text mode.
+    // Wait to ensure previous clicks expire the multi-click threshold.
+    await page.waitForTimeout(400);
+    const boxBounds = await box.boundingBox();
+    if (!boxBounds) throw new Error('Box not found');
+    await page.mouse.click(boxBounds.x + 40, boxBounds.y + 30);
+    await page.waitForTimeout(800);
+
+    // Must still be in text mode
+    await expect(shell).toHaveAttribute('data-mode', 'text');
+
+    // Selection should be collapsed (no selection rects after single click)
+    const afterClickRects = await page.locator('.text-selection rect').count();
+    expect(afterClickRects).toBe(0);
+
+    // Cursor should be visible
+    const cursor = page.locator('#text-cursor');
+    await expect(cursor).toBeAttached();
+  });
+
   test('changing font family without selection should apply to whole paragraph', async ({ page }) => {
     const box = page.locator('.box-rect').first();
     // 0. Deselect initially selected box

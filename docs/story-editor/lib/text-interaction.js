@@ -19,6 +19,7 @@ export class TextInteractionController {
     this._dragMode = 'char';
     this._keydownHandled = false;
     this._clickTracker = new ClickTracker();
+    this._pendingSingleClickTimer = null;
 
     this._bindEvents();
   }
@@ -44,6 +45,10 @@ export class TextInteractionController {
   }
 
   destroy() {
+    if (this._pendingSingleClickTimer != null) {
+      clearTimeout(this._pendingSingleClickTimer);
+      this._pendingSingleClickTimer = null;
+    }
     this.container.removeEventListener('pointerdown', this._onPointerDown);
     document.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerup', this._onPointerUp);
@@ -62,6 +67,12 @@ export class TextInteractionController {
     // but we use manual container.focus() to be safe.
     this.container.focus();
 
+    // Cancel any pending single-click update — a new click arrived
+    if (this._pendingSingleClickTimer != null) {
+      clearTimeout(this._pendingSingleClickTimer);
+      this._pendingSingleClickTimer = null;
+    }
+
     this.cursor.handleClick(e);
     const pos = this.cursor.getPosition();
     if (!pos) return;
@@ -79,8 +90,27 @@ export class TextInteractionController {
       const base = this.editor.selection?.anchor || { paraIndex: pos.paraIndex, charOffset: pos.charOffset };
       this._dragAnchor = { paraIndex: base.paraIndex, charOffset: base.charOffset };
     } else {
+      // Single click: place cursor and clear selection immediately so the
+      // user gets instant visual feedback (caret appears, selection rects
+      // disappear). Defer the full re-layout update — if a rapid second
+      // click arrives (double-click), we cancel the deferred update and go
+      // straight to word selection without an intermediate render flash.
       this.editor.moveCursor(pos, false);
       this._dragAnchor = { paraIndex: pos.paraIndex, charOffset: pos.charOffset };
+      this._dragMode = mode;
+      this._selecting = true;
+      this._dragMoved = false;
+
+      // Lightweight visual update: clear selection highlights and show caret
+      this.cursor.updateSelection(null);
+      this.cursor.moveTo(this.editor.cursor);
+      this.cursor.setVisible(true);
+
+      this._pendingSingleClickTimer = setTimeout(async () => {
+        this._pendingSingleClickTimer = null;
+        await this.update();
+      }, this._clickTracker.threshold);
+      return;
     }
     this._dragMode = mode;
 
@@ -91,6 +121,14 @@ export class TextInteractionController {
 
   async _handlePointerMove(e) {
     if (!this.enabled() || !this._selecting || !this.cursor || !this._dragAnchor) return;
+
+    // If a deferred single-click update is pending and the user starts
+    // dragging, flush it immediately so the selection renders.
+    if (this._pendingSingleClickTimer != null) {
+      clearTimeout(this._pendingSingleClickTimer);
+      this._pendingSingleClickTimer = null;
+      await this.update();
+    }
 
     this.cursor.handleClick(e);
     const pos = this.cursor.getPosition();
@@ -122,6 +160,13 @@ export class TextInteractionController {
   _handlePointerUp() {
     this._selecting = false;
     this._dragAnchor = null;
+    // If a deferred single-click update is still pending (no drag, no
+    // double-click), flush it now on pointer-up so the caret renders.
+    if (this._pendingSingleClickTimer != null) {
+      clearTimeout(this._pendingSingleClickTimer);
+      this._pendingSingleClickTimer = null;
+      this.update();
+    }
   }
 
   async _handleKeyDown(e) {
