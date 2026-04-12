@@ -229,6 +229,7 @@ The server exposes a flat file-shaped REST surface under `/store/`.
 |---|---|---|
 | `GET` | `/store/{user}/{doc}/` | List document files (JSON array of relative paths) |
 | `GET` | `/store/{user}/{doc}/{dir}.aggregate.json` | Aggregate: read all `.json` files in `{dir}/`, return as JSON array |
+| `GET` | `/store/{user}/{doc}/stories/{id}/edit` | Serve the story editor for this story |
 | `GET` | `/store/{user}/{doc}/{file...}` | Return file content |
 | `PUT` | `/store/{user}/{doc}/{file...}` | Create or overwrite file; parent dirs created automatically |
 | `DELETE`| `/store/{user}/{doc}/{file...}` | Remove a file (optional, for cleanup) |

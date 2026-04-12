@@ -136,9 +136,9 @@ test.describe('Story Editor Integration', () => {
         expect(Number(secondParaSize)).toBe(22);
     });
 
-    test('loads story from document store via ?doc= parameter', async ({ page }) => {
-        // Navigate to the story editor with the store document URL
-        await page.goto('/story-editor/index.html?doc=demo/typography-sampler&story=story-main');
+    test('loads story from document store via /edit URL', async ({ page }) => {
+        // Navigate to the story editor via the store /edit route
+        await page.goto('/store/demo/typography-sampler/stories/story-main/edit');
         await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
 
         // Verify the store-loaded text is rendered (not the hardcoded sample).

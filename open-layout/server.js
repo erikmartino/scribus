@@ -291,6 +291,16 @@ function aggregateJsonFiles(dirPath, callback) {
 function handleStoreRequest(req, res, pathname) {
   const method = req.method;
 
+  // --- /edit suffix: serve the story editor for a store story ---
+  // GET /store/{user}/{doc}/stories/{storyId}/edit
+  //   → serve story-editor/index.html (the editor reads its own URL to
+  //     derive the document path and story id).
+  if (method === 'GET' && pathname.endsWith('/edit')) {
+    const editorPath = path.join(rootDir, 'story-editor', 'index.html');
+    serveFile(editorPath, res);
+    return;
+  }
+
   // --- Aggregation via virtual file extension ---
   // GET .../styles/paragraph.aggregate.json
   //   → read all .json files in .../styles/paragraph/ and return as array.
