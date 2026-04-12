@@ -1,0 +1,12 @@
+{
+  "assets": [
+    {
+      "hash": "a1b2c3d4",
+      "filename": "hero-photo.jpg",
+      "mime": "image/jpeg",
+      "width": 3000,
+      "height": 2000,
+      "sizeBytes": 1482930
+    }
+  ]
+}

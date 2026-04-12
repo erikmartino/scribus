@@ -1,0 +1,26 @@
+{
+  "id": "spread-2",
+  "pages": [
+    { "index": 1, "label": "2" }
+  ],
+  "frames": [
+    {
+      "id": "frame-body",
+      "type": "text",
+      "x": 20,
+      "y": 20,
+      "width": 80,
+      "height": 260,
+      "storyRef": "story-body"
+    },
+    {
+      "id": "frame-sidebar",
+      "type": "text",
+      "x": 110,
+      "y": 20,
+      "width": 80,
+      "height": 260,
+      "storyRef": "story-sidebar"
+    }
+  ]
+}

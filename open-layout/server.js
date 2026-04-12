@@ -7,6 +7,7 @@ import path from 'node:path';
 import url from 'node:url';
 
 const rootDir = process.cwd();
+const storeDir = path.join(rootDir, 'store');
 const portArg = process.argv[2];
 const parsedPort = Number(portArg);
 const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 8000;
@@ -25,6 +26,21 @@ const MIME = {
   '.webp': 'image/webp',
   '.wasm': 'application/wasm',
   '.txt': 'text/plain; charset=utf-8',
+  // DTP / print-relevant formats
+  '.pdf': 'application/pdf',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.eps': 'application/postscript',
+  '.ai': 'application/postscript',
+  '.psd': 'image/vnd.adobe.photoshop',
+  '.avif': 'image/avif',
+  '.heic': 'image/heic',
+  '.icc': 'application/vnd.iccprofile',
+  '.icm': 'application/vnd.iccprofile',
+  '.otf': 'font/otf',
+  '.ttf': 'font/ttf',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
 };
 
 const VENDOR_MAP = {
@@ -183,10 +199,140 @@ function serveDirectoryListing(dirPath, requestPath, res) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Document store — GET / PUT / DELETE under /store/{user}/{doc}/{path...}
+// ---------------------------------------------------------------------------
+
+function safeResolveStorePath(pathname) {
+  // Strip the /store prefix and resolve against storeDir.
+  const relative = pathname.replace(/^\/store\/?/, '');
+  const decoded = decodeURIComponent(relative);
+  const fullPath = path.resolve(storeDir, decoded);
+  if (!fullPath.startsWith(path.resolve(storeDir))) return null;
+  return fullPath;
+}
+
+// Recursively list all files under `dir`, returning paths relative to `base`.
+function listFilesRecursive(dir, base, callback) {
+  const results = [];
+  const walk = (current, done) => {
+    fs.readdir(current, { withFileTypes: true }, (err, entries) => {
+      if (err) { done(err); return; }
+      let pending = entries.length;
+      if (pending === 0) { done(null); return; }
+      for (const entry of entries) {
+        const full = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          walk(full, (walkErr) => {
+            if (walkErr) { done(walkErr); return; }
+            if (--pending === 0) done(null);
+          });
+        } else {
+          results.push(path.relative(base, full));
+          if (--pending === 0) done(null);
+        }
+      }
+    });
+  };
+  walk(dir, (err) => callback(err, results));
+}
+
+function handleStoreRequest(req, res, pathname) {
+  const filePath = safeResolveStorePath(pathname);
+  if (!filePath) {
+    sendError(res, 400, 'Bad Request: invalid path');
+    return;
+  }
+
+  const method = req.method;
+
+  // --- PUT: write a file, creating parent dirs as needed ---
+  if (method === 'PUT') {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      const data = Buffer.concat(chunks);
+      try {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      } catch (mkdirErr) {
+        sendError(res, 500, `Cannot create directory: ${mkdirErr.message}`);
+        return;
+      }
+      const existed = fs.existsSync(filePath);
+      fs.writeFile(filePath, data, (writeErr) => {
+        if (writeErr) {
+          sendError(res, 500, `Write failed: ${writeErr.message}`);
+          return;
+        }
+        res.statusCode = existed ? 200 : 201;
+        setIsolationHeaders(res);
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.end(existed ? 'Updated' : 'Created');
+      });
+    });
+    return;
+  }
+
+  // --- DELETE: remove a file ---
+  if (method === 'DELETE') {
+    fs.unlink(filePath, (unlinkErr) => {
+      if (unlinkErr) {
+        sendError(res, 404, 'Not Found');
+        return;
+      }
+      res.statusCode = 204;
+      setIsolationHeaders(res);
+      res.end();
+    });
+    return;
+  }
+
+  // --- GET: serve file or directory listing ---
+  if (method !== 'GET') {
+    sendError(res, 405, 'Method Not Allowed');
+    return;
+  }
+
+  fs.stat(filePath, (statErr, stat) => {
+    if (statErr) {
+      sendError(res, 404, 'Not Found');
+      return;
+    }
+
+    if (stat.isDirectory()) {
+      listFilesRecursive(filePath, filePath, (listErr, files) => {
+        if (listErr) {
+          sendError(res, 500, `Listing failed: ${listErr.message}`);
+          return;
+        }
+        files.sort();
+        res.statusCode = 200;
+        setIsolationHeaders(res);
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify(files, null, 2));
+      });
+      return;
+    }
+
+    serveFile(filePath, res);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Main request handler
+// ---------------------------------------------------------------------------
+
 const server = http.createServer((req, res) => {
   try {
     const parsed = new url.URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = parsed.pathname;
+
+    // Document store routes.
+    if (pathname.startsWith('/store')) {
+      handleStoreRequest(req, res, pathname);
+      return;
+    }
+
     const filePath = safeResolvePath(pathname);
 
     if (!filePath) {
@@ -234,4 +380,5 @@ const server = http.createServer((req, res) => {
 server.listen(port, () => {
   console.log(`Serving heavily-threaded webapps at http://localhost:${port}`);
   console.log('Cross-Origin-Isolation headers are ACTIVE (SAB enabled).');
+  console.log(`Document store API at http://localhost:${port}/store/`);
 });

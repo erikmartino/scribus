@@ -1,0 +1,9 @@
+{
+  "format": "open-layout/v1",
+  "title": "Q2 Product Brochure",
+  "created": "2026-04-12T10:00:00Z",
+  "modified": "2026-04-12T14:32:00Z",
+  "defaultUnits": "mm",
+  "pageSize": { "width": 210, "height": 297 },
+  "bleed": { "top": 3, "right": 3, "bottom": 3, "left": 3 }
+}

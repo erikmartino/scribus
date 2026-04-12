@@ -1,0 +1,11 @@
+{
+  "id": "story-title",
+  "paragraphs": [
+    {
+      "styleRef": "heading-1",
+      "runs": [
+        { "text": "Introducing the Q2 Lineup", "style": {} }
+      ]
+    }
+  ]
+}

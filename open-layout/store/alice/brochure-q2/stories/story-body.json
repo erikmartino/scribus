@@ -1,0 +1,25 @@
+{
+  "id": "story-body",
+  "paragraphs": [
+    {
+      "styleRef": "heading-2",
+      "runs": [
+        { "text": "Product Details", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "The first product in the lineup is a vector illustration tool that runs entirely in the browser. It supports SVG export and real-time co-editing through git-based workflows.", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "Performance benchmarks show a ", "style": {} },
+        { "text": "3x improvement", "style": { "bold": true } },
+        { "text": " over the previous generation, thanks to WebAssembly-powered text shaping and layout.", "style": {} }
+      ]
+    }
+  ]
+}

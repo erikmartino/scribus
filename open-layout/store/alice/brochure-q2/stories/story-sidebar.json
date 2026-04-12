@@ -1,0 +1,29 @@
+{
+  "id": "story-sidebar",
+  "paragraphs": [
+    {
+      "styleRef": "heading-2",
+      "runs": [
+        { "text": "Quick Facts", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "Release date: June 2026", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "License: GPL v2+", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "Platforms: Web, Linux, macOS, Windows", "style": {} }
+      ]
+    }
+  ]
+}

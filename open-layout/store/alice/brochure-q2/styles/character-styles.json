@@ -1,0 +1,12 @@
+{
+  "styles": [
+    {
+      "id": "emphasis",
+      "italic": true
+    },
+    {
+      "id": "strong",
+      "bold": true
+    }
+  ]
+}
