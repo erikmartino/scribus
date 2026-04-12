@@ -266,6 +266,7 @@
       buildParagraphLayoutStyles,
     } from './lib/paragraph-style-render.js';
     import { TextInteractionController } from './lib/text-interaction.js';
+    import { loadStoryFromStore } from './lib/store-loader.js';
 
     function updateStatus(msg, isOk = true) {
       console.log(`[Status] ${msg}`);
@@ -293,11 +294,36 @@
         console.error(err);
         return;
       }
-      const sampleEl = document.getElementById('sample-text');
       const container = document.getElementById('svg-container');
       const defaultFontSize = 22;
-      const story = extractParagraphs(sampleEl);
-      const paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
+
+      // Load story from the document store if ?doc= and ?story= are provided,
+      // otherwise fall back to the hardcoded #sample-text.
+      const params = new URLSearchParams(location.search);
+      const docPath = params.get('doc');
+      const storyId = params.get('story') || 'story-main';
+
+      let story, paragraphStyles;
+      if (docPath) {
+        try {
+          updateStatus(`Loading story from /store/${docPath}/...`);
+          const loaded = await loadStoryFromStore(docPath, storyId);
+          story = loaded.story;
+          paragraphStyles = loaded.paragraphStyles;
+          updateStatus('Loaded from store', true);
+        } catch (loadErr) {
+          console.warn('Store load failed, using built-in sample:', loadErr);
+          updateStatus('Store load failed — using built-in sample');
+          const sampleEl = document.getElementById('sample-text');
+          story = extractParagraphs(sampleEl);
+          paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
+        }
+      } else {
+        const sampleEl = document.getElementById('sample-text');
+        story = extractParagraphs(sampleEl);
+        paragraphStyles = extractParagraphStyles(sampleEl, defaultFontSize);
+      }
+
       const editor = new EditorState(story, paragraphStyles);
       
       const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles, container);

@@ -136,6 +136,38 @@ test.describe('Story Editor Integration', () => {
         expect(Number(secondParaSize)).toBe(22);
     });
 
+    test('loads story from document store via ?doc= parameter', async ({ page }) => {
+        // Navigate to the story editor with the store document URL
+        await page.goto('/story-editor/index.html?doc=demo/typography-sampler&story=story-main');
+        await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
+
+        // Verify the store-loaded text is rendered (not the hardcoded sample).
+        // Words are rendered as separate <tspan> elements, so check individually.
+        const svgHTML = await page.locator('#svg-container svg').innerHTML();
+        expect(svgHTML).toContain('Typography');
+        expect(svgHTML).toContain('Sampler');
+        expect(svgHTML).toContain('invisible');
+        expect(svgHTML).toContain('felt');
+
+        // The hardcoded sample text should NOT be present
+        expect(svgHTML).not.toContain('Aaffable griffin');
+
+        // Verify italic and bold styling survived the store→editor conversion
+        // "invisible" should be italic, "felt" should be bold
+        expect(svgHTML).toContain('font-style="italic"');
+        expect(svgHTML).toContain('font-weight="bold"');
+
+        // Verify the editor is interactive — type something
+        const editor = page.locator('#svg-container');
+        await editor.focus();
+        await page.keyboard.press('End');
+        await page.waitForTimeout(100);
+        await page.keyboard.type('ZQX', { delay: 50 });
+        await page.waitForTimeout(500);
+        const afterType = await page.locator('#svg-container svg').innerHTML();
+        expect(afterType).toContain('ZQX');
+    });
+
     test('double-click on existing selection narrows to word', async ({ page }) => {
         const editor = page.locator('#svg-container');
         await editor.focus();

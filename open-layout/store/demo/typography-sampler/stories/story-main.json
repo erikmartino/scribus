@@ -1,0 +1,29 @@
+{
+  "id": "story-main",
+  "paragraphs": [
+    {
+      "styleRef": "lead",
+      "runs": [
+        { "text": "Typography Sampler", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "Good typography is ", "style": {} },
+        { "text": "invisible", "style": { "italic": true } },
+        { "text": "; great typography is ", "style": {} },
+        { "text": "felt", "style": { "bold": true } },
+        { "text": ". Ligatures like fi, fl, ffi, and ffl stitch letters into fluid shapes.", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "From justified columns to careful kerning, every ", "style": {} },
+        { "text": "detail affects", "style": { "bold": true, "italic": true } },
+        { "text": " the final impression on the page.", "style": {} }
+      ]
+    }
+  ]
+}

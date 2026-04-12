@@ -237,14 +237,94 @@ function listFilesRecursive(dir, base, callback) {
   walk(dir, (err) => callback(err, results));
 }
 
+// Aggregate JSON entries from a directory.  Collects from two sources:
+//   1. Any .json files directly in the directory  (flat collections)
+//   2. meta.json inside each immediate subdirectory (per-entry folders)
+// Returns them as a single sorted array via callback(err, items).
+function aggregateJsonFiles(dirPath, callback) {
+  fs.readdir(dirPath, { withFileTypes: true }, (err, entries) => {
+    if (err) { callback(err, null); return; }
+
+    // Build list of JSON file paths to read, keyed for sort order.
+    const filesToRead = []; // { sortKey, filePath }
+
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.json')) {
+        filesToRead.push({ sortKey: entry.name, filePath: path.join(dirPath, entry.name) });
+      } else if (entry.isDirectory()) {
+        const metaPath = path.join(dirPath, entry.name, 'meta.json');
+        filesToRead.push({ sortKey: entry.name, filePath: metaPath });
+      }
+    }
+
+    filesToRead.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    if (filesToRead.length === 0) { callback(null, []); return; }
+
+    const results = [];
+    let pending = filesToRead.length;
+    let failed = false;
+
+    for (let i = 0; i < filesToRead.length; i++) {
+      const { filePath: fp, sortKey } = filesToRead[i];
+      const idx = i;
+      fs.readFile(fp, 'utf-8', (readErr, data) => {
+        if (failed) return;
+        if (readErr) {
+          // Subdirectory without meta.json — skip silently.
+          results[idx] = null;
+          if (--pending === 0) callback(null, results.filter(r => r !== null));
+          return;
+        }
+        try {
+          results[idx] = JSON.parse(data);
+        } catch (parseErr) {
+          failed = true;
+          callback(new Error(`Bad JSON in ${sortKey}: ${parseErr.message}`), null);
+          return;
+        }
+        if (--pending === 0) callback(null, results.filter(r => r !== null));
+      });
+    }
+  });
+}
+
 function handleStoreRequest(req, res, pathname) {
+  const method = req.method;
+
+  // --- Aggregation via virtual file extension ---
+  // GET .../styles/paragraph.aggregate.json
+  //   → read all .json files in .../styles/paragraph/ and return as array.
+  if (method === 'GET' && pathname.endsWith('.aggregate.json')) {
+    const dirPathname = pathname.slice(0, -'.aggregate.json'.length);
+    const dirPath = safeResolveStorePath(dirPathname);
+    if (!dirPath) {
+      sendError(res, 400, 'Bad Request: invalid path');
+      return;
+    }
+    fs.stat(dirPath, (statErr, stat) => {
+      if (statErr || !stat.isDirectory()) {
+        sendError(res, 404, 'Not Found');
+        return;
+      }
+      aggregateJsonFiles(dirPath, (aggErr, items) => {
+        if (aggErr) {
+          sendError(res, 500, `Aggregation failed: ${aggErr.message}`);
+          return;
+        }
+        res.statusCode = 200;
+        setIsolationHeaders(res);
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify(items, null, 2));
+      });
+    });
+    return;
+  }
+
   const filePath = safeResolveStorePath(pathname);
   if (!filePath) {
     sendError(res, 400, 'Bad Request: invalid path');
     return;
   }
-
-  const method = req.method;
 
   // --- PUT: write a file, creating parent dirs as needed ---
   if (method === 'PUT') {
