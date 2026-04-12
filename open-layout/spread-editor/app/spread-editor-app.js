@@ -26,6 +26,8 @@ export class SpreadEditorApp {
     this.cursor = null;
     this.hasBeforeInput = 'onbeforeinput' in document;
     this.boxes = [];
+    this.imageBoxes = [];
+    this._imageBoxCounter = 0;
     this.selectedBoxId = null;
     this.currentSpread = null;
     this._svg = null;
@@ -63,16 +65,22 @@ export class SpreadEditorApp {
       this._interaction = new BoxInteractionController({
         getSvg: () => this._svg,
         getBounds: () => this.currentSpread?.pasteboardRect,
-        getBoxes: () => this.boxes,
+        getBoxes: () => [...this.boxes, ...this.imageBoxes],
         setBoxes: (next) => {
-          this.boxes = typeof next === 'function' ? next(this.boxes) : next;
+          const all = [...this.boxes, ...this.imageBoxes];
+          const updated = typeof next === 'function' ? next(all) : next;
+          // Partition back into text boxes and image boxes
+          this.boxes = updated.filter(b => !b.imageUrl);
+          this.imageBoxes = updated.filter(b => !!b.imageUrl);
           this.update(); // fire-and-forget from interaction handler
         },
         onSelectBox: (boxId) => {
           this.selectedBoxId = boxId;
         },
         onBodyClick: async (event, boxId, wasAlreadySelected) => {
-          if (this.mode === 'object' && wasAlreadySelected) {
+          // Image boxes don't support text editing — skip enter-text-mode
+          const isImageBox = this.imageBoxes.some(b => b.id === boxId);
+          if (this.mode === 'object' && wasAlreadySelected && !isImageBox) {
             this.setMode('text');
             if (this._textInteraction) {
               await this._textInteraction._handlePointerDown(event);
@@ -228,7 +236,8 @@ export class SpreadEditorApp {
     const prevState = {
       editorState: this.editor.getState(),
       fontSize: this._fontSize,
-      lineHeight: this._lineHeight
+      lineHeight: this._lineHeight,
+      imageBoxes: this.imageBoxes.map(b => ({ ...b })),
     };
 
     const action = {
@@ -241,6 +250,7 @@ export class SpreadEditorApp {
         this.editor.setState(prevState.editorState);
         this._fontSize = prevState.fontSize;
         this._lineHeight = prevState.lineHeight;
+        this.imageBoxes = prevState.imageBoxes;
         await this.update();
       }
     };
@@ -321,7 +331,7 @@ export class SpreadEditorApp {
 
   /** Place an image box on the pasteboard centered in the current view. */
   _placeImageBox(dataUrl) {
-    if (!this._svg || !this.currentSpread) return;
+    if (!this.currentSpread) return;
     const img = new Image();
     img.onload = () => {
       // Size the box proportionally, capped at 300px wide
@@ -335,18 +345,45 @@ export class SpreadEditorApp {
       const x = page.x + (page.width - w) / 2;
       const y = page.y + (page.height - h) / 2;
 
-      // Render the image directly into the SVG as a positioned element
-      const SVG_NS = 'http://www.w3.org/2000/svg';
-      const imgEl = document.createElementNS(SVG_NS, 'image');
-      imgEl.setAttribute('href', dataUrl);
-      imgEl.setAttribute('x', String(x));
-      imgEl.setAttribute('y', String(y));
-      imgEl.setAttribute('width', String(w));
-      imgEl.setAttribute('height', String(h));
-      imgEl.setAttribute('data-image-box', 'true');
-      this._svg.appendChild(imgEl);
+      const boxId = `image-${++this._imageBoxCounter}`;
+      const imageBox = {
+        id: boxId,
+        x, y, width: w, height: h,
+        minWidth: 20, minHeight: 20,
+        imageUrl: dataUrl,
+      };
+
+      this.submitAction('Paste Image Box', () => {
+        this.imageBoxes = [...this.imageBoxes, imageBox];
+        this.selectedBoxId = boxId;
+      });
     };
     img.src = dataUrl;
+  }
+
+  /** Render all image boxes as SVG <image> elements inside the given SVG. */
+  _renderImageBoxes(svg) {
+    // Remove any previous image-box layer
+    const prev = svg.querySelector('[data-layer="image-boxes"]');
+    if (prev) prev.remove();
+
+    if (this.imageBoxes.length === 0) return;
+
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('data-layer', 'image-boxes');
+    svg.appendChild(g);
+
+    for (const box of this.imageBoxes) {
+      const imgEl = document.createElementNS(SVG_NS, 'image');
+      imgEl.setAttribute('href', box.imageUrl);
+      imgEl.setAttribute('x', String(box.x));
+      imgEl.setAttribute('y', String(box.y));
+      imgEl.setAttribute('width', String(box.width));
+      imgEl.setAttribute('height', String(box.height));
+      imgEl.setAttribute('data-image-box', 'true');
+      imgEl.setAttribute('pointer-events', 'none');
+      g.appendChild(imgEl);
+    }
   }
 
   setStatus(msg, cls = '') {
@@ -538,8 +575,12 @@ export class SpreadEditorApp {
     }
 
     this.decorateSpread(svg, spread.pageRects, spread);
+
+    // Render image boxes into the SVG (they are not part of text layout)
+    this._renderImageBoxes(svg);
+
     drawBoxOverlay(svg, {
-      boxes: this.boxes,
+      boxes: [...this.boxes, ...this.imageBoxes],
       selectedBoxId: this.selectedBoxId,
     });
     svg.setAttribute('width', String(spread.pasteboardRect.width));

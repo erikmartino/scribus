@@ -1,6 +1,10 @@
-# DTP Interaction Model & User Interface Guidelines
+# Spread Editor User Interface Plan
 
-This document outlines the standard, expected interactions for desktop publishing (DTP) software (like Scribus, InDesign, or Figma) and evaluates how our current Spread Editor prototype compares to these established patterns.
+Date: 2026-04-12
+
+Status: Active planning reference.
+
+This plan tracks expected desktop publishing interaction behavior and current Spread Editor parity.
 
 ## 1. Object Selection & Mode Transitions
 
@@ -14,7 +18,8 @@ In a DTP application, users seamlessly transition between moving boxes on the ca
 - **Drag to Select Text:** If the application is already in Text Mode, clicking and dragging over the text should *select text ranges*, blocking the ability to drag the box itself (preventing conflicting gestures).
 
 ### Current Implementation Status
-✅ Our Spread Editor now perfectly mirrors this flow. A single click selects the box. A subsequent single click enters text mode inline. Box dragging is explicitly disabled while in Text Mode to prioritize text selection, and clicking the background successfully clears all states.
+
+Implemented: object selection, re-click to enter text mode, object drag in object mode, and background click deselection.
 
 ## 2. Text Selection Gestures
 
@@ -28,9 +33,12 @@ When operating natively inside text mode, a robust set of mouse gestures is mand
 - **Shift + Drag:** Holding `Shift` while dragging expands the current highlighted selection dynamically without dropping the original anchor point.
 
 ### Current Implementation Status
-✅ We handle single, double, and triple clicks accurately via manual interval tracking in `TextInteractionController` (circumventing W3C `PointerEvent.detail` discrepancies). 
-✅ `Shift + Click` ranges are supported by evaluating `e.shiftKey` and branching into `editor.moveCursor(pos, true)`. 
-❌ **Missing/Incomplete:** We currently do not have robust gesture support for `Shift + Drag` continuous selection adjustments.
+
+Implemented: single, double, triple click selection and shift+click anchored extension.
+
+Missing/incomplete:
+- Robust shift+drag continuous extension behavior across line boundaries.
+- Explicit acceptance tests for reverse-direction range extension and anchor preservation.
 
 ## 3. Visual Cursors & Mouse States
 
@@ -43,7 +51,13 @@ Proper contextual mouse cursors immediately hint to the user which actions are a
 - **Pointer (Hand):** Hovering over resize handles or interactive button ribbons.
 
 ### Current Implementation Status
-⚠️ **Partial.** The application currently uses standard CSS hover states across some elements, but the dynamic switching of the mouse cursor from "Default" to "I-Beam" precisely over the text paths based on current application mode is not completely rigorous.
+
+Partial: base hover behavior exists, but cursor-mode fidelity is not fully deterministic in all states.
+
+Missing/incomplete:
+- Consistent move cursor over draggable selected object body in object mode.
+- Deterministic I-beam over editable text regions only in text mode.
+- Explicit resize-handle pointer affordances for all handles.
 
 ## 4. Visual Selection Responses
 
@@ -55,6 +69,15 @@ Users depend on immediate, non-intrusive visual feedback to comprehend what is a
 - **Blinking Insertion Point:** A sharp, easily readable vertical line blinking steadily when text is actively being edited but no range is currently selected.
 
 ### Current Implementation Status
-✅ **Object Selection:** Bounding box stroke styles are correctly toggled on select.
-✅ **Text Selection Highlight:** We calculate and render `.text-selection rect` blocks across multiple lines seamlessly using the layout engine.
-✅ **Blinking Cursor:** The `TextCursor` class faithfully draws and blinks standard SVG lines synchronized to the DOM state.
+
+Implemented: object selection boxes, text range highlighting, and blinking insertion cursor.
+
+Missing/incomplete:
+- Clear visual distinction between primary selected object and secondary/hover states.
+- Verification of selection highlight contrast/accessibility in all supported themes/backgrounds.
+
+## Next Plan Items
+
+- [ ] Add Playwright coverage for shift+drag range extension and anchor invariants.
+- [ ] Tighten cursor-style state machine and assert styles in browser tests.
+- [ ] Add visual state snapshots for object select/hover/edit transitions.

@@ -60,7 +60,7 @@ test.describe('Spread Editor Rich Paste', () => {
     expect(italicSpans.length).toBeGreaterThan(0);
   });
 
-  test('pasting image in object mode creates SVG image element', async ({ page }) => {
+  test('pasting image in object mode creates SVG image element with resize handles', async ({ page }) => {
     const shell = page.locator('scribus-app-shell');
 
     // Click background to ensure we're in object mode
@@ -68,7 +68,7 @@ test.describe('Spread Editor Rich Paste', () => {
     await canvas.click({ position: { x: 10, y: 10 } });
     await expect(shell).toHaveAttribute('data-mode', 'object');
 
-    // Write a small PNG to the clipboard (1x1 red pixel)
+    // Write a small PNG to the clipboard (50x50 red pixel)
     await page.evaluate(async () => {
       const c = document.createElement('canvas');
       c.width = 50; c.height = 50;
@@ -89,6 +89,73 @@ test.describe('Spread Editor Rich Paste', () => {
       return svg.querySelectorAll('image[data-image-box]').length;
     });
     expect(imgCount).toBeGreaterThan(0);
+
+    // Verify resize handles are drawn for the image box
+    const handleInfo = await page.evaluate(() => {
+      const svg = document.querySelector('#svg-container svg');
+      // Find the box-id of the image box overlay
+      const imageBoxRect = svg.querySelector('[data-box-id^="image-"]');
+      if (!imageBoxRect) return { boxId: null, handleCount: 0 };
+      const boxId = imageBoxRect.dataset.boxId;
+      const handles = svg.querySelectorAll(`[data-sublayer="handles"] [data-box-id="${boxId}"]`);
+      return { boxId, handleCount: handles.length };
+    });
+    expect(handleInfo.boxId).toBeTruthy();
+    expect(handleInfo.handleCount).toBe(8); // 8 resize handles (nw, n, ne, w, e, sw, s, se)
+  });
+
+  test('pasted image in object mode survives click interaction', async ({ page }) => {
+    const shell = page.locator('scribus-app-shell');
+
+    // Ensure object mode
+    const canvas = page.locator('#svg-container');
+    await canvas.click({ position: { x: 10, y: 10 } });
+    await expect(shell).toHaveAttribute('data-mode', 'object');
+
+    // Paste a 50x50 image
+    await page.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = 50; c.height = 50;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = 'green';
+      ctx.fillRect(0, 0, 50, 50);
+      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
+    });
+
+    await page.keyboard.press('ControlOrMeta+v');
+    await page.waitForTimeout(1500);
+
+    // Confirm image exists
+    let imgCount = await page.evaluate(() => {
+      const svg = document.querySelector('#svg-container svg');
+      return svg.querySelectorAll('image[data-image-box]').length;
+    });
+    expect(imgCount).toBe(1);
+
+    // Click on the image box overlay (the box-rect with image- prefix id)
+    const imageOverlay = page.locator('[data-box-id^="image-"][data-handle="body"]');
+    await imageOverlay.click();
+    await page.waitForTimeout(500);
+
+    // Image should still exist after click
+    imgCount = await page.evaluate(() => {
+      const svg = document.querySelector('#svg-container svg');
+      return svg.querySelectorAll('image[data-image-box]').length;
+    });
+    expect(imgCount).toBe(1);
+
+    // Click on the background
+    await canvas.click({ position: { x: 10, y: 10 } });
+    await page.waitForTimeout(500);
+
+    // Image should still exist after background click
+    imgCount = await page.evaluate(() => {
+      const svg = document.querySelector('#svg-container svg');
+      return svg.querySelectorAll('image[data-image-box]').length;
+    });
+    expect(imgCount).toBe(1);
   });
 
   test('pasting image in text mode inserts inline image placeholder', async ({ page }) => {
