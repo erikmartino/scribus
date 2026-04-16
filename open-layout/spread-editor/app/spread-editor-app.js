@@ -101,6 +101,7 @@ export class SpreadEditorApp {
       // Register Text Commands & Clipboard Integration
       this._registerCommands(shell);
       this._initClipboard(shell);
+      this._registerCreatables(shell);
 
       await this.update();
       this.setMode('object');
@@ -232,11 +233,99 @@ export class SpreadEditorApp {
     });
   }
 
+  _registerCreatables(shell) {
+    shell.registerCreatable({
+      id: 'spread.textFrame',
+      label: 'Text Frame',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+        <line x1="7" y1="8" x2="17" y2="8"></line>
+        <line x1="7" y1="12" x2="17" y2="12"></line>
+        <line x1="7" y1="16" x2="13" y2="16"></line>
+      </svg>`,
+      onCreate: () => this._createTextFrame()
+    });
+
+    shell.registerCreatable({
+      id: 'spread.imageFrame',
+      label: 'Image Frame',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+        <polyline points="21 15 16 10 5 21"></polyline>
+      </svg>`,
+      onCreate: () => this._createImageFrame()
+    });
+  }
+
+  _createTextFrame() {
+    if (!this.currentSpread) return;
+    const page = this.currentSpread.pageRects[0];
+    const boxId = `text-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const w = 200;
+    const h = 150;
+    const x = page.x + (page.width - w) / 2;
+    const y = page.y + (page.height - h) / 2;
+
+    const box = {
+      id: boxId,
+      x, y,
+      width: w,
+      height: h,
+      minWidth: 80,
+      minHeight: 60,
+    };
+
+    this.submitAction('Create Text Frame', () => {
+      this.boxes = [...this.boxes, box];
+      this.selectedBoxId = boxId;
+      this.setMode('object');
+    });
+  }
+
+  _createImageFrame() {
+    if (!this.currentSpread) return;
+    const page = this.currentSpread.pageRects[0];
+    const boxId = `image-${++this._imageBoxCounter}`;
+    const w = 200;
+    const h = 150;
+    const x = page.x + (page.width - w) / 2;
+    const y = page.y + (page.height - h) / 2;
+
+    const imageBox = {
+      id: boxId,
+      x, y,
+      width: w,
+      height: h,
+      minWidth: 20,
+      minHeight: 20,
+      imageUrl: this._emptyImagePlaceholder(),
+    };
+
+    this.submitAction('Create Image Frame', () => {
+      this.imageBoxes = [...this.imageBoxes, imageBox];
+      this.selectedBoxId = boxId;
+      this.setMode('object');
+    });
+  }
+
+  /** Generate a simple SVG data URL as a placeholder for empty image frames. */
+  _emptyImagePlaceholder() {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
+      <rect width="200" height="150" fill="#e0ddd5" stroke="#b0ab9f" stroke-width="1"/>
+      <line x1="0" y1="0" x2="200" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
+      <line x1="200" y1="0" x2="0" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
+      <text x="100" y="80" text-anchor="middle" fill="#8a857a" font-size="14" font-family="sans-serif">Image</text>
+    </svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
   submitAction(label, fn) {
     const prevState = {
       editorState: this.editor.getState(),
       fontSize: this._fontSize,
       lineHeight: this._lineHeight,
+      boxes: this.boxes.map(b => ({ ...b })),
       imageBoxes: this.imageBoxes.map(b => ({ ...b })),
     };
 
@@ -250,6 +339,7 @@ export class SpreadEditorApp {
         this.editor.setState(prevState.editorState);
         this._fontSize = prevState.fontSize;
         this._lineHeight = prevState.lineHeight;
+        this.boxes = prevState.boxes;
         this.imageBoxes = prevState.imageBoxes;
         await this.update();
       }
@@ -539,9 +629,14 @@ export class SpreadEditorApp {
 
     if (this.boxes.length === 0) {
       this.boxes = createBoxesFromDefaults(spread.boxes);
+      this._defaultBoxCount = spread.boxes.length;
       this.selectedBoxId = this.boxes[0]?.id || null;
     }
-    if (this.boxes.length !== spread.boxes.length) {
+    // Only reset boxes to match layout defaults if no user-created frames
+    // have been added (i.e. count still matches the initial default count).
+    if (this._defaultBoxCount !== undefined &&
+        this.boxes.length === this._defaultBoxCount &&
+        this.boxes.length !== spread.boxes.length) {
       const defaults = createBoxesFromDefaults(spread.boxes);
       this.boxes = defaults.map((d, i) => {
         const existing = this.boxes[i];
@@ -551,6 +646,7 @@ export class SpreadEditorApp {
           id: d.id,
         };
       });
+      this._defaultBoxCount = spread.boxes.length;
       this.selectedBoxId = this.boxes[0]?.id || null;
     }
     this.boxes = clampBoxesToBounds(this.boxes, spread.pasteboardRect);
