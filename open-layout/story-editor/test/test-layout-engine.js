@@ -191,7 +191,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
       { x: 50, y: 0, width: 40, height: 30 },
     ];
 
-    const flowed = engine.flowIntoBoxes(shapedParas, boxes, 10, 100);
+    const { boxResults: flowed } = engine.flowIntoBoxes(shapedParas, boxes, 10, 100);
 
     assert.equal(flowed.length, 2);
     assert.equal(flowed[0].lines.length, 1);
@@ -244,7 +244,7 @@ describe('LayoutEngine.flowIntoBoxes', () => {
     ];
 
     const boxes = [{ x: 0, y: 0, width: 80, height: 120 }];
-    const flowed = engine.flowIntoBoxes(shapedParas, boxes, 10, 120);
+    const { boxResults: flowed } = engine.flowIntoBoxes(shapedParas, boxes, 10, 120);
 
     assert.equal(flowed[0].lines.length >= 2, true);
     assert.equal(flowed[0].lines[0].paraIndex, 0);

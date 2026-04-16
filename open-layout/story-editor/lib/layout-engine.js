@@ -173,7 +173,7 @@ export class LayoutEngine {
    * @param {Box[]} boxes
    * @param {number} fontSize
    * @param {number} lineHeightPct
-   * @returns {{ box: Box, lines: LineEntry[] }[]}
+   * @returns {{ boxResults: { box: Box, lines: LineEntry[] }[], overflow: boolean }}
    */
   flowIntoBoxes(shapedParas, boxes, fontSize, lineHeightPct) {
     const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 16;
@@ -182,6 +182,7 @@ export class LayoutEngine {
     const boxResults = boxes.map(box => ({ box, lines: [] }));
     let boxIdx = 0;
     let usedHeight = 0;
+    let overflow = false;
 
     for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize, fontFamily } of shapedParas) {
       const effectiveFontSize = paraFontSize;
@@ -222,6 +223,8 @@ export class LayoutEngine {
           usedHeight += needed;
           break;
         }
+        // If we exhausted all boxes without placing this empty paragraph
+        if (boxIdx >= boxes.length) overflow = true;
         continue;
       }
 
@@ -277,9 +280,11 @@ export class LayoutEngine {
 
         if (consumed) break; // entire paragraph placed
       }
+      // If glyphs remain after exhausting all boxes, we have overflow
+      if (remainingGlyphs.length > 0 && boxIdx >= boxes.length) overflow = true;
     }
 
-    return boxResults;
+    return { boxResults, overflow };
   }
 
   /**
@@ -373,8 +378,10 @@ export class LayoutEngine {
   async renderStory(paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
     await this.ensureFonts(paragraphs, paragraphStyles);
     const shaped = this.shapeParagraphs(paragraphs, fontSize, paragraphStyles);
-    const boxResults = this.flowIntoBoxes(shaped, boxes, fontSize, lineHeightPct);
-    return this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
+    const { boxResults, overflow } = this.flowIntoBoxes(shaped, boxes, fontSize, lineHeightPct);
+    const result = this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
+    result.overflow = overflow;
+    return result;
   }
 
 

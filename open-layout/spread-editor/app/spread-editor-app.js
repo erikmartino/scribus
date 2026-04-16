@@ -782,6 +782,7 @@ export class SpreadEditorApp {
 
         if (storyBoxes.length === 0) {
           storyEntry.lineMap = [];
+          storyEntry.overflow = false;
           continue;
         }
 
@@ -800,6 +801,7 @@ export class SpreadEditorApp {
           );
           baseSvg = result.svg;
           storyEntry.lineMap = result.lineMap;
+          storyEntry.overflow = result.overflow || false;
         } else {
           // Additional stories: render off-screen, transplant content
           const result = await this.engine.renderStory(
@@ -810,6 +812,7 @@ export class SpreadEditorApp {
             paragraphLayoutStyles,
           );
           storyEntry.lineMap = result.lineMap;
+          storyEntry.overflow = result.overflow || false;
 
           // Transplant all child elements from the secondary SVG into
           // the base SVG. Skip box background <rect>s (the base SVG
@@ -838,6 +841,10 @@ export class SpreadEditorApp {
     drawBoxOverlay(svg, {
       boxes: [...this.boxes, ...this.imageBoxes],
       selectedBoxId: this.selectedBoxId,
+      stories: this._stories.map(s => ({
+        boxIds: s.boxIds,
+        overflow: s.overflow || false,
+      })),
     });
     svg.setAttribute('width', String(spread.pasteboardRect.width));
     svg.setAttribute('height', String(spread.pasteboardRect.height));
