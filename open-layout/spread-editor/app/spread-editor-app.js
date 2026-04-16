@@ -81,10 +81,33 @@ export class SpreadEditorApp {
           // Image boxes don't support text editing — skip enter-text-mode
           const isImageBox = this.imageBoxes.some(b => b.id === boxId);
           if (this.mode === 'object' && wasAlreadySelected && !isImageBox) {
-            this.setMode('text');
-            if (this._textInteraction) {
-              await this._textInteraction._handlePointerDown(event);
-              this._textInteraction._handlePointerUp(event);
+            // Check if the clicked box has any text lines. If empty,
+            // place the cursor at the end of the story so the user can
+            // start typing and text will flow into the frame.
+            const clickedBox = this.boxes.find(b => b.id === boxId);
+            const boxHasLines = clickedBox && this._lineMap &&
+              this._lineMap.some(line =>
+                Math.abs(line.colX - clickedBox.x) < 1 &&
+                Math.abs(line.boxY - clickedBox.y) < 1
+              );
+
+            if (!boxHasLines && this.editor) {
+              // Place cursor at end of the last paragraph before entering
+              // text mode, so a single update cycle handles everything.
+              const lastPara = this.editor.story.length - 1;
+              const lastParaText = this.editor.story[lastPara]
+                ?.map(r => r.text).join('') || '';
+              this.editor.moveCursor({
+                paraIndex: lastPara,
+                charOffset: lastParaText.length,
+              });
+              this.setMode('text');
+            } else {
+              this.setMode('text');
+              if (this._textInteraction) {
+                await this._textInteraction._handlePointerDown(event);
+                this._textInteraction._handlePointerUp(event);
+              }
             }
           } else if (this.mode !== 'text' && this.selectedBoxId !== boxId) {
             this.selectedBoxId = boxId;
