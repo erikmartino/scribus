@@ -94,6 +94,28 @@ export class ShapesDemoPlugin {
       }
     });
 
+    // Register creatable shape types
+    shell.registerCreatable({
+      id: 'shape.circle',
+      label: 'Circle',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle></svg>`,
+      onCreate: () => this._createNewShape('circle')
+    });
+
+    shell.registerCreatable({
+      id: 'shape.square',
+      label: 'Square',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>`,
+      onCreate: () => this._createNewShape('square')
+    });
+
+    shell.registerCreatable({
+      id: 'shape.triangle',
+      label: 'Triangle',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 22,21 2,21"></polygon></svg>`,
+      onCreate: () => this._createNewShape('triangle')
+    });
+
     // Register generic copy/paste if not handled by system shortcuts
     shell.commands.register({
       id: 'shape.duplicate',
@@ -103,6 +125,41 @@ export class ShapesDemoPlugin {
         this.shell.clipboard.paste();
       },
       isEnabled: () => !!selection.current
+    });
+  }
+
+  _createNewShape(type) {
+    const id = type + '-' + Math.random().toString(36).substr(2, 9);
+    const defaults = {
+      circle: { color: '#ff4081', text: 'Circle' },
+      square: { color: '#3f51b5', text: 'Square' },
+      triangle: { color: '#4caf50', text: '' }
+    };
+    const def = defaults[type] || { color: '#888', text: type };
+    const data = {
+      id,
+      type,
+      color: def.color,
+      text: def.text,
+      left: 60 + Math.round(Math.random() * 120),
+      top: 60 + Math.round(Math.random() * 80),
+      isUndo: true
+    };
+
+    this.shell.history.submit({
+      label: `Create ${type}`,
+      execute: () => {
+        selection.clear();
+        this._createShapeFromData(data);
+      },
+      undo: () => {
+        const item = activeDocument.get(data.id);
+        if (item) {
+          if (item.element) item.element.remove();
+          activeDocument.removeItem(data.id);
+        }
+        selection.clear();
+      }
     });
   }
 

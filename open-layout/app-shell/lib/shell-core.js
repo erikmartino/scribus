@@ -4,12 +4,14 @@ import { activeDocument } from './document-model.js';
 import { CommandRegistry, CommandHistory } from './command-manager.js';
 import '../../ui-components/index.js';
 import './components/command-palette.js';
+import './components/create-menu.js';
 
 
 export class AppShell extends EventTarget {
   constructor() {
     super();
     this.plugins = [];
+    this.creatables = [];
     this._updateQueued = false;
     this.commands = new CommandRegistry(this);
     this.history = new CommandHistory();
@@ -63,6 +65,22 @@ export class AppShell extends EventTarget {
     this.updateRibbon(selection.current);
     this.updatePanels(selection.current);
   }
+  /**
+   * Register a creatable object type that appears in the Create menu.
+   * @param {{ id: string, label: string, icon?: string, onCreate: () => void }} descriptor
+   */
+  registerCreatable(descriptor) {
+    if (!descriptor.id || !descriptor.label || typeof descriptor.onCreate !== 'function') {
+      console.warn('registerCreatable: requires id, label, and onCreate.');
+      return;
+    }
+    this.creatables.push(descriptor);
+    this.dispatchEvent(new CustomEvent('creatables-changed'));
+    if (this._initialized) {
+      this.requestUpdate();
+    }
+  }
+
   registerPlugin(plugin) {
     this.plugins.push(plugin);
     if (plugin.init) {
@@ -299,40 +317,50 @@ class SystemPlugin {
   }
 
   getRibbonSections(selected) {
-    return [
-      AppShell.createRibbonSection('Application', (container) => {
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.undo',
-          iconOnly: true
-        }));
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.redo',
-          iconOnly: true
-        }));
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.fullscreen',
-          iconOnly: true
-        }));
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.help',
-          iconOnly: true
-        }));
-      }),
-      AppShell.createRibbonSection('Edit', (container) => {
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.cut',
-          iconOnly: true
-        }));
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.copy',
-          iconOnly: true
-        }));
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'app.paste',
-          iconOnly: true
-        }));
-      })
-    ];
+    const sections = [];
+
+    // Create menu (leftmost in the ribbon, only shown when creatables are registered)
+    if (this.shell.creatables.length > 0) {
+      sections.push(AppShell.createRibbonSection('Create', (container) => {
+        container.appendChild(document.createElement('scribus-create-menu'));
+      }));
+    }
+
+    sections.push(AppShell.createRibbonSection('Application', (container) => {
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'app.undo',
+        iconOnly: true
+      }));
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'app.redo',
+        iconOnly: true
+      }));
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'app.fullscreen',
+        iconOnly: true
+      }));
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'app.help',
+        iconOnly: true
+      }));
+    }));
+
+    sections.push(AppShell.createRibbonSection('Edit', (container) => {
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'app.cut',
+        iconOnly: true
+      }));
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'app.copy',
+        iconOnly: true
+      }));
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'app.paste',
+        iconOnly: true
+      }));
+    }));
+
+    return sections;
   }
 }
 
