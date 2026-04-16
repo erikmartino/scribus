@@ -60,6 +60,10 @@ export class TextInteractionController {
     this.cursor = cursor;
   }
 
+  setEditor(editor) {
+    this.editor = editor;
+  }
+
   async _handlePointerDown(e) {
     if (!this.enabled() || !this.cursor || e.button !== 0) return;
     

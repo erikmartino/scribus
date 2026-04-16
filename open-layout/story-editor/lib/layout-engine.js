@@ -353,13 +353,28 @@ export class LayoutEngine {
    * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[] }>}
    */
   async renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
+    const result = await this.renderStory(paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles);
+    container.innerHTML = '';
+    container.appendChild(result.svg);
+    return result;
+  }
+
+  /**
+   * Shape, flow, and render a single story into its boxes, returning
+   * the SVG element and lineMap without modifying any container.
+   *
+   * @param {Story} paragraphs
+   * @param {Box[]} boxes
+   * @param {number} fontSize
+   * @param {number} lineHeightPct
+   * @param {{ fontSize: number, fontFamily: string }[]} [paragraphStyles]
+   * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[] }>}
+   */
+  async renderStory(paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
     await this.ensureFonts(paragraphs, paragraphStyles);
     const shaped = this.shapeParagraphs(paragraphs, fontSize, paragraphStyles);
     const boxResults = this.flowIntoBoxes(shaped, boxes, fontSize, lineHeightPct);
-    const { svg, lineMap } = this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
-    container.innerHTML = '';
-    container.appendChild(svg);
-    return { svg, lineMap };
+    return this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
   }
 
 

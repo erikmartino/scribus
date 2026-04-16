@@ -47,7 +47,8 @@ Add a "Create" button to the leftmost position of the ribbon bar that opens a dr
 - [x] `SystemPlugin` renders Create section as first ribbon section
 - [x] `ShapesDemoPlugin` registers 3 shape creatables
 - [x] `SpreadEditorApp` registers Text Frame and Image Frame creatables
-- [x] Playwright tests: app-shell (7), spread-editor (6), all passing
+- [x] Playwright tests: app-shell (7), spread-editor (10), all passing
+- [x] Multi-story architecture: each new text frame gets its own independent story (see `multi-story-architecture-plan.md`)
 
 ## Remaining Work
 

@@ -193,6 +193,145 @@ test.describe('Spread Editor Create Menu', () => {
     expect(state.editorCursor.paraIndex).toBeGreaterThanOrEqual(0);
   });
 
+  test('new text frame has an independent story from the default boxes', async ({ page }) => {
+    // Get original story paragraph count (from #sample-text)
+    const origStoryInfo = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      if (!app) return null;
+      return {
+        storyCount: app._stories.length,
+        originalParaCount: app._stories[0]?.editor.story.length,
+      };
+    });
+    expect(origStoryInfo).not.toBeNull();
+    expect(origStoryInfo.storyCount).toBe(1);
+
+    // Create a new text frame
+    const trigger = page.locator('scribus-create-menu button.trigger');
+    await trigger.click();
+    const textFrameItem = page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' });
+    await textFrameItem.click();
+    await page.waitForTimeout(500);
+
+    // Verify a second story was created
+    const afterCreate = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      if (!app) return null;
+      return {
+        storyCount: app._stories.length,
+        originalParaCount: app._stories[0]?.editor.story.length,
+        newStoryParaCount: app._stories[1]?.editor.story.length,
+        newStoryText: app._stories[1]?.editor.story
+          .map(p => p.map(r => r.text).join('')).join('\n'),
+      };
+    });
+    expect(afterCreate.storyCount).toBe(2);
+    // The new story should have 1 empty paragraph
+    expect(afterCreate.newStoryParaCount).toBe(1);
+    expect(afterCreate.newStoryText).toBe('');
+    // Original story should be unchanged
+    expect(afterCreate.originalParaCount).toBe(origStoryInfo.originalParaCount);
+  });
+
+  test('typing in a new text frame does not affect the original story', async ({ page }) => {
+    // Get original story text
+    const origText = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      return app?._stories[0]?.editor.story
+        .map(p => p.map(r => r.text).join('')).join('\n') || '';
+    });
+
+    // Create a new text frame
+    const trigger = page.locator('scribus-create-menu button.trigger');
+    await trigger.click();
+    const textFrameItem = page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' });
+    await textFrameItem.click();
+    await page.waitForTimeout(500);
+
+    // Find the new frame and double-click to enter text mode
+    const newBoxRect = await page.evaluate(() => {
+      const svg = document.querySelector('#svg-container svg');
+      const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
+      for (const r of rects) {
+        if (r.dataset.boxId.startsWith('text-')) {
+          return {
+            boxId: r.dataset.boxId,
+            x: parseFloat(r.getAttribute('x')),
+            y: parseFloat(r.getAttribute('y')),
+            width: parseFloat(r.getAttribute('width')),
+            height: parseFloat(r.getAttribute('height'))
+          };
+        }
+      }
+      return null;
+    });
+    expect(newBoxRect).not.toBeNull();
+
+    const svgBox = await page.locator('#svg-container svg').boundingBox();
+    const svgViewBox = await page.evaluate(() => {
+      const svg = document.querySelector('#svg-container svg');
+      const vb = svg.viewBox.baseVal;
+      return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
+    });
+
+    const scaleX = svgBox.width / svgViewBox.width;
+    const scaleY = svgBox.height / svgViewBox.height;
+    const clickX = svgBox.x + (newBoxRect.x - svgViewBox.x + newBoxRect.width / 2) * scaleX;
+    const clickY = svgBox.y + (newBoxRect.y - svgViewBox.y + newBoxRect.height / 2) * scaleY;
+
+    // First click: select, second click: enter text mode
+    await page.mouse.click(clickX, clickY);
+    await page.waitForTimeout(200);
+    await page.mouse.click(clickX, clickY);
+    await page.waitForTimeout(500);
+
+    // Type text (ensure container has focus for keyboard events)
+    await page.locator('#svg-container').focus();
+    await page.keyboard.type('Hello independent');
+    await page.waitForTimeout(500);
+
+    // Verify the new story has the typed text and original is unchanged
+    const result = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      return {
+        newStoryText: app?._activeStory?.editor.story
+          .map(p => p.map(r => r.text).join('')).join('\n') || '',
+        originalText: app?._stories[0]?.editor.story
+          .map(p => p.map(r => r.text).join('')).join('\n') || '',
+      };
+    });
+    expect(result.newStoryText).toContain('Hello independent');
+    // Original story should be completely unchanged
+    expect(result.originalText).toBe(origText);
+  });
+
+  test('undo of text frame creation also removes its story', async ({ page }) => {
+    // Create a new text frame
+    const trigger = page.locator('scribus-create-menu button.trigger');
+    await trigger.click();
+    const textFrameItem = page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' });
+    await textFrameItem.click();
+    await page.waitForTimeout(500);
+
+    // Verify we have 2 stories
+    const countAfter = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      return app?._stories.length;
+    });
+    expect(countAfter).toBe(2);
+
+    // Undo
+    await page.keyboard.press('ControlOrMeta+KeyZ');
+    await page.waitForTimeout(500);
+
+    // Verify back to 1 story
+    const countUndo = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      return app?._stories.length;
+    });
+    expect(countUndo).toBe(1);
+  });
+
   test('dropdown closes after creating a frame', async ({ page }) => {
     const trigger = page.locator('scribus-create-menu button.trigger');
     await trigger.click();

@@ -22,12 +22,12 @@ export class SpreadEditorApp {
   constructor(root) {
     this.root = root;
     this.engine = null;
-    this.editor = null;
     this.cursor = null;
     this.hasBeforeInput = 'onbeforeinput' in document;
     this.boxes = [];
     this.imageBoxes = [];
     this._imageBoxCounter = 0;
+    this._storyCounter = 0;
     this.selectedBoxId = null;
     this.currentSpread = null;
     this._svg = null;
@@ -36,9 +36,19 @@ export class SpreadEditorApp {
     this._lastClickTime = 0;
     this.shell = shell;
     this._ribbonSections = null; // Cache sections
+
+    // Multi-story: each text frame (or chain) has its own EditorState.
+    // _stories is an array of { id, editor, boxIds, lineMap }.
+    this._stories = [];
+    this._activeStory = null;
     
     this._fontSize = 20;
     this._lineHeight = 138;
+  }
+
+  /** Active editor — returns the EditorState of the currently active story. */
+  get editor() {
+    return this._activeStory?.editor ?? null;
   }
 
   async init(shell) {
@@ -61,7 +71,17 @@ export class SpreadEditorApp {
       });
       const paragraphs = extractParagraphs(this.sampleEl);
       const paragraphStyles = extractParagraphStyles(this.sampleEl, this._fontSize);
-      this.editor = new EditorState(paragraphs, paragraphStyles);
+      // The initial story will be assigned box IDs once boxes are created
+      // in the first update() call. We store it with an empty boxIds array
+      // for now; update() will populate it.
+      const initialStory = {
+        id: `story-${this._storyCounter++}`,
+        editor: new EditorState(paragraphs, paragraphStyles),
+        boxIds: [], // populated in update() from default boxes
+        lineMap: [],
+      };
+      this._stories = [initialStory];
+      this._activeStory = initialStory;
       this._interaction = new BoxInteractionController({
         getSvg: () => this._svg,
         getBounds: () => this.currentSpread?.pasteboardRect,
@@ -81,15 +101,19 @@ export class SpreadEditorApp {
           // Image boxes don't support text editing — skip enter-text-mode
           const isImageBox = this.imageBoxes.some(b => b.id === boxId);
           if (this.mode === 'object' && wasAlreadySelected && !isImageBox) {
+            // Activate the story that owns this box
+            this._activateStoryForBox(boxId);
+
             // Check if the clicked box has any text lines. If empty,
             // place the cursor at the end of the story so the user can
             // start typing and text will flow into the frame.
             const clickedBox = this.boxes.find(b => b.id === boxId);
-            const boxHasLines = clickedBox && this._lineMap &&
-              this._lineMap.some(line =>
-                Math.abs(line.colX - clickedBox.x) < 1 &&
-                Math.abs(line.boxY - clickedBox.y) < 1
-              );
+            const storyEntry = this._findStoryForBox(boxId);
+            const storyLineMap = storyEntry?.lineMap || [];
+            const boxHasLines = clickedBox && storyLineMap.some(line =>
+              Math.abs(line.colX - clickedBox.x) < 1 &&
+              Math.abs(line.boxY - clickedBox.y) < 1
+            );
 
             if (!boxHasLines && this.editor) {
               // Place cursor at end of the last paragraph before entering
@@ -151,12 +175,35 @@ export class SpreadEditorApp {
     }
     
     // Update cursor visibility
-    if (this.cursor) {
+    if (this.cursor && this.editor) {
       this.cursor.setVisible(mode === 'text' && !this.editor.hasSelection());
     }
     
     this.update({ full: false });
     this.shell?.requestUpdate();
+  }
+
+  /** Find the story entry that owns the given box ID. */
+  _findStoryForBox(boxId) {
+    return this._stories.find(s => s.boxIds.includes(boxId)) || null;
+  }
+
+  /** Activate the story that owns the given box, updating cursor/interaction. */
+  _activateStoryForBox(boxId) {
+    const story = this._findStoryForBox(boxId);
+    if (story && story !== this._activeStory) {
+      this._activeStory = story;
+      // Swap the editor and lineMap on the interaction controller and cursor
+      if (this._textInteraction) {
+        this._textInteraction.setEditor(story.editor);
+      }
+      if (this.cursor) {
+        this.cursor.setStory(story.editor.story);
+        if (story.lineMap.length > 0) {
+          this.cursor.updateLayout(this._svg, story.lineMap, this._fontSize);
+        }
+      }
+    }
   }
 
   _registerCommands(shell) {
@@ -299,8 +346,19 @@ export class SpreadEditorApp {
       minHeight: 60,
     };
 
+    // Each new text frame gets its own independent story
+    const emptyStory = [[{ text: '', style: { bold: false, italic: false } }]];
+    const emptyStyles = [{ fontSize: this._fontSize }];
+    const newStoryEntry = {
+      id: `story-${this._storyCounter++}`,
+      editor: new EditorState(emptyStory, emptyStyles),
+      boxIds: [boxId],
+      lineMap: [],
+    };
+
     this.submitAction('Create Text Frame', () => {
       this.boxes = [...this.boxes, box];
+      this._stories = [...this._stories, newStoryEntry];
       this.selectedBoxId = boxId;
       this.setMode('object');
     });
@@ -344,8 +402,17 @@ export class SpreadEditorApp {
   }
 
   submitAction(label, fn) {
+    // Snapshot all stories' states for undo
+    const prevStories = this._stories.map(s => ({
+      id: s.id,
+      editorState: s.editor.getState(),
+      boxIds: [...s.boxIds],
+    }));
+    const prevActiveStoryId = this._activeStory?.id;
     const prevState = {
-      editorState: this.editor.getState(),
+      stories: prevStories,
+      activeStoryId: prevActiveStoryId,
+      storyCounter: this._storyCounter,
       fontSize: this._fontSize,
       lineHeight: this._lineHeight,
       boxes: this.boxes.map(b => ({ ...b })),
@@ -359,7 +426,22 @@ export class SpreadEditorApp {
         await this.update();
       },
       undo: async () => {
-        this.editor.setState(prevState.editorState);
+        // Restore all stories from snapshot
+        this._storyCounter = prevState.storyCounter;
+        this._stories = prevState.stories.map(snap => ({
+          id: snap.id,
+          editor: new EditorState([], []),
+          boxIds: [...snap.boxIds],
+          lineMap: [],
+        }));
+        for (let i = 0; i < this._stories.length; i++) {
+          this._stories[i].editor.setState(prevState.stories[i].editorState);
+        }
+        this._activeStory = this._stories.find(s => s.id === prevState.activeStoryId) || this._stories[0] || null;
+        // Re-wire interaction controller to restored active editor
+        if (this._textInteraction && this._activeStory) {
+          this._textInteraction.setEditor(this._activeStory.editor);
+        }
         this._fontSize = prevState.fontSize;
         this._lineHeight = prevState.lineHeight;
         this.boxes = prevState.boxes;
@@ -654,6 +736,10 @@ export class SpreadEditorApp {
       this.boxes = createBoxesFromDefaults(spread.boxes);
       this._defaultBoxCount = spread.boxes.length;
       this.selectedBoxId = this.boxes[0]?.id || null;
+      // Assign default boxes to the initial story
+      if (this._stories.length > 0 && this._stories[0].boxIds.length === 0) {
+        this._stories[0].boxIds = this.boxes.map(b => b.id);
+      }
     }
     // Only reset boxes to match layout defaults if no user-created frames
     // have been added (i.e. count still matches the initial default count).
@@ -671,27 +757,78 @@ export class SpreadEditorApp {
       });
       this._defaultBoxCount = spread.boxes.length;
       this.selectedBoxId = this.boxes[0]?.id || null;
+      // Update initial story's boxIds to match new defaults
+      if (this._stories.length > 0) {
+        this._stories[0].boxIds = this.boxes
+          .filter(b => !b.id.startsWith('text-'))
+          .map(b => b.id);
+      }
     }
     this.boxes = clampBoxesToBounds(this.boxes, spread.pasteboardRect);
 
     let svg = this._svg;
-    let lineMap = this._lineMap;
 
     if (isFull || !svg) {
-      const paragraphLayoutStyles = buildParagraphLayoutStyles(this._fontSize, this.editor.paragraphStyles);
-      const result = await this.engine.renderToContainer(
-        this.container,
-        this.editor.story,
-        this.boxes,
-        this._fontSize,
-        this._lineHeight,
-        paragraphLayoutStyles,
-      );
-      svg = result.svg;
-      lineMap = result.lineMap;
+      // Render each story into its own set of boxes, then merge SVGs.
+      // The first story renders via renderToContainer (creates the base SVG).
+      // Additional stories render via renderStory and their text content
+      // is transplanted into the base SVG.
+      let baseSvg = null;
+
+      for (const storyEntry of this._stories) {
+        const storyBoxes = storyEntry.boxIds
+          .map(id => this.boxes.find(b => b.id === id))
+          .filter(Boolean);
+
+        if (storyBoxes.length === 0) {
+          storyEntry.lineMap = [];
+          continue;
+        }
+
+        const paragraphLayoutStyles = buildParagraphLayoutStyles(
+          this._fontSize, storyEntry.editor.paragraphStyles);
+
+        if (!baseSvg) {
+          // First story: use renderToContainer to set up the base SVG
+          const result = await this.engine.renderToContainer(
+            this.container,
+            storyEntry.editor.story,
+            storyBoxes,
+            this._fontSize,
+            this._lineHeight,
+            paragraphLayoutStyles,
+          );
+          baseSvg = result.svg;
+          storyEntry.lineMap = result.lineMap;
+        } else {
+          // Additional stories: render off-screen, transplant content
+          const result = await this.engine.renderStory(
+            storyEntry.editor.story,
+            storyBoxes,
+            this._fontSize,
+            this._lineHeight,
+            paragraphLayoutStyles,
+          );
+          storyEntry.lineMap = result.lineMap;
+
+          // Transplant all child elements from the secondary SVG into
+          // the base SVG. Skip box background <rect>s (the base SVG
+          // and the overlay system draw those).
+          for (const child of Array.from(result.svg.childNodes)) {
+            if (child.tagName === 'rect') continue; // skip box backgrounds
+            baseSvg.appendChild(child);
+          }
+        }
+      }
+
+      svg = baseSvg || this._svg;
       this._svg = svg;
-      this._lineMap = lineMap;
     }
+
+    if (!svg) return;
+
+    // Determine the active story's lineMap for cursor operations
+    const activeLineMap = this._activeStory?.lineMap || [];
 
     this.decorateSpread(svg, spread.pageRects, spread);
 
@@ -711,7 +848,7 @@ export class SpreadEditorApp {
 
     if (this.cursor) {
       this.cursor.setStory(this.editor.story);
-      this.cursor.updateLayout(svg, lineMap, fontSize);
+      this.cursor.updateLayout(svg, activeLineMap, fontSize);
       this.cursor.updateSelection(this.editor.getSelectionRange());
       this.cursor.moveTo(this.editor.cursor);
       this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
@@ -729,9 +866,10 @@ export class SpreadEditorApp {
         });
       } else {
         this._textInteraction.setCursor(this.cursor);
+        this._textInteraction.setEditor(this.editor);
       }
     } else {
-      this.cursor = new TextCursor(svg, this.editor.story, lineMap, this._fontSize);
+      this.cursor = new TextCursor(svg, this.editor.story, activeLineMap, this._fontSize);
       this.cursor.updateSelection(this.editor.getSelectionRange());
       this.cursor.moveTo(this.editor.cursor);
       this.cursor.setVisible(this.mode === 'text' && !this.editor.hasSelection());
@@ -749,15 +887,17 @@ export class SpreadEditorApp {
     }
 
     // Update style buttons
-    const typingStyle = this.editor.getTypingStyle();
-    const boldBtn = this.root.querySelector('#toggle-bold');
-    const italicBtn = this.root.querySelector('#toggle-italic');
-    boldBtn?.toggleAttribute('active', !!typingStyle.bold);
-    italicBtn?.toggleAttribute('active', !!typingStyle.italic);
+    if (this.editor) {
+      const typingStyle = this.editor.getTypingStyle();
+      const boldBtn = this.root.querySelector('#toggle-bold');
+      const italicBtn = this.root.querySelector('#toggle-italic');
+      boldBtn?.toggleAttribute('active', !!typingStyle.bold);
+      italicBtn?.toggleAttribute('active', !!typingStyle.italic);
+    }
   }
 
   getRibbonSections(selected) {
-    if (this.mode === 'object') {
+    if (this.mode === 'object' || !this.editor) {
       return [];
     } else {
       const typingStyle = this.editor.getTypingStyle();
