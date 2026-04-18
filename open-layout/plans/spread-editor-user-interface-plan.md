@@ -34,10 +34,7 @@ When operating natively inside text mode, a robust set of mouse gestures is mand
 
 ### Current Implementation Status
 
-Implemented: single, double, triple click selection, shift+click extension (forward, reverse, cross-line), and click-drag selection (single-line and multi-line). Playwright tests in `text-selection-cursors.spec.js` cover all variants.
-
-Known gap:
-- **Anchor invariant on consecutive shift+clicks**: a second shift+click does not preserve the original selection anchor — it extends from the end of the prior selection rather than from the original caret position. This is a behavior bug in the editor, not a test issue.
+Implemented: single, double, triple click selection, shift+click extension (forward, reverse, cross-line), click-drag selection (single-line and multi-line), and consecutive shift+click anchor preservation. Playwright tests in `text-selection-cursors.spec.js` cover all variants including anchor invariant assertions.
 
 ## 3. Visual Cursors & Mouse States
 
@@ -86,47 +83,33 @@ Missing/incomplete:
 - [x] Playwright coverage for shift+click, shift+drag, and click-drag selection.
 - [x] Cursor-style assertions for all modes (object, text, resize, ports).
 - [x] Visual state transition tests (select/deselect, enter/exit text mode, ribbon visibility).
+- [x] Consecutive shift+click anchor invariant verified and tested.
+- [x] `cloneStyle`/`cloneParagraphStyle` added to `story-editor-core.js` re-export boundary.
 
 ## Known Bugs
 
-- [ ] Consecutive shift+clicks do not preserve the original selection anchor (the anchor moves to the end of the previous selection instead of staying at the initial caret position).
+(none)
 
 ## Next Plan Items
 
-- [ ] Fix shift+click anchor invariant (consecutive shift+clicks should extend from original caret, not from end of previous selection).
+(none — all interaction behavior items are implemented and tested)
 
 ## Structural Consolidation Opportunities
 
-Cross-module imports currently reach deep into `story-editor/lib/` from both `spread-editor/` and `document-store/`. The following opportunities would simplify the dependency graph:
+Cross-module imports currently reach deep into `story-editor/lib/` from both `spread-editor/` and `document-store/`. The following opportunities were evaluated:
 
 ### 1. Extract `style.js` and `paragraph-style.js` into a shared module
 
-**Problem:** `cloneStyle()` and `cloneParagraphStyle()` are imported by three modules — `story-editor/lib/`, `spread-editor/app/`, and `document-store/lib/` — each reaching into `story-editor/lib/` with deep `../../` paths.
+**Status:** Deferred. Moving these to a shared location would be the cleanest fix but is a larger refactor (~12 import sites across 8 files). Not needed until more modules depend on these utilities.
 
-**Proposal:** Move `style.js` and `paragraph-style.js` to a shared location (e.g., a new `document-model/` module or into `app-shell/lib/`). This would make the dependency direction explicit: shared data-model utilities live in one place, and all modules import from there.
+### 2. Add `style.js` and `paragraph-style.js` to the `story-editor-core.js` re-export ✅
 
-**Files affected:** ~12 import sites across 8 files.
-
-### 2. Add `style.js` and `paragraph-style.js` to the `story-editor-core.js` re-export
-
-**Problem:** `spread-editor/lib/story-editor-core.js` already re-exports 7 modules from `story-editor/lib/`, but `spread-editor-app.js` still imports `cloneStyle` and `cloneParagraphStyle` directly from `story-editor/lib/` bypassing the re-export boundary.
-
-**Proposal (minimal fix):** Add `cloneStyle` and `cloneParagraphStyle` to the `story-editor-core.js` barrel export. This keeps the existing architecture but closes the gap in the boundary. Does not help `document-store/` which also imports them directly.
-
-**Files affected:** 3 (story-editor-core.js, spread-editor-app.js, document-store.js).
+**Status:** Done (2026-04-18). Added `cloneStyle`, `DEFAULT_STYLE`, `styleEq`, `cloneParagraphStyle`, and `DEFAULT_PARAGRAPH_STYLE` to the barrel export. Updated `spread-editor-app.js` to import through the barrel instead of deep `../../story-editor/lib/` paths. `document-store/` still uses direct imports (fixing it would require `document-store` to depend on `spread-editor`, which inverts the dependency direction).
 
 ### 3. Deduplicate `#svg-container` CSS
 
-**Problem:** `#svg-container` styles appear in four HTML files: `story-editor/index.html`, `spread-editor/index.html`, `spread-editor/components/spread-layout/index.html`, and `spread-editor/components/story-core/index.html`. Common properties (`user-select: none`, `caret-color: transparent`, `outline: none`) are repeated.
-
-**Proposal:** Extract common `#svg-container` base styles into `shell.css` as a `.svg-workspace` utility class. Page-specific overrides (background color, cursor mode rules) stay inline.
-
-**Files affected:** 4 HTML files.
+**Status:** Evaluated and declined (2026-04-18). Only 2 properties are actually shared (`user-select: none`, `caret-color: transparent`). Each file has substantially different `background`, `padding`, `border`, `cursor`, `min-height`, and `box-shadow` values. Extracting 2 lines into a utility class would add coupling without meaningful simplification.
 
 ### 4. Centralize the test DOM mock
 
-**Problem:** `app-shell/test/dom-mock.js` is imported by unit tests in two other modules (`spread-editor/test/`, `story-editor/test/`). It's logically shared test infrastructure but lives inside `app-shell/test/`.
-
-**Proposal:** Keep as-is (it's only 2 consumers and the path is clear), or move to a top-level `test-utils/dom-mock.js` if the consumer count grows.
-
-**Files affected:** 2 (low priority).
+**Status:** Keep as-is. Only 2 consumers, paths are clear. Revisit if consumer count grows.

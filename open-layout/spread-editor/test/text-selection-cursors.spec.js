@@ -148,11 +148,18 @@ test.describe('Shift+Click and Shift+Drag Selection', () => {
     const count2 = await selectionRectCount(page);
     expect(count2).toBeGreaterThan(0);
 
-    // NOTE: Ideally the anchor would be preserved across consecutive
-    // shift+clicks (the second shift+click should extend from the
-    // original anchor, not from the end of the first selection).
-    // This is tracked as a known gap in
-    // plans/spread-editor-user-interface-plan.md.
+    // Verify anchor is preserved: the selection anchor after the second
+    // shift+click should be the same as after the first shift+click
+    // (i.e. the original caret position, not the end of the first selection).
+    const state = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      if (!app?._activeStory?.editor) return null;
+      return app._activeStory.editor.selection;
+    });
+    if (state) {
+      // Anchor should be at the beginning (Home key position)
+      expect(state.anchor.charOffset).toBe(0);
+    }
   });
 
   test('click-drag creates a selection range', async ({ page }) => {

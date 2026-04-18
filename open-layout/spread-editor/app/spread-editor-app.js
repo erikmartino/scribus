@@ -7,9 +7,9 @@ import {
   extractParagraphStyles,
   buildParagraphLayoutStyles,
   parseHtmlToStory,
+  cloneStyle,
+  cloneParagraphStyle,
 } from '../lib/story-editor-core.js';
-import { cloneStyle } from '../../story-editor/lib/style.js';
-import { cloneParagraphStyle } from '../../story-editor/lib/paragraph-style.js';
 import { serializeStory, putJson, updateDocTimestamp } from '../../document-store/lib/document-store.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
