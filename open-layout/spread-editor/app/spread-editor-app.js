@@ -668,7 +668,11 @@ export class SpreadEditorApp {
   }
 
   /**
-   * Apply current zoom level to the SVG viewBox without a full re-layout.
+   * Apply current zoom level by scaling the SVG element size.
+   * The viewBox always shows the full pasteboard (1:1 SVG units).
+   * The width/height attributes grow/shrink with zoom so the browser
+   * renders the same content at a larger/smaller CSS pixel size —
+   * the container scrolls naturally via overflow:auto.
    */
   _applyZoom() {
     const svg = this._svg;
@@ -676,15 +680,13 @@ export class SpreadEditorApp {
     if (!svg || !spread) return;
 
     const pb = spread.pasteboardRect;
-    const vbW = pb.width / this._zoom;
-    const vbH = pb.height / this._zoom;
-    // Center the zoomed view on the spread center
-    const cx = pb.x + pb.width / 2;
-    const cy = pb.y + pb.height / 2;
-    const vbX = cx - vbW / 2;
-    const vbY = cy - vbH / 2;
-
-    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+    svg.setAttribute('width', String(pb.width * this._zoom));
+    svg.setAttribute('height', String(pb.height * this._zoom));
+    // viewBox stays at full pasteboard — SVG scales to fit width/height
+    svg.setAttribute(
+      'viewBox',
+      `${pb.x} ${pb.y} ${pb.width} ${pb.height}`,
+    );
 
     // Update the status bar with zoom percentage
     const pct = Math.round(this._zoom * 100);
@@ -1486,16 +1488,11 @@ export class SpreadEditorApp {
       linkMode: this._linkSource,
     });
     const pb = spread.pasteboardRect;
-    svg.setAttribute('width', String(pb.width));
-    svg.setAttribute('height', String(pb.height));
-    // Apply zoom: a smaller viewBox = zoomed in, larger = zoomed out
-    const vbW = pb.width / this._zoom;
-    const vbH = pb.height / this._zoom;
-    const cx = pb.x + pb.width / 2;
-    const cy = pb.y + pb.height / 2;
+    svg.setAttribute('width', String(pb.width * this._zoom));
+    svg.setAttribute('height', String(pb.height * this._zoom));
     svg.setAttribute(
       'viewBox',
-      `${cx - vbW / 2} ${cy - vbH / 2} ${vbW} ${vbH}`,
+      `${pb.x} ${pb.y} ${pb.width} ${pb.height}`,
     );
 
     if (this.cursor) {
