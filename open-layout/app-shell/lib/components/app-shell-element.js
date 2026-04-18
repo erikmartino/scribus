@@ -70,7 +70,7 @@ export class ScribusAppShell extends HTMLElement {
 
         .main-body {
           grid-area: main;
-          overflow-y: auto;
+          overflow: auto;
           position: relative;
           background: var(--bg-color);
         }

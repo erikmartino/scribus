@@ -15,12 +15,14 @@
       cursor: default;
       user-select: none;
       caret-color: transparent;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100%;
       outline: none;
       overflow: auto;
+    }
+
+    #svg-container svg {
+      display: block;
+      margin: auto;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     }
 
     [data-mode="object"] #svg-container .box-rect {
@@ -37,10 +39,6 @@
     }
     [data-mode="text"] [data-only-mode="object"] {
       display: none !important;
-    }
-
-    #svg-container svg {
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     }
 
     #sample-text {
