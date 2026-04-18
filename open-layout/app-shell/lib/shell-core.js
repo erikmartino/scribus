@@ -200,7 +200,9 @@ export class AppShell extends EventTarget {
     if (!this._initialized || !this.panelContent) return;
     
     this.panelContent.innerHTML = '';
-    this.panelTitle.textContent = selected ? `Properties: ${selected.type}` : 'Properties';
+    if (this.panelTitle) {
+      this.panelTitle.textContent = selected ? `Properties: ${selected.type}` : 'Properties';
+    }
     
     this.plugins.forEach(plugin => {
       if (typeof plugin.getPanelContent === 'function') {

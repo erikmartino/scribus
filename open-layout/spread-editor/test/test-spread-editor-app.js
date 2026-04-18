@@ -41,14 +41,18 @@ test('SpreadEditorApp Selection Modes', async (t) => {
   const app = new SpreadEditorApp(root);
   app.shell = mockShell;
   
-  // Mock editor with enough structure for setMode and getRibbonSections
-  app.editor = { 
-    getTypingStyle: () => ({}),
-    story: [[{ text: 'Hello', style: {} }]],
-    cursor: { paraIndex: 0, charOffset: 0, lineIndex: 0 },
-    paragraphStyles: [{ fontSize: 20 }],
-    hasSelection: () => false,
-    getSelectionRange: () => null,
+  // Mock active story — editor is a getter that reads _activeStory.editor
+  app._activeStory = {
+    editor: {
+      getTypingStyle: () => ({}),
+      story: [[{ text: 'Hello', style: {} }]],
+      cursor: { paraIndex: 0, charOffset: 0, lineIndex: 0 },
+      paragraphStyles: [{ fontSize: 20 }],
+      hasSelection: () => false,
+      getSelectionRange: () => null,
+    },
+    boxIds: [],
+    lineMap: [],
   };
   app.engine = {
     renderToContainer: async () => ({ svg: globalThis.document.createElement('svg'), lineMap: new Map() })
