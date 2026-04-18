@@ -28,8 +28,18 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
    - Default to ASCII unless the file already requires Unicode.
 
 3. Verify code changes.
-   - If changes touch `docs/story-editor/lib` or `docs/story-editor/test`, run:
-     - `node --test test/*.js` from `docs/story-editor`.
+   - **Unit tests first, then E2E.** When implementing new features, always
+     start by writing and running unit tests (`npm test`) against the module's
+     `lib/` code. Only after unit tests are green, write Playwright E2E tests
+     that exercise the module's `index.html` in a real browser. This order
+     catches logic bugs early and keeps the feedback loop fast.
+   - **Unit tests:** Run `npm test` from the project root. This auto-discovers
+     all unit test files matching `*/test/test-*.js` across every module
+     (app-shell, document-store, font-manager, spread-editor, story-editor).
+     New modules must follow the same convention (`{module}/test/test-*.js`)
+     to be picked up automatically.
+   - **E2E tests:** Run `npm run test:e2e` (or `npx playwright test`) for
+     Playwright browser tests.
    - If changes are docs-only, tests are optional.
 
 4. Be safe with git.

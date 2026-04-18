@@ -1,6 +1,6 @@
 # Open Layout Document Store — Format & API Spec
 
-Status: **Draft v0.3** — 2026-04-12
+Status: **Draft v0.4** — 2026-04-18
 
 ### Implementation progress
 
@@ -13,8 +13,9 @@ Status: **Draft v0.3** — 2026-04-12
 - [x] Playwright E2E test for store loading
 - [x] POST copy endpoint for document instantiation from templates
 - [x] Save (PUT) back to store from the spread editor (`doc.save` command, Ctrl+S)
-- [ ] Spread editor load from store (currently saves only; initial data is still hardcoded)
-- [ ] Story editor save-back
+- [x] Spread editor loads from store via `?doc=` URL param (`_loadFromStore()`)
+- [x] Document browser with template cloning and per-document Open routing
+- [x] Story editor save-back
 
 ## Goals
 

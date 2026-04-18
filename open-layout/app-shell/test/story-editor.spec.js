@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
 
 /** Wire up browser console/error forwarding for diagnostics. */
 function forwardBrowserLogs(page) {
@@ -166,6 +168,102 @@ test.describe('Story Editor Integration', () => {
         await page.waitForTimeout(500);
         const afterType = await page.locator('#svg-container svg').innerHTML();
         expect(afterType).toContain('ZQX');
+    });
+
+    test('Save button is visible when loaded from store', async ({ page }) => {
+        await page.goto('/store/demo/typography-sampler/stories/story-main/edit');
+        await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
+
+        const saveBtn = page.locator('scribus-button[label="Save"]');
+        await expect(saveBtn).toBeVisible();
+    });
+
+    test('Save button is NOT visible without store context', async ({ page }) => {
+        // The beforeEach already navigated to /story-editor/index.html
+        const saveBtn = page.locator('scribus-button[label="Save"]');
+        await expect(saveBtn).not.toBeVisible();
+    });
+
+    test('Ctrl+S saves story back to store', async ({ page, request }) => {
+        const STORE_DIR = path.resolve(import.meta.dirname, '../../store');
+        const testSlug = `test-story-save-${Date.now()}`;
+        const testDir = path.join(STORE_DIR, 'alice', testSlug);
+
+        try {
+            // Create a test document from the template
+            const res = await request.post(`/store/alice/${testSlug}`, {
+                data: { from: 'demo/typography-sampler' },
+            });
+            expect(res.status()).toBe(201);
+
+            // Open the story editor for the cloned document
+            await page.goto(`/store/alice/${testSlug}/stories/story-main/edit`);
+            await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
+
+            // Type something distinctive
+            const editor = page.locator('#svg-container');
+            await editor.focus();
+            await page.keyboard.press('End');
+            await page.waitForTimeout(200);
+            await page.keyboard.type('SAVEMARKER', { delay: 30 });
+            await page.waitForTimeout(500);
+
+            // Save via Ctrl+S
+            await page.keyboard.press('ControlOrMeta+KeyS');
+
+            // Wait for status to show Saved
+            const statusEl = page.locator('#status');
+            await expect(statusEl).toContainText('Saved', { timeout: 10000 });
+
+            // Verify the story file was updated on disk
+            const storyPath = path.join(testDir, 'stories', 'story-main.json');
+            expect(fs.existsSync(storyPath)).toBe(true);
+            const storyJson = JSON.parse(fs.readFileSync(storyPath, 'utf-8'));
+            const allText = storyJson.paragraphs
+                .flatMap(p => p.runs.map(r => r.text))
+                .join('');
+            expect(allText).toContain('SAVEMARKER');
+
+            // Verify document.json modified timestamp was updated
+            const docJsonPath = path.join(testDir, 'document.json');
+            const docJson = JSON.parse(fs.readFileSync(docJsonPath, 'utf-8'));
+            // The modified timestamp should be recent (within last 30 seconds)
+            const modifiedAge = Date.now() - new Date(docJson.modified).getTime();
+            expect(modifiedAge).toBeLessThan(30000);
+        } finally {
+            fs.rmSync(testDir, { recursive: true, force: true });
+        }
+    });
+
+    test('clicking Save button persists story', async ({ page, request }) => {
+        const STORE_DIR = path.resolve(import.meta.dirname, '../../store');
+        const testSlug = `test-story-btn-${Date.now()}`;
+        const testDir = path.join(STORE_DIR, 'alice', testSlug);
+
+        try {
+            const res = await request.post(`/store/alice/${testSlug}`, {
+                data: { from: 'demo/typography-sampler' },
+            });
+            expect(res.status()).toBe(201);
+
+            await page.goto(`/store/alice/${testSlug}/stories/story-main/edit`);
+            await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
+
+            // Click the Save button
+            const saveBtn = page.locator('scribus-button[label="Save"]');
+            await saveBtn.click();
+
+            const statusEl = page.locator('#status');
+            await expect(statusEl).toContainText('Saved', { timeout: 10000 });
+
+            // Verify story file exists and has content
+            const storyPath = path.join(testDir, 'stories', 'story-main.json');
+            const storyJson = JSON.parse(fs.readFileSync(storyPath, 'utf-8'));
+            expect(storyJson.id).toBe('story-main');
+            expect(storyJson.paragraphs.length).toBeGreaterThan(0);
+        } finally {
+            fs.rmSync(testDir, { recursive: true, force: true });
+        }
     });
 
     test('double-click on existing selection narrows to word', async ({ page }) => {

@@ -237,7 +237,7 @@
       buildParagraphLayoutStyles,
     } from './lib/paragraph-style-render.js';
     import { TextInteractionController } from './lib/text-interaction.js';
-    import { loadStoryFromStore } from './lib/store-loader.js';
+    import { loadStoryFromStore } from '../document-store/lib/document-store.js';
 
     function updateStatus(msg, isOk = true) {
       console.log(`[Status] ${msg}`);
@@ -302,8 +302,13 @@
       }
 
       const editor = new EditorState(story, paragraphStyles);
-      
-      const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles, container);
+
+      // Build store context for save-back (if loaded from store)
+      const storeContext = storeMatch
+        ? { docPath: storeMatch[1], storyId: storeMatch[2] }
+        : null;
+
+      const storyPlugin = new StoryEditorPlugin(editor, () => update(), paragraphStyles, container, storeContext);
       shell.registerPlugin(storyPlugin);
 
       let cursor = null;

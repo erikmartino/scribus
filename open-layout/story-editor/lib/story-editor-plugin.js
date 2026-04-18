@@ -3,17 +3,30 @@ import { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { parseHtmlToStory } from './html-paste-parser.js';
+import { serializeStory, putJson, updateDocTimestamp } from '../../document-store/lib/document-store.js';
 
 /**
  * StoryEditorPlugin - Adapts the Story Editor logic to the Scribus App Shell.
  */
 export class StoryEditorPlugin {
-  constructor(editor, update, initialParagraphStyles, container) {
+  /**
+   * @param {EditorState} editor
+   * @param {Function} update
+   * @param {Array} initialParagraphStyles
+   * @param {HTMLElement} container
+   * @param {object} [storeContext] - { docPath, storyId } when loaded from store
+   */
+  constructor(editor, update, initialParagraphStyles, container, storeContext) {
     this.editor = editor;
     this.update = update;
     this.paragraphStyles = editor.paragraphStyles;
     this.container = container;
     
+    // Store context for save-back
+    this._docPath = storeContext?.docPath || null;
+    this._storyId = storeContext?.storyId || null;
+    this._saving = false;
+
     // If the editor was initialized without the initial styles, sync them now
     if (this.paragraphStyles.length === 0 && initialParagraphStyles) {
       this.paragraphStyles.push(...initialParagraphStyles);
@@ -112,6 +125,30 @@ export class StoryEditorPlugin {
         this.submitAction('Reset Layout', () => {
           this.editor.reset();
         });
+      }
+    });
+
+    // Save command — only available when loaded from the store
+    shell.commands.register({
+      id: 'doc.save',
+      label: 'Save',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+        <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>`,
+      execute: () => this._save(),
+      isEnabled: () => !!this._docPath && !this._saving,
+      shortcut: 'Ctrl+S',
+    });
+
+    // Intercept Ctrl+S to prevent browser Save dialog
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (this._docPath && !this._saving) {
+          shell.commands.execute('doc.save');
+        }
       }
     });
   }
@@ -215,12 +252,51 @@ export class StoryEditorPlugin {
     });
   }
 
+  async _save() {
+    if (!this._docPath || !this._storyId || this._saving) return;
+
+    this._saving = true;
+    const statusEl = document.getElementById('status');
+    if (statusEl) statusEl.setText('Saving...', '');
+    this.shell?.requestUpdate();
+    try {
+      const json = serializeStory(this._storyId, this.editor);
+      const res = await putJson(
+        `/store/${this._docPath}/stories/${this._storyId}.json`,
+        json
+      );
+      if (!res.ok) throw new Error(`PUT failed: ${res.status}`);
+
+      await updateDocTimestamp(this._docPath);
+      if (statusEl) statusEl.setText('Saved.', 'ok');
+    } catch (err) {
+      if (statusEl) statusEl.setText(`Save failed: ${err.message}`, 'error');
+      console.error('Save failed:', err);
+    } finally {
+      this._saving = false;
+      this.shell?.requestUpdate();
+    }
+  }
+
   getRibbonSections() {
-    return [
+    const sections = [];
+
+    // Document section (Save button) — only when loaded from store
+    if (this._docPath) {
+      sections.push(AppShell.createRibbonSection('Document', (container) => {
+        container.appendChild(this.shell.ui.createButton({
+          commandId: 'doc.save',
+        }));
+      }));
+    }
+
+    sections.push(
       TextTools.createTypographySection(this.shell, {
         fontFamily: this.state.typingStyle.fontFamily || 'EB Garamond'
       })
-    ];
+    );
+
+    return sections;
   }
 
   getPanelContent(selected) {

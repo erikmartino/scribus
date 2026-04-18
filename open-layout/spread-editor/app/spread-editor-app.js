@@ -10,6 +10,7 @@ import {
 } from '../lib/story-editor-core.js';
 import { cloneStyle } from '../../story-editor/lib/style.js';
 import { cloneParagraphStyle } from '../../story-editor/lib/paragraph-style.js';
+import { serializeStory, putJson, updateDocTimestamp } from '../../document-store/lib/document-store.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
 import { drawBoxOverlay } from './box-overlay.js';
@@ -607,43 +608,28 @@ export class SpreadEditorApp {
     this.shell?.requestUpdate();
 
     try {
-      // 1. Build spread JSON (frames = text boxes + image boxes)
-      const spreadJson = this._serializeSpread();
-
-      // 2. Build per-story JSON files
-      const storyFiles = this._serializeStories();
-
-      // 3. Update document.json modified timestamp
-      const docJsonUrl = `/store/${this._docPath}/document.json`;
-      let docJson = null;
-      try {
-        const res = await fetch(docJsonUrl);
-        if (res.ok) docJson = await res.json();
-      } catch { /* ignore */ }
-
-      // PUT all files in parallel
+      // PUT spread + stories + timestamp in parallel
       const puts = [];
 
       // Spread
       puts.push(
-        this._putJson(`/store/${this._docPath}/spreads/spread-1.json`, spreadJson)
+        putJson(`/store/${this._docPath}/spreads/spread-1.json`, this._serializeSpread())
       );
 
-      // Stories
-      for (const { id, json } of storyFiles) {
+      // Stories (using shared serializer)
+      for (const storyEntry of this._stories) {
+        const json = serializeStory(storyEntry.id, storyEntry.editor);
         puts.push(
-          this._putJson(`/store/${this._docPath}/stories/${id}.json`, json)
+          putJson(`/store/${this._docPath}/stories/${storyEntry.id}.json`, json)
         );
       }
 
-      // document.json (update modified timestamp)
-      if (docJson) {
-        docJson.modified = new Date().toISOString();
-        puts.push(this._putJson(docJsonUrl, docJson));
-      }
+      // document.json timestamp
+      puts.push(updateDocTimestamp(this._docPath));
 
       const results = await Promise.all(puts);
-      const failed = results.filter(r => !r.ok);
+      // updateDocTimestamp returns void, so filter only Response objects
+      const failed = results.filter(r => r && typeof r.ok === 'boolean' && !r.ok);
       if (failed.length > 0) {
         throw new Error(`${failed.length} file(s) failed to save`);
       }
@@ -656,14 +642,6 @@ export class SpreadEditorApp {
       this._saving = false;
       this.shell?.requestUpdate();
     }
-  }
-
-  async _putJson(url, data) {
-    return fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data, null, 2),
-    });
   }
 
   /**
@@ -709,43 +687,6 @@ export class SpreadEditorApp {
       ],
       frames,
     };
-  }
-
-  /**
-   * Serialize each story's EditorState into the store's story JSON format.
-   */
-  _serializeStories() {
-    const results = [];
-
-    for (const storyEntry of this._stories) {
-      const editor = storyEntry.editor;
-      const paragraphs = [];
-
-      for (let pi = 0; pi < editor.story.length; pi++) {
-        const runs = editor.story[pi].map(run => ({
-          text: run.text,
-          style: {
-            ...(run.style.bold ? { bold: true } : {}),
-            ...(run.style.italic ? { italic: true } : {}),
-            ...(run.style.fontFamily ? { fontFamily: run.style.fontFamily } : {}),
-          },
-        }));
-        paragraphs.push({
-          styleRef: 'body',
-          runs,
-        });
-      }
-
-      results.push({
-        id: storyEntry.id,
-        json: {
-          id: storyEntry.id,
-          paragraphs,
-        },
-      });
-    }
-
-    return results;
   }
 
   /**

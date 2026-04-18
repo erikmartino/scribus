@@ -19,7 +19,7 @@ In a DTP application, users seamlessly transition between moving boxes on the ca
 
 ### Current Implementation Status
 
-Implemented: object selection, re-click to enter text mode, object drag in object mode, and background click deselection.
+Implemented: object selection, re-click to enter text mode, object drag in object mode, background click deselection, and Escape key to exit text mode back to object mode. Creating a new text frame immediately enters text mode with the cursor ready.
 
 ## 2. Text Selection Gestures
 
@@ -75,6 +75,18 @@ Implemented: object selection boxes, text range highlighting, and blinking inser
 Missing/incomplete:
 - Clear visual distinction between primary selected object and secondary/hover states.
 - Verification of selection highlight contrast/accessibility in all supported themes/backgrounds.
+
+## Completed since initial plan
+
+- [x] Frame creation, deletion, linking/unlinking with full undo support.
+- [x] Text frame overflow indicators and port visuals.
+- [x] Create menu (Text Frame, Image Frame) with creatable registry.
+- [x] New text frames enter text mode immediately with cursor ready.
+- [x] Escape key exits text mode back to object mode.
+- [x] Clicking empty linked frame places cursor at end of story.
+- [x] Save/load documents to/from the store (Ctrl+S, `?doc=` URL param).
+- [x] Document browser with template cloning and Open routing.
+- [x] Shared UI components (`<scribus-status-bar>`, `<scribus-dialog>`).
 
 ## Next Plan Items
 

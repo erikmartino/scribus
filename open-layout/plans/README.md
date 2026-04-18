@@ -6,13 +6,17 @@ All implementation planning should live under `plans/`.
 
 ## Active plans
 
-- `box-overflow-linking-plan.md` - Text frame overflow markers and linking port indicators. Phase 1 (visual) completed, Phase 2 (interaction) planned.
-- `document-store-spec.md` - Exploded document format and HTTP store API spec. IDML-inspired, git/AI-friendly.
-- `story-editor-do-not-implement-yet-plan.md` - Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
-- `spread-editor-user-interface-plan.md` - Target interaction model and UX parity goals for the Spread Editor.
+- `document-store-spec.md` — Exploded document format and HTTP store API spec. IDML-inspired, git/AI-friendly.
+- `spread-editor-user-interface-plan.md` — Target interaction model and UX parity goals for the Spread Editor.
+- `story-editor-do-not-implement-yet-plan.md` — Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
 
 ## Archived/cleaned up
 
-- Removed completed implementation plans and completed one-off analyses.
-- `create-menu-plan.md` - Create menu button, creatable object registry, and spread editor integration (completed).
-- `multi-story-architecture-plan.md` - Independent stories per text frame in the spread editor (completed).
+Completed plans are removed per convention. Previously completed:
+
+- `document-store-module-plan.md` — Centralized document-store module with load/save API and debug inspector page (completed).
+- `box-overflow-linking-plan.md` — Overflow markers, linking ports, link/unlink interaction (completed).
+- `document-browser-plan.md` — Document browser with template cloning and Open routing (completed).
+- `shared-ui-components-refactor-plan.md` — Shared `<scribus-status-bar>`, `<scribus-dialog>`, CSS utilities (completed).
+- `create-menu-plan.md` — Create menu button, creatable object registry (completed).
+- `multi-story-architecture-plan.md` — Independent stories per text frame (completed).

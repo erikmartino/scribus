@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Inspector</title>
+  <link rel="stylesheet" href="../app-shell/css/shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .inspector-workspace {
+      padding: 2rem 3rem;
+      overflow-y: auto;
+      max-height: 100%;
+    }
+
+    .inspector-workspace h2 {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+    }
+
+    .inspector-workspace h2:not(:first-child) {
+      margin-top: 2rem;
+    }
+
+    .doc-header {
+      background: var(--shell-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .doc-header .doc-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .doc-header .doc-meta {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    .doc-header .doc-meta span {
+      display: inline-block;
+      margin-right: 1.5rem;
+    }
+
+    .tree-section {
+      background: var(--shell-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 0.8rem;
+      overflow: hidden;
+    }
+
+    .tree-section-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+      transition: background var(--transition-fast);
+    }
+
+    .tree-section-header:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .tree-section-header .chevron {
+      display: inline-block;
+      width: 16px;
+      text-align: center;
+      transition: transform var(--transition-fast);
+      color: var(--text-dim);
+    }
+
+    .tree-section-header .chevron.open {
+      transform: rotate(90deg);
+    }
+
+    .tree-section-header .badge {
+      background: var(--border);
+      color: var(--text-dim);
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 0.1rem 0.5rem;
+      border-radius: 8px;
+      margin-left: auto;
+    }
+
+    .tree-section-body {
+      padding: 0 1rem 0.8rem 2.2rem;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      display: none;
+    }
+
+    .tree-section-body.open {
+      display: block;
+    }
+
+    .tree-item {
+      border-left: 2px solid var(--border);
+      padding: 0.3rem 0 0.3rem 0.8rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .tree-item .item-id {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .tree-item .item-detail {
+      color: var(--text-dim);
+      font-size: 0.75rem;
+    }
+
+    .tree-item .item-label {
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    .tree-sub-item {
+      padding-left: 0.8rem;
+      border-left: 1px solid var(--border);
+      margin-left: 0.4rem;
+      margin-top: 0.2rem;
+    }
+
+    .tree-sub-item .sub-label {
+      color: var(--accent-secondary);
+      font-size: 0.75rem;
+    }
+
+    .key-value {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.15rem 0;
+    }
+
+    .key-value .key {
+      color: var(--text-dim);
+      min-width: 100px;
+    }
+
+    .key-value .value {
+      color: var(--text-main);
+    }
+
+    .raw-json {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 0.3rem;
+    }
+
+    .no-doc {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-dim);
+    }
+
+    .no-doc code {
+      background: rgba(187, 134, 252, 0.15);
+      color: var(--accent);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+
+<body>
+  <scribus-app-shell>
+    <div slot="ribbon" class="ribbon-controls"></div>
+
+    <div class="inspector-workspace" id="workspace">
+      <!-- Populated by main.js -->
+    </div>
+
+    <div slot="panels" style="padding: 1.5rem;">
+      <h3 class="panel-header">Document Inspector</h3>
+      <div id="properties-view">
+        <div style="color: var(--text-dim); font-size: 0.85rem; line-height: 1.5;">
+          <p>Inspect the internal structure of a document from the store.</p>
+          <p style="margin-top: 0.8rem;">Use <code style="color: var(--accent);">?doc=user/docname</code> to load a document.</p>
+        </div>
+      </div>
+    </div>
+  </scribus-app-shell>
+  <scribus-status-bar id="status">Loading...</scribus-status-bar>
+
+  <script type="module">
+    import '../app-shell/lib/components/app-shell-element.js';
+    import '../ui-components/index.js';
+    import './app/main.js';
+  </script>
+</body>
+
+</html>
