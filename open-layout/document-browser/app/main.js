@@ -226,15 +226,11 @@ class DocumentBrowserPlugin {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
 
-    const overlay = document.createElement('div');
-    overlay.className = 'clone-dialog-overlay';
+    const dialog = document.getElementById('clone-dialog');
+    dialog.setAttribute('heading', `New from "${templateDoc.title}"`);
 
-    const dialog = document.createElement('div');
-    dialog.className = 'clone-dialog';
-
-    const heading = document.createElement('h3');
-    heading.textContent = `New from "${templateDoc.title}"`;
-    dialog.appendChild(heading);
+    // Build body + actions into the dialog's light DOM
+    dialog.innerHTML = '';
 
     const nameLabel = document.createElement('label');
     nameLabel.textContent = 'Document name';
@@ -252,16 +248,15 @@ class DocumentBrowserPlugin {
     errorMsg.style.cssText = 'color: #ff5555; font-size: 0.78rem; margin-bottom: 0.5rem; min-height: 1.2em;';
     dialog.appendChild(errorMsg);
 
-    const btnRow = document.createElement('div');
-    btnRow.className = 'dialog-actions';
-
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => overlay.remove());
+    cancelBtn.slot = 'actions';
+    cancelBtn.addEventListener('click', () => dialog.close());
 
     const createBtn = document.createElement('button');
     createBtn.className = 'primary';
     createBtn.textContent = 'Create';
+    createBtn.slot = 'actions';
     createBtn.addEventListener('click', async () => {
       const slug = nameInput.value.trim().replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
       if (!slug) {
@@ -291,7 +286,7 @@ class DocumentBrowserPlugin {
           throw new Error(text);
         }
 
-        overlay.remove();
+        dialog.close();
         this._setStatus(`Created ${DEFAULT_USER}/${slug}`, 'ok');
         // Reload the document list
         await this._load();
@@ -302,24 +297,20 @@ class DocumentBrowserPlugin {
       }
     });
 
-    btnRow.appendChild(cancelBtn);
-    btnRow.appendChild(createBtn);
-    dialog.appendChild(btnRow);
-    overlay.appendChild(dialog);
+    dialog.appendChild(cancelBtn);
+    dialog.appendChild(createBtn);
 
-    // Close on overlay background click
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
+    dialog.show();
+
+    // Focus after shadow DOM renders
+    requestAnimationFrame(() => {
+      nameInput.focus();
+      nameInput.select();
     });
-
-    document.body.appendChild(overlay);
-    nameInput.focus();
-    nameInput.select();
 
     // Enter key submits
     nameInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') createBtn.click();
-      if (e.key === 'Escape') overlay.remove();
     });
   }
 
@@ -342,8 +333,7 @@ class DocumentBrowserPlugin {
 
   _setStatus(text, type) {
     if (!this._status) return;
-    this._status.textContent = text;
-    this._status.className = 'status-bar' + (type ? ` ${type}` : '');
+    this._status.setText(text, type);
   }
 
   // Plugin interface — no ribbon or panel contributions needed

@@ -1059,10 +1059,9 @@ export class SpreadEditorApp {
     }
   }
 
-  setStatus(msg, cls = '') {
+  setStatus(msg, type = '') {
     if (this.statusEl) {
-      this.statusEl.textContent = msg;
-      this.statusEl.className = cls;
+      this.statusEl.setText(msg, type);
     }
   }
 

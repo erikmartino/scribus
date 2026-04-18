@@ -160,3 +160,27 @@ scribus-app-shell:defined {
   border-color: var(--accent-secondary);
   background: rgba(0,0,0,0.8);
 }
+
+/* Panel header - reusable panel title */
+.panel-header {
+  margin-bottom: 1rem;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+/* Info card - reusable glass panel */
+.info-card {
+  font-size: 0.84rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.2rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.info-card strong {
+  color: var(--accent);
+}

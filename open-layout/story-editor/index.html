@@ -4,31 +4,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="/story-editor/">
   <title>Story Editor - Scribus App Shell</title>
-  <link rel="stylesheet" href="/app-shell/css/shell.css">
+  <link rel="stylesheet" href="../app-shell/css/shell.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --paper: #fffcf5;
-      --paper-border: #cdc2af;
-      --workspace-bg: #121214;
-    }
-
-    body {
-      background-color: var(--workspace-bg);
-      margin: 0;
-      padding: 0;
-      color: var(--text-main);
-    }
-
-    /* Story Editor Specific Styles */
     #svg-container {
-      background: var(--paper);
+      background: #fffcf5;
       padding: 60px;
       border-radius: 8px;
-      border: 1px solid var(--paper-border);
+      border: 1px solid #cdc2af;
       box-shadow: 0 30px 90px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
       cursor: text;
       user-select: none;
@@ -53,24 +40,7 @@
       flex-direction: column;
       align-items: center;
     }
-
-    .info-card {
-      font-size: 0.84rem;
-      color: var(--text-dim);
-      margin-top: 40px;
-      line-height: 1.6;
-      background: rgba(255, 255, 255, 0.03);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px;
-      max-width: 800px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-
-    .info-card strong {
-      color: var(--accent);
-    }
+  
   </style>
 </head>
 
@@ -81,7 +51,7 @@
     <div class="workspace-wrapper">
       <div id="svg-container" tabindex="0" class="selectable" spellcheck="false"></div>
 
-      <div class="info-card">
+      <div class="info-card" style="margin-top: 40px; max-width: 800px; padding: 24px;">
         <p><strong>Story Editor Pro:</strong> Powered by HarfBuzz WASM & Scribus Layout Logic. 
            This environment provides pixel-perfect typography with full OpenType support, 
             ligatures, and professional hyphenation.
@@ -90,13 +60,13 @@
     </div>
 
     <div slot="panels" id="properties-panel">
-      <h3 id="panel-title" style="margin-bottom: 1.5rem; color: var(--accent); padding: 1.5rem 1.5rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em;">Properties</h3>
+      <h3 id="panel-title" class="panel-header" style="margin-bottom: 1.5rem; padding: 1.5rem 1.5rem 0; text-transform: uppercase; letter-spacing: 0.1em;">Properties</h3>
       <div id="properties-view" style="padding: 0 1.5rem 1.5rem;">
         <!-- Plugin will inject content here -->
       </div>
     </div>
   </scribus-app-shell>
-  <div id="status" class="status-bar">Ready</div>
+  <scribus-status-bar id="status" type="ok">Ready</scribus-status-bar>
 
   <!-- Sample text as HTML — the DOM tree is the style source -->
   <div id="sample-text">
@@ -251,26 +221,28 @@
   </details>
 
   <script type="module">
-    import '/app-shell/lib/components/app-shell-element.js';
-    import shell from '/app-shell/lib/shell-core.js';
-    import { StoryEditorPlugin } from '/story-editor/lib/story-editor-plugin.js';
+    import '../app-shell/lib/components/app-shell-element.js';
+    import '../ui-components/index.js';
+    import shell from '../app-shell/lib/shell-core.js';
+    import { StoryEditorPlugin } from './lib/story-editor-plugin.js';
 
-    import { LayoutEngine } from '/story-editor/lib/layout-engine.js';
-    import { extractParagraphs } from '/story-editor/lib/text-extract.js';
-    import { TextCursor } from '/story-editor/lib/cursor.js';
-    import { EditorState } from '/story-editor/lib/editor-state.js';
+    import { LayoutEngine } from './lib/layout-engine.js';
+    import { extractParagraphs } from './lib/text-extract.js';
+    import { TextCursor } from './lib/cursor.js';
+    import { EditorState } from './lib/editor-state.js';
     import {
       extractParagraphStyles,
       ensureParagraphStylesLength,
       defaultParagraphStyle,
       buildParagraphLayoutStyles,
-    } from '/story-editor/lib/paragraph-style-render.js';
-    import { TextInteractionController } from '/story-editor/lib/text-interaction.js';
-    import { loadStoryFromStore } from '/story-editor/lib/store-loader.js';
+    } from './lib/paragraph-style-render.js';
+    import { TextInteractionController } from './lib/text-interaction.js';
+    import { loadStoryFromStore } from './lib/store-loader.js';
 
     function updateStatus(msg, isOk = true) {
       console.log(`[Status] ${msg}`);
-      // In a real app we might update a status bar in the shell
+      const el = document.getElementById('status');
+      if (el) el.setText(msg, isOk ? 'ok' : 'error');
     }
 
     async function main() {

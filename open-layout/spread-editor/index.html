@@ -10,21 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --paper: #fffcf8;
-      --pasteboard: #dad5cb;
-      --pasteboard-dark: #ccc8bc;
-    }
-
-    body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      overflow: hidden;
-      margin: 0;
-      padding: 0;
-    }
-
     #svg-container {
-      background: var(--pasteboard);
+      background: #dad5cb;
       cursor: default;
       user-select: none;
       caret-color: transparent;
@@ -35,15 +22,10 @@
       outline: none;
     }
 
-    /* Object Selection Mode Cursor Styles */
-    [data-mode="object"] #svg-container {
-      cursor: default;
-    }
     [data-mode="object"] #svg-container .box-rect {
       cursor: move;
     }
 
-    /* Text Edit Mode Cursor Styles */
     [data-mode="text"] #svg-container {
       cursor: text;
     }
@@ -60,34 +42,9 @@
       box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     }
 
-    .info-card {
-      background: rgba(255, 252, 246, 0.05);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.2rem;
-      margin-top: 1rem;
-      color: var(--text-dim);
-      font-size: 0.85rem;
-      line-height: 1.5;
-    }
-
     #sample-text {
       display: none;
     }
-    .status-bar {
-      position: absolute;
-      bottom: 0px;
-      left: 0px;
-      padding: 4px 12px;
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      background: rgba(0,0,0,0.4);
-      z-index: 2000;
-      border-top-right-radius: 8px;
-      backdrop-filter: blur(4px);
-    }
-    .status-bar.ok { color: var(--accent-secondary); }
-    .status-bar.error { color: #ff5555; }
   </style>
 </head>
 
@@ -109,7 +66,7 @@
     </div>
 
     <div id="svg-container" tabindex="0" class="selectable" contenteditable="true" spellcheck="false"></div>
-    <div id="status" class="status-bar">Ready</div>
+    <scribus-status-bar id="status" type="ok">Ready</scribus-status-bar>
 
     <div id="sample-text">
       <p>
@@ -133,12 +90,12 @@
     </div>
 
     <div slot="panels" style="padding: 1.5rem;">
-      <h3 id="panel-title" style="margin-bottom: 1rem; color: var(--accent);">Properties</h3>
+      <h3 id="panel-title" class="panel-header">Properties</h3>
       <div id="properties-view">
-        <div class="info-card">
+        <div class="info-card" style="margin-top: 1rem;">
           <p>This spread demo reuses `story-editor/lib` modules and coordinates layout across facing pages.</p>
         </div>
-        <div class="info-card">
+        <div class="info-card" style="margin-top: 1rem;">
           <p>Currently affecting <strong>2</strong> Pages.</p>
         </div>
       </div>

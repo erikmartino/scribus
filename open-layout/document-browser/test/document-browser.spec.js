@@ -22,7 +22,7 @@ test.describe('Document Browser', () => {
   test('page loads and shows Ready status', async ({ page }) => {
     const status = page.locator('#status');
     await expect(status).toHaveText('Ready');
-    await expect(status).toHaveClass(/ok/);
+    await expect(status).toHaveAttribute('type', 'ok');
   });
 
   test('displays Templates section with at least one template', async ({ page }) => {
@@ -65,8 +65,8 @@ test.describe('Document Browser', () => {
     const useBtn = page.locator('#template-grid .doc-card button.primary').first();
     await useBtn.click();
 
-    const dialog = page.locator('.clone-dialog');
-    await expect(dialog).toBeVisible();
+    const dialog = page.locator('scribus-dialog#clone-dialog');
+    await expect(dialog).toHaveAttribute('open', '');
 
     // Dialog should have a name input
     const nameInput = dialog.locator('input#clone-name-input');
@@ -80,25 +80,25 @@ test.describe('Document Browser', () => {
     const useBtn = page.locator('#template-grid .doc-card button.primary').first();
     await useBtn.click();
 
-    const dialog = page.locator('.clone-dialog');
-    await expect(dialog).toBeVisible();
+    const dialog = page.locator('scribus-dialog#clone-dialog');
+    await expect(dialog).toHaveAttribute('open', '');
 
     const cancelBtn = dialog.locator('button', { hasText: 'Cancel' });
     await cancelBtn.click();
 
-    await expect(dialog).not.toBeVisible();
+    await expect(dialog).not.toHaveAttribute('open');
   });
 
   test('Escape key closes clone dialog', async ({ page }) => {
     const useBtn = page.locator('#template-grid .doc-card button.primary').first();
     await useBtn.click();
 
-    const dialog = page.locator('.clone-dialog');
-    await expect(dialog).toBeVisible();
+    const dialog = page.locator('scribus-dialog#clone-dialog');
+    await expect(dialog).toHaveAttribute('open', '');
 
     await page.keyboard.press('Escape');
 
-    await expect(dialog).not.toBeVisible();
+    await expect(dialog).not.toHaveAttribute('open');
   });
 
   test('cloning a template creates a new document', async ({ page }) => {
@@ -109,8 +109,8 @@ test.describe('Document Browser', () => {
       const useBtn = page.locator('#template-grid .doc-card button.primary').first();
       await useBtn.click();
 
-      const dialog = page.locator('.clone-dialog');
-      await expect(dialog).toBeVisible();
+      const dialog = page.locator('scribus-dialog#clone-dialog');
+      await expect(dialog).toHaveAttribute('open', '');
 
       const nameInput = dialog.locator('input#clone-name-input');
       await nameInput.fill(testSlug);
@@ -119,7 +119,7 @@ test.describe('Document Browser', () => {
       await createBtn.click();
 
       // Dialog should close
-      await expect(dialog).not.toBeVisible({ timeout: 5000 });
+      await expect(dialog).not.toHaveAttribute('open', '', { timeout: 5000 });
 
       // The new document should appear in the user docs grid after reload
       const newCard = page.locator(`#user-docs-grid .doc-card[data-doc-path="alice/${testSlug}"]`);
@@ -139,25 +139,30 @@ test.describe('Document Browser', () => {
       const useBtn = page.locator('#template-grid .doc-card button.primary').first();
       await useBtn.click();
 
-      const nameInput = page.locator('.clone-dialog input#clone-name-input');
+      const dialog = page.locator('scribus-dialog#clone-dialog');
+      await expect(dialog).toHaveAttribute('open', '');
+
+      const nameInput = dialog.locator('input#clone-name-input');
       await nameInput.fill(testSlug);
 
-      const createBtn = page.locator('.clone-dialog button.primary', { hasText: 'Create' });
+      const createBtn = dialog.locator('button.primary', { hasText: 'Create' });
       await createBtn.click();
 
       // Wait for dialog to close (first clone succeeded)
-      await expect(page.locator('.clone-dialog')).not.toBeVisible({ timeout: 5000 });
+      await expect(dialog).not.toHaveAttribute('open', '', { timeout: 5000 });
 
       // Try to clone again with the same name
       await useBtn.click();
-      const nameInput2 = page.locator('.clone-dialog input#clone-name-input');
+      await expect(dialog).toHaveAttribute('open', '');
+
+      const nameInput2 = dialog.locator('input#clone-name-input');
       await nameInput2.fill(testSlug);
 
-      const createBtn2 = page.locator('.clone-dialog button.primary', { hasText: 'Create' });
+      const createBtn2 = dialog.locator('button.primary', { hasText: 'Create' });
       await createBtn2.click();
 
       // Should show error about already existing
-      const errorMsg = page.locator('.clone-dialog div', { hasText: 'already exists' });
+      const errorMsg = dialog.locator('div', { hasText: 'already exists' });
       await expect(errorMsg).toBeVisible({ timeout: 5000 });
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
