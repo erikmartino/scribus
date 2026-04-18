@@ -176,7 +176,7 @@ class DocumentBrowserPlugin {
     openBtn.className = 'primary';
     openBtn.textContent = 'Open';
     openBtn.addEventListener('click', () => {
-      window.location.href = `/spread-editor/index.html`;
+      window.location.href = `/spread-editor/index.html?doc=${encodeURIComponent(doc.path)}`;
     });
     actions.appendChild(openBtn);
 

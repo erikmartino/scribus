@@ -8,6 +8,8 @@ import {
   buildParagraphLayoutStyles,
   parseHtmlToStory,
 } from '../lib/story-editor-core.js';
+import { cloneStyle } from '../../story-editor/lib/style.js';
+import { cloneParagraphStyle } from '../../story-editor/lib/paragraph-style.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
 import { drawBoxOverlay } from './box-overlay.js';
@@ -48,6 +50,11 @@ export class SpreadEditorApp {
     
     this._fontSize = 20;
     this._lineHeight = 138;
+
+    // Document store path (e.g. "alice/brochure-q2").
+    // When set, the Save button writes back to /store/{docPath}/...
+    this._docPath = null;
+    this._saving = false;
   }
 
   /** Active editor — returns the EditorState of the currently active story. */
@@ -73,19 +80,25 @@ export class SpreadEditorApp {
         fontFamily: 'EB Garamond',
         reserveBottom: false,
       });
-      const paragraphs = extractParagraphs(this.sampleEl);
-      const paragraphStyles = extractParagraphStyles(this.sampleEl, this._fontSize);
-      // The initial story will be assigned box IDs once boxes are created
-      // in the first update() call. We store it with an empty boxIds array
-      // for now; update() will populate it.
-      const initialStory = {
-        id: `story-${this._storyCounter++}`,
-        editor: new EditorState(paragraphs, paragraphStyles),
-        boxIds: [], // populated in update() from default boxes
-        lineMap: [],
-      };
-      this._stories = [initialStory];
-      this._activeStory = initialStory;
+      // Detect document store path from URL (?doc=user/docname)
+      const params = new URLSearchParams(location.search);
+      this._docPath = params.get('doc') || null;
+
+      if (this._docPath) {
+        await this._loadFromStore();
+      } else {
+        // Fallback: use hardcoded sample text from #sample-text element
+        const paragraphs = extractParagraphs(this.sampleEl);
+        const paragraphStyles = extractParagraphStyles(this.sampleEl, this._fontSize);
+        const initialStory = {
+          id: `story-${this._storyCounter++}`,
+          editor: new EditorState(paragraphs, paragraphStyles),
+          boxIds: [], // populated in update() from default boxes
+          lineMap: [],
+        };
+        this._stories = [initialStory];
+        this._activeStory = initialStory;
+      }
       this._interaction = new BoxInteractionController({
         getSvg: () => this._svg,
         getBounds: () => this.currentSpread?.pasteboardRect,
@@ -148,11 +161,12 @@ export class SpreadEditorApp {
       this._lastBoxClickId = null;
 
       this.bindEvents();
-      
+
       // Register Text Commands & Clipboard Integration
       this._registerCommands(shell);
       this._initClipboard(shell);
       this._registerCreatables(shell);
+      this._registerSaveCommand(shell);
 
       shell.addEventListener('delete-requested', () => this._deleteSelectedBox());
 
@@ -210,6 +224,146 @@ export class SpreadEditorApp {
         }
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Store loading — read spread + stories from the document store
+  // ---------------------------------------------------------------------------
+
+  async _loadFromStore() {
+    this.setStatus('Loading document from store...');
+
+    // 1. Load the spread definition
+    const spreadUrl = `/store/${this._docPath}/spreads/spread-1.json`;
+    const spreadRes = await fetch(spreadUrl);
+    if (!spreadRes.ok) {
+      throw new Error(`Failed to load spread: ${spreadRes.status} ${spreadUrl}`);
+    }
+    const spreadJson = await spreadRes.json();
+
+    // 2. Load paragraph style definitions (for resolving styleRef)
+    let styleMap = {};
+    try {
+      const stylesUrl = `/store/${this._docPath}/styles/paragraph.aggregate.json`;
+      const stylesRes = await fetch(stylesUrl);
+      if (stylesRes.ok) {
+        const styles = await stylesRes.json();
+        for (const s of styles) styleMap[s.id] = s;
+      }
+    } catch { /* styles are optional */ }
+
+    // 3. Parse frames into boxes and collect storyRefs to load
+    const storyRefsToLoad = new Set();
+    // Map from storyRef -> ordered list of box IDs in that story chain
+    const storyBoxMap = new Map();
+
+    for (const frame of spreadJson.frames || []) {
+      if (frame.type === 'image') {
+        this.imageBoxes.push({
+          id: frame.id,
+          x: frame.x,
+          y: frame.y,
+          width: frame.width,
+          height: frame.height,
+          minWidth: 20,
+          minHeight: 20,
+          imageUrl: frame.imageUrl || this._emptyImagePlaceholder(),
+        });
+        this._imageBoxCounter++;
+      } else {
+        // Text frame
+        this.boxes.push({
+          id: frame.id,
+          x: frame.x,
+          y: frame.y,
+          width: frame.width,
+          height: frame.height,
+          minWidth: 80,
+          minHeight: 60,
+        });
+        if (frame.storyRef) {
+          storyRefsToLoad.add(frame.storyRef);
+          if (!storyBoxMap.has(frame.storyRef)) {
+            storyBoxMap.set(frame.storyRef, []);
+          }
+          storyBoxMap.get(frame.storyRef).push(frame.id);
+        }
+      }
+    }
+
+    // 4. Load each referenced story
+    const storyPromises = [...storyRefsToLoad].map(async (storyRef) => {
+      const storyUrl = `/store/${this._docPath}/stories/${storyRef}.json`;
+      const res = await fetch(storyUrl);
+      if (!res.ok) {
+        console.warn(`Failed to load story ${storyRef}: ${res.status}`);
+        return null;
+      }
+      const storyJson = await res.json();
+
+      // Convert store format -> editor format
+      const story = [];
+      const paragraphStyles = [];
+      for (const para of storyJson.paragraphs || []) {
+        const runs = (para.runs || []).map(run => ({
+          text: run.text,
+          style: cloneStyle(run.style),
+        }));
+        story.push(runs);
+
+        const def = styleMap[para.styleRef] || {};
+        paragraphStyles.push(cloneParagraphStyle({
+          fontSize: def.fontSize ?? this._fontSize,
+          fontFamily: def.fontFamily ?? 'EB Garamond',
+        }));
+      }
+
+      // Ensure at least one paragraph
+      if (story.length === 0) {
+        story.push([{ text: '', style: cloneStyle() }]);
+        paragraphStyles.push(cloneParagraphStyle({ fontSize: this._fontSize }));
+      }
+
+      return {
+        storyRef,
+        id: storyJson.id || storyRef,
+        story,
+        paragraphStyles,
+        boxIds: storyBoxMap.get(storyRef) || [],
+      };
+    });
+
+    const loadedStories = (await Promise.all(storyPromises)).filter(Boolean);
+
+    // 5. Build story entries
+    this._stories = [];
+    for (const loaded of loadedStories) {
+      const storyEntry = {
+        id: loaded.id,
+        editor: new EditorState(loaded.story, loaded.paragraphStyles),
+        boxIds: loaded.boxIds,
+        lineMap: [],
+      };
+      this._stories.push(storyEntry);
+      this._storyCounter++;
+    }
+
+    // If no stories were loaded, create an empty fallback
+    if (this._stories.length === 0) {
+      const emptyStory = [[{ text: '', style: cloneStyle() }]];
+      const emptyStyles = [cloneParagraphStyle({ fontSize: this._fontSize })];
+      this._stories.push({
+        id: `story-${this._storyCounter++}`,
+        editor: new EditorState(emptyStory, emptyStyles),
+        boxIds: this.boxes.map(b => b.id),
+        lineMap: [],
+      });
+    }
+
+    this._activeStory = this._stories[0];
+    // Mark boxes as loaded so update() won't overwrite with defaults
+    this._loadedFromStore = true;
+    this.selectedBoxId = this.boxes[0]?.id || this.imageBoxes[0]?.id || null;
   }
 
   /**
@@ -414,6 +568,184 @@ export class SpreadEditorApp {
         });
       }
     });
+  }
+
+  _registerSaveCommand(shell) {
+    shell.commands.register({
+      id: 'doc.save',
+      label: 'Save',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+        <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>`,
+      execute: () => this._save(),
+      isEnabled: () => !!this._docPath && !this._saving,
+      shortcut: 'Ctrl+S',
+    });
+
+    // Intercept Ctrl+S globally to prevent the browser's Save dialog
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (this._docPath && !this._saving) {
+          shell.commands.execute('doc.save');
+        }
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Save — serialize in-memory state to the document store
+  // ---------------------------------------------------------------------------
+
+  async _save() {
+    if (!this._docPath || this._saving) return;
+
+    this._saving = true;
+    this.setStatus('Saving...', '');
+    this.shell?.requestUpdate();
+
+    try {
+      // 1. Build spread JSON (frames = text boxes + image boxes)
+      const spreadJson = this._serializeSpread();
+
+      // 2. Build per-story JSON files
+      const storyFiles = this._serializeStories();
+
+      // 3. Update document.json modified timestamp
+      const docJsonUrl = `/store/${this._docPath}/document.json`;
+      let docJson = null;
+      try {
+        const res = await fetch(docJsonUrl);
+        if (res.ok) docJson = await res.json();
+      } catch { /* ignore */ }
+
+      // PUT all files in parallel
+      const puts = [];
+
+      // Spread
+      puts.push(
+        this._putJson(`/store/${this._docPath}/spreads/spread-1.json`, spreadJson)
+      );
+
+      // Stories
+      for (const { id, json } of storyFiles) {
+        puts.push(
+          this._putJson(`/store/${this._docPath}/stories/${id}.json`, json)
+        );
+      }
+
+      // document.json (update modified timestamp)
+      if (docJson) {
+        docJson.modified = new Date().toISOString();
+        puts.push(this._putJson(docJsonUrl, docJson));
+      }
+
+      const results = await Promise.all(puts);
+      const failed = results.filter(r => !r.ok);
+      if (failed.length > 0) {
+        throw new Error(`${failed.length} file(s) failed to save`);
+      }
+
+      this.setStatus('Saved.', 'ok');
+    } catch (err) {
+      this.setStatus(`Save failed: ${err.message}`, 'error');
+      console.error('Save failed:', err);
+    } finally {
+      this._saving = false;
+      this.shell?.requestUpdate();
+    }
+  }
+
+  async _putJson(url, data) {
+    return fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data, null, 2),
+    });
+  }
+
+  /**
+   * Serialize boxes and image boxes into a single spread JSON object
+   * matching the store format.
+   */
+  _serializeSpread() {
+    const frames = [];
+
+    // Text frames: each box references its story via storyRef
+    for (const box of this.boxes) {
+      const story = this._findStoryForBox(box.id);
+      const frame = {
+        id: box.id,
+        type: 'text',
+        x: Math.round(box.x * 100) / 100,
+        y: Math.round(box.y * 100) / 100,
+        width: Math.round(box.width * 100) / 100,
+        height: Math.round(box.height * 100) / 100,
+      };
+      if (story) frame.storyRef = story.id;
+      frames.push(frame);
+    }
+
+    // Image frames
+    for (const box of this.imageBoxes) {
+      frames.push({
+        id: box.id,
+        type: 'image',
+        x: Math.round(box.x * 100) / 100,
+        y: Math.round(box.y * 100) / 100,
+        width: Math.round(box.width * 100) / 100,
+        height: Math.round(box.height * 100) / 100,
+        imageUrl: box.imageUrl,
+      });
+    }
+
+    return {
+      id: 'spread-1',
+      pages: [
+        { index: 0, label: '1' },
+        { index: 1, label: '2' },
+      ],
+      frames,
+    };
+  }
+
+  /**
+   * Serialize each story's EditorState into the store's story JSON format.
+   */
+  _serializeStories() {
+    const results = [];
+
+    for (const storyEntry of this._stories) {
+      const editor = storyEntry.editor;
+      const paragraphs = [];
+
+      for (let pi = 0; pi < editor.story.length; pi++) {
+        const runs = editor.story[pi].map(run => ({
+          text: run.text,
+          style: {
+            ...(run.style.bold ? { bold: true } : {}),
+            ...(run.style.italic ? { italic: true } : {}),
+            ...(run.style.fontFamily ? { fontFamily: run.style.fontFamily } : {}),
+          },
+        }));
+        paragraphs.push({
+          styleRef: 'body',
+          runs,
+        });
+      }
+
+      results.push({
+        id: storyEntry.id,
+        json: {
+          id: storyEntry.id,
+          paragraphs,
+        },
+      });
+    }
+
+    return results;
   }
 
   /**
@@ -911,36 +1243,40 @@ export class SpreadEditorApp {
     });
     this.currentSpread = spread;
 
-    if (this.boxes.length === 0) {
-      this.boxes = createBoxesFromDefaults(spread.boxes);
-      this._defaultBoxCount = spread.boxes.length;
-      this.selectedBoxId = this.boxes[0]?.id || null;
-      // Assign default boxes to the initial story
-      if (this._stories.length > 0 && this._stories[0].boxIds.length === 0) {
-        this._stories[0].boxIds = this.boxes.map(b => b.id);
+    // When loaded from the store, skip default box creation — boxes
+    // were already populated by _loadFromStore().
+    if (!this._loadedFromStore) {
+      if (this.boxes.length === 0) {
+        this.boxes = createBoxesFromDefaults(spread.boxes);
+        this._defaultBoxCount = spread.boxes.length;
+        this.selectedBoxId = this.boxes[0]?.id || null;
+        // Assign default boxes to the initial story
+        if (this._stories.length > 0 && this._stories[0].boxIds.length === 0) {
+          this._stories[0].boxIds = this.boxes.map(b => b.id);
+        }
       }
-    }
-    // Only reset boxes to match layout defaults if no user-created frames
-    // have been added (i.e. count still matches the initial default count).
-    if (this._defaultBoxCount !== undefined &&
-        this.boxes.length === this._defaultBoxCount &&
-        this.boxes.length !== spread.boxes.length) {
-      const defaults = createBoxesFromDefaults(spread.boxes);
-      this.boxes = defaults.map((d, i) => {
-        const existing = this.boxes[i];
-        if (!existing) return d;
-        return {
-          ...existing,
-          id: d.id,
-        };
-      });
-      this._defaultBoxCount = spread.boxes.length;
-      this.selectedBoxId = this.boxes[0]?.id || null;
-      // Update initial story's boxIds to match new defaults
-      if (this._stories.length > 0) {
-        this._stories[0].boxIds = this.boxes
-          .filter(b => !b.id.startsWith('text-'))
-          .map(b => b.id);
+      // Only reset boxes to match layout defaults if no user-created frames
+      // have been added (i.e. count still matches the initial default count).
+      if (this._defaultBoxCount !== undefined &&
+          this.boxes.length === this._defaultBoxCount &&
+          this.boxes.length !== spread.boxes.length) {
+        const defaults = createBoxesFromDefaults(spread.boxes);
+        this.boxes = defaults.map((d, i) => {
+          const existing = this.boxes[i];
+          if (!existing) return d;
+          return {
+            ...existing,
+            id: d.id,
+          };
+        });
+        this._defaultBoxCount = spread.boxes.length;
+        this.selectedBoxId = this.boxes[0]?.id || null;
+        // Update initial story's boxIds to match new defaults
+        if (this._stories.length > 0) {
+          this._stories[0].boxIds = this.boxes
+            .filter(b => !b.id.startsWith('text-'))
+            .map(b => b.id);
+        }
       }
     }
     this.boxes = clampBoxesToBounds(this.boxes, spread.pasteboardRect);
@@ -1084,13 +1420,23 @@ export class SpreadEditorApp {
   }
 
   getRibbonSections(selected) {
-    if (this.mode === 'object' || !this.editor) {
-      return [];
-    } else {
+    const sections = [];
+
+    // Document section — always visible (Save button)
+    if (this._docPath) {
+      sections.push(AppShell.createRibbonSection('Document', (container) => {
+        container.appendChild(this.shell.ui.createButton({
+          commandId: 'doc.save',
+        }));
+      }));
+    }
+
+    // Text-mode sections
+    if (this.mode !== 'object' && this.editor) {
       const typingStyle = this.editor.getTypingStyle();
       const paraIndex = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
       const paraStyle = this.editor.paragraphStyles[paraIndex] || {};
-      return [
+      sections.push(
         TextTools.createTypographySection(this.shell, {
           fontFamily: typingStyle.fontFamily || 'EB Garamond'
         }),
@@ -1098,7 +1444,9 @@ export class SpreadEditorApp {
           fontSize: paraStyle.fontSize || this._fontSize || 20,
           lineHeight: this._lineHeight || 138
         })
-      ];
+      );
     }
+
+    return sections;
   }
 }

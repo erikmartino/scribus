@@ -12,8 +12,9 @@ Status: **Draft v0.3** — 2026-04-12
 - [x] Story editor reads from store via `?doc=` URL param (`store-loader.js`)
 - [x] Playwright E2E test for store loading
 - [x] POST copy endpoint for document instantiation from templates
-- [ ] Save (PUT) back to store from the editor
-- [ ] Spread editor integration
+- [x] Save (PUT) back to store from the spread editor (`doc.save` command, Ctrl+S)
+- [ ] Spread editor load from store (currently saves only; initial data is still hardcoded)
+- [ ] Story editor save-back
 
 ## Goals
 
