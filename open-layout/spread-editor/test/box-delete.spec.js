@@ -27,6 +27,11 @@ test.describe('Text Frame Deletion', () => {
     await page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' }).click();
     await page.waitForTimeout(500);
 
+    // Creating a text frame now enters text mode; press Escape to return
+    // to object mode so the frame is selected and deletable.
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
     const before = await page.evaluate(() => {
       const svg = document.querySelector('#svg-container svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
@@ -51,6 +56,10 @@ test.describe('Text Frame Deletion', () => {
     await page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' }).click();
     await page.waitForTimeout(500);
 
+    // Exit text mode so Backspace triggers frame deletion, not text editing
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
     const before = await page.evaluate(() => {
       const svg = document.querySelector('#svg-container svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
@@ -73,6 +82,10 @@ test.describe('Text Frame Deletion', () => {
     await trigger.click();
     await page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' }).click();
     await page.waitForTimeout(500);
+
+    // Exit text mode so Backspace triggers frame deletion
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
 
     const before = await page.evaluate(() => {
       const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);

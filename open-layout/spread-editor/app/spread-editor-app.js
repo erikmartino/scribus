@@ -838,7 +838,13 @@ export class SpreadEditorApp {
       this.boxes = [...this.boxes, box];
       this._stories = [...this._stories, newStoryEntry];
       this.selectedBoxId = boxId;
-      this.setMode('object');
+      // Activate the new story and enter text mode with cursor ready
+      this._activeStory = newStoryEntry;
+      if (this._textInteraction) {
+        this._textInteraction.setEditor(newStoryEntry.editor);
+      }
+      newStoryEntry.editor.moveCursor({ paraIndex: 0, charOffset: 0 });
+      this.setMode('text');
     });
   }
 
@@ -1214,11 +1220,14 @@ export class SpreadEditorApp {
       }
     });
 
-    // Escape key cancels link mode
+    // Escape key: cancel link mode, or exit text mode back to object mode
     this.container.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.mode === 'link') {
         e.preventDefault();
         this._exitLinkMode();
+      } else if (e.key === 'Escape' && this.mode === 'text') {
+        e.preventDefault();
+        this.setMode('object');
       }
     });
 
