@@ -55,7 +55,7 @@ export class SpreadEditorApp {
     // Zoom: 1.0 = 100%, >1 = zoomed in, <1 = zoomed out
     this._zoom = 1.0;
     this._zoomMin = 0.25;
-    this._zoomMax = 4.0;
+    this._zoomMax = 40.0;
     this._zoomStep = 1.1; // multiplicative step per wheel tick
 
     // Document store path (e.g. "alice/brochure-q2").
