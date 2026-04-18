@@ -288,6 +288,38 @@ function aggregateJsonFiles(dirPath, callback) {
   });
 }
 
+// Recursively copy a directory tree from `src` to `dest`.
+// Calls callback(err) when done.
+function copyDirRecursive(src, dest, callback) {
+  fs.mkdir(dest, { recursive: true }, (mkdirErr) => {
+    if (mkdirErr) { callback(mkdirErr); return; }
+    fs.readdir(src, { withFileTypes: true }, (readErr, entries) => {
+      if (readErr) { callback(readErr); return; }
+      if (entries.length === 0) { callback(null); return; }
+      let pending = entries.length;
+      let failed = false;
+      for (const entry of entries) {
+        if (failed) return;
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+          copyDirRecursive(srcPath, destPath, (err) => {
+            if (failed) return;
+            if (err) { failed = true; callback(err); return; }
+            if (--pending === 0) callback(null);
+          });
+        } else {
+          fs.copyFile(srcPath, destPath, (cpErr) => {
+            if (failed) return;
+            if (cpErr) { failed = true; callback(cpErr); return; }
+            if (--pending === 0) callback(null);
+          });
+        }
+      }
+    });
+  });
+}
+
 function handleStoreRequest(req, res, pathname) {
   const method = req.method;
 
@@ -325,6 +357,96 @@ function handleStoreRequest(req, res, pathname) {
         setIsolationHeaders(res);
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(JSON.stringify(items, null, 2));
+      });
+    });
+    return;
+  }
+
+  // --- POST: copy (instantiate) a document from a template ---
+  // POST /store/{user}/{newDoc}
+  // Body: { "from": "{user}/{sourceDoc}" }
+  // Recursively copies the source document directory to the target path.
+  // Returns 409 if the target already exists, 404 if source is missing.
+  // Updates document.json with fresh created/modified timestamps.
+  if (method === 'POST') {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      let body;
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+      } catch {
+        sendError(res, 400, 'Bad Request: invalid JSON body');
+        return;
+      }
+      if (!body.from || typeof body.from !== 'string') {
+        sendError(res, 400, 'Bad Request: "from" field is required');
+        return;
+      }
+
+      const destPath = safeResolveStorePath(pathname);
+      const srcPath = safeResolveStorePath(`/store/${body.from}`);
+      if (!destPath || !srcPath) {
+        sendError(res, 400, 'Bad Request: invalid path');
+        return;
+      }
+
+      // Source must exist and be a directory
+      fs.stat(srcPath, (srcErr, srcStat) => {
+        if (srcErr || !srcStat.isDirectory()) {
+          sendError(res, 404, `Source not found: ${body.from}`);
+          return;
+        }
+
+        // Destination must not already exist
+        fs.stat(destPath, (destErr) => {
+          if (!destErr) {
+            sendError(res, 409, `Conflict: ${pathname.replace(/^\/store\//, '')} already exists`);
+            return;
+          }
+
+          copyDirRecursive(srcPath, destPath, (copyErr) => {
+            if (copyErr) {
+              sendError(res, 500, `Copy failed: ${copyErr.message}`);
+              return;
+            }
+
+            // Update document.json timestamps
+            const docJsonPath = path.join(destPath, 'document.json');
+            fs.readFile(docJsonPath, 'utf-8', (readErr, data) => {
+              if (readErr) {
+                // No document.json — still a valid copy, just skip patching
+                res.statusCode = 201;
+                setIsolationHeaders(res);
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(JSON.stringify({ path: pathname.replace(/^\/store\//, '') }));
+                return;
+              }
+              try {
+                const doc = JSON.parse(data);
+                const now = new Date().toISOString();
+                doc.created = now;
+                doc.modified = now;
+                fs.writeFile(docJsonPath, JSON.stringify(doc, null, 2) + '\n', (writeErr) => {
+                  if (writeErr) {
+                    sendError(res, 500, `Copy succeeded but failed to update document.json: ${writeErr.message}`);
+                    return;
+                  }
+                  res.statusCode = 201;
+                  setIsolationHeaders(res);
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({ path: pathname.replace(/^\/store\//, '') }));
+                });
+              } catch (parseErr) {
+                // Malformed document.json — copy is still valid
+                res.statusCode = 201;
+                setIsolationHeaders(res);
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(JSON.stringify({ path: pathname.replace(/^\/store\//, '') }));
+              }
+            });
+          });
+        });
       });
     });
     return;

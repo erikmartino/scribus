@@ -11,6 +11,7 @@ Status: **Draft v0.3** — 2026-04-12
 - [x] Example documents (`store/alice/brochure-q2/`, `store/demo/typography-sampler/`)
 - [x] Story editor reads from store via `?doc=` URL param (`store-loader.js`)
 - [x] Playwright E2E test for store loading
+- [x] POST copy endpoint for document instantiation from templates
 - [ ] Save (PUT) back to store from the editor
 - [ ] Spread editor integration
 
@@ -232,6 +233,7 @@ The server exposes a flat file-shaped REST surface under `/store/`.
 | `GET` | `/store/{user}/{doc}/stories/{id}/edit` | Serve the story editor for this story |
 | `GET` | `/store/{user}/{doc}/{file...}` | Return file content |
 | `PUT` | `/store/{user}/{doc}/{file...}` | Create or overwrite file; parent dirs created automatically |
+| `POST`  | `/store/{user}/{newDoc}` | Copy a document from a template (see §3.6) |
 | `DELETE`| `/store/{user}/{doc}/{file...}` | Remove a file (optional, for cleanup) |
 
 ### 3.2  Content types
@@ -293,6 +295,37 @@ because they are not JSON.
 | 204 | Deleted (DELETE) |
 | 400 | Malformed path / traversal attempt |
 | 404 | File or document not found |
+| 409 | Conflict (POST copy target already exists) |
+
+### 3.6  Document copy (POST)
+
+`POST /store/{user}/{newDoc}` with a JSON body creates a new document by
+recursively copying an existing one:
+
+```json
+{ "from": "demo/typography-sampler" }
+```
+
+**Behavior:**
+
+1. The `from` field identifies the source document (relative to `/store/`).
+2. The source must exist and be a directory; otherwise the server returns 404.
+3. The target path must not already exist; otherwise the server returns 409.
+4. All files and subdirectories are copied recursively (stories, styles,
+   spreads, assets — including binary files).
+5. After copying, `document.json` in the new document is patched with fresh
+   `created` and `modified` timestamps.  If `document.json` is missing or
+   malformed, the copy still succeeds — only the timestamp patch is skipped.
+
+**Response (201 Created):**
+
+```json
+{ "path": "alice/my-new-brochure" }
+```
+
+This endpoint enables "New from Template" workflows: a set of template
+documents can live under a shared namespace (e.g. `templates/`) and be
+instantiated into a user's workspace with a single POST.
 
 ---
 

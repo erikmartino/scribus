@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Browser</title>
+  <link rel="stylesheet" href="../app-shell/css/shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .browser-workspace {
+      padding: 2rem 3rem;
+      overflow-y: auto;
+      max-height: 100%;
+    }
+
+    .browser-workspace h2 {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+    }
+
+    .browser-workspace h2:not(:first-child) {
+      margin-top: 2.5rem;
+    }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    .doc-card {
+      background: var(--shell-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem;
+      cursor: default;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .doc-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 4px 20px rgba(187, 134, 252, 0.15);
+    }
+
+    .doc-card .title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 0.3rem;
+      word-break: break-word;
+    }
+
+    .doc-card .meta {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      line-height: 1.4;
+    }
+
+    .doc-card .meta .detail {
+      display: flex;
+      gap: 0.8rem;
+      margin-top: 0.3rem;
+      flex-wrap: wrap;
+    }
+
+    .doc-card .actions {
+      margin-top: 0.8rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .doc-card .actions button {
+      font-family: inherit;
+      font-size: 0.78rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .doc-card .actions button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .doc-card .actions button.primary {
+      background: var(--accent);
+      color: #121214;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .doc-card .actions button.primary:hover {
+      background: #d0a4ff;
+    }
+
+    .doc-card .actions button:disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .empty-state {
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      padding: 1rem 0;
+    }
+
+    /* Clone dialog */
+    .clone-dialog-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 5000;
+    }
+
+    .clone-dialog {
+      background: var(--shell-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      min-width: 340px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .clone-dialog h3 {
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+
+    .clone-dialog label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-bottom: 0.3rem;
+    }
+
+    .clone-dialog input {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-color);
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      margin-bottom: 0.8rem;
+    }
+
+    .clone-dialog input:focus {
+      border-color: var(--accent);
+    }
+
+    .clone-dialog .dialog-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+
+    .clone-dialog .dialog-actions button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+
+    .clone-dialog .dialog-actions button.primary {
+      background: var(--accent);
+      color: #121214;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .status-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      padding: 4px 12px;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 2000;
+      border-top-right-radius: 8px;
+      backdrop-filter: blur(4px);
+    }
+    .status-bar.ok { color: var(--accent-secondary); }
+    .status-bar.error { color: #ff5555; }
+  </style>
+</head>
+
+<body>
+  <scribus-app-shell>
+    <div slot="ribbon" class="ribbon-controls">
+    </div>
+
+    <div class="browser-workspace" id="workspace">
+      <!-- Populated by main.js -->
+    </div>
+    <div id="status" class="status-bar">Loading...</div>
+
+    <div slot="panels" style="padding: 1.5rem;">
+      <h3 id="panel-title" style="margin-bottom: 1rem; color: var(--accent);">Document Browser</h3>
+      <div id="properties-view">
+        <div style="color: var(--text-dim); font-size: 0.85rem; line-height: 1.5;">
+          <p>Browse templates and your documents.</p>
+          <p style="margin-top: 0.8rem;">Click <strong>Use Template</strong> to create a new document from a template.</p>
+          <p style="margin-top: 0.8rem;">Click <strong>Open</strong> to open an existing document in the spread editor.</p>
+        </div>
+      </div>
+    </div>
+  </scribus-app-shell>
+
+  <script type="module">
+    import '../app-shell/lib/components/app-shell-element.js';
+    import '../ui-components/index.js';
+    import './app/main.js';
+  </script>
+</body>
+
+</html>
