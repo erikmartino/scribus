@@ -78,6 +78,14 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
 - Whenever work progresses on a planned task, update the corresponding plan file to reflect current status and remaining work.
 - If a plan has no remaining work, remove it and update any index/reference files that list active plans.
 
+## Shared Layout and Components
+
+- Maximize reuse of shared styles and components via the app shell (`app-shell/css/shell.css` and `ui-components/`).
+- Do not duplicate CSS across demo pages. If a style appears in more than one demo, extract it into `shell.css` as a utility class or into a web component.
+- Use Shadow DOM web components for encapsulating and sharing UI patterns (e.g., `<scribus-status-bar>`, `<scribus-dialog>`, `<scribus-button>`). Use slots to keep components flexible.
+- Page-specific CSS that is genuinely unique to one demo may stay inline in that demo's `<style>` block, but keep it minimal.
+- All demos must use relative paths for imports (`../app-shell/...`, not `/app-shell/...`). If a page is served from a different URL (e.g., a server rewrite), use a `<base>` tag to fix resolution.
+
 ## Editing Guidance for `docs/story-editor`
 
 - Keep model logic in `lib/` pure where possible.
