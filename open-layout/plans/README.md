@@ -6,7 +6,6 @@ All implementation planning should live under `plans/`.
 
 ## Active plans
 
-- `spread-editor-user-interface-plan.md` — Target interaction model and UX parity goals for the Spread Editor.
 - `story-editor-do-not-implement-yet-plan.md` — Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
 
 Reference specifications live in `../specs/`.
@@ -21,3 +20,4 @@ Completed plans are removed per convention. Previously completed:
 - `shared-ui-components-refactor-plan.md` — Shared `<scribus-status-bar>`, `<scribus-dialog>`, CSS utilities (completed).
 - `create-menu-plan.md` — Create menu button, creatable object registry (completed).
 - `multi-story-architecture-plan.md` — Independent stories per text frame (completed).
+- `spread-editor-user-interface-plan.md` — Interaction model and UX parity (completed, moved to `../specs/`).

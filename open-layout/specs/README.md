@@ -9,3 +9,4 @@ remain as authoritative references.
 ## Specs
 
 - `document-store-spec.md` — Exploded document format and HTTP store API. IDML-inspired, git/AI-friendly.
+- `spread-editor-user-interface-spec.md` — DTP interaction model: object/text mode transitions, selection gestures, cursor styles, visual feedback.
