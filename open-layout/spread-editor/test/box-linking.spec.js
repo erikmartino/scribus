@@ -285,4 +285,113 @@ test.describe('Text Frame Linking', () => {
     expect(state.storyCount).toBe(1);
     expect(state.chainLength).toBe(4);
   });
+
+  test('clicking an empty linked frame places cursor at end of story', async ({ page }) => {
+    // Create a new (empty) text frame and link it to the default chain
+    const trigger = page.locator('scribus-create-menu button.trigger');
+    await trigger.click();
+    await page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' }).click();
+    await page.waitForTimeout(500);
+
+    // Get the new box ID
+    const newBoxId = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      const allBoxes = app?.boxes || [];
+      return allBoxes.find(b => b.id.startsWith('text-'))?.id;
+    });
+    expect(newBoxId).toBeTruthy();
+
+    // Link it: click output port on last default box, then click new box
+    await clickPort(page, 'p2-c2', 'output');
+    await page.waitForTimeout(300);
+    await clickBoxBody(page, newBoxId);
+    await page.waitForTimeout(500);
+
+    // The new box is now at the end of the chain but has no text lines.
+    // Enter text mode on the first default box (which has text)
+    const firstBody = page.locator('[data-box-id="p1-c1"][data-handle="body"]');
+    await firstBody.click();
+    await page.waitForTimeout(200);
+    await firstBody.click();
+    await page.waitForTimeout(500);
+
+    // Confirm text mode is active
+    const modeAfterFirst = await page.locator('scribus-app-shell').getAttribute('data-mode');
+    expect(modeAfterFirst).toBe('text');
+
+    // Now click the empty linked frame's body overlay
+    const emptyBody = page.locator(`[data-box-id="${newBoxId}"][data-handle="body"]`);
+    await emptyBody.click();
+    await page.waitForTimeout(500);
+
+    // Cursor should be at the end of the story, not at a geometric
+    // nearest position in a different frame
+    const cursorPos = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      const editor = app?._activeStory?.editor;
+      if (!editor) return null;
+      const lastPara = editor.story.length - 1;
+      const lastParaLen = editor.story[lastPara]?.map(r => r.text).join('').length || 0;
+      return {
+        paraIndex: editor.cursor.paraIndex,
+        charOffset: editor.cursor.charOffset,
+        expectedPara: lastPara,
+        expectedOffset: lastParaLen,
+      };
+    });
+
+    expect(cursorPos).not.toBeNull();
+    expect(cursorPos.paraIndex).toBe(cursorPos.expectedPara);
+    expect(cursorPos.charOffset).toBe(cursorPos.expectedOffset);
+  });
+
+  test('double-clicking an empty linked frame enters text mode at end of story', async ({ page }) => {
+    // Create a new text frame and link it to the default chain
+    const trigger = page.locator('scribus-create-menu button.trigger');
+    await trigger.click();
+    await page.locator('.scribus-create-menu-item', { hasText: 'Text Frame' }).click();
+    await page.waitForTimeout(500);
+
+    const newBoxId = await page.evaluate(() => {
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      return app?.boxes?.find(b => b.id.startsWith('text-'))?.id;
+    });
+    expect(newBoxId).toBeTruthy();
+
+    // Link the new frame to the chain
+    await clickPort(page, 'p2-c2', 'output');
+    await page.waitForTimeout(300);
+    await clickBoxBody(page, newBoxId);
+    await page.waitForTimeout(500);
+
+    // Start from object mode — click the empty frame once to select
+    const emptyBody = page.locator(`[data-box-id="${newBoxId}"][data-handle="body"]`);
+    await emptyBody.click();
+    await page.waitForTimeout(300);
+
+    // Click again to enter text mode (wasAlreadySelected path)
+    await emptyBody.click();
+    await page.waitForTimeout(500);
+
+    const state = await page.evaluate(() => {
+      const shell = document.querySelector('scribus-app-shell');
+      const app = window.scribusShell?.plugins?.find(p => p._stories !== undefined);
+      const editor = app?._activeStory?.editor;
+      if (!editor) return null;
+      const lastPara = editor.story.length - 1;
+      const lastParaLen = editor.story[lastPara]?.map(r => r.text).join('').length || 0;
+      return {
+        mode: shell?.getAttribute('data-mode'),
+        paraIndex: editor.cursor.paraIndex,
+        charOffset: editor.cursor.charOffset,
+        expectedPara: lastPara,
+        expectedOffset: lastParaLen,
+      };
+    });
+
+    expect(state).not.toBeNull();
+    expect(state.mode).toBe('text');
+    expect(state.paraIndex).toBe(state.expectedPara);
+    expect(state.charOffset).toBe(state.expectedOffset);
+  });
 });

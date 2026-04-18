@@ -1115,11 +1115,37 @@ export class SpreadEditorApp {
           // Check if click point is geometrically inside a text box
           const pt = this._interaction._toSvgPoint(e);
           if (pt) {
-            const inBox = this.boxes.some(b =>
+            const hitBox = this.boxes.find(b =>
               pt.x >= b.x && pt.x <= b.x + b.width &&
               pt.y >= b.y && pt.y <= b.y + b.height
             );
-            if (inBox) return;
+            if (hitBox) {
+              // If the clicked box has no rendered lines (empty linked
+              // frame), place the cursor at the end of its story instead
+              // of letting TextInteractionController do a geometric
+              // nearest-line lookup into a different frame.
+              const storyEntry = this._findStoryForBox(hitBox.id);
+              const storyLineMap = storyEntry?.lineMap || [];
+              const boxHasLines = storyLineMap.some(line =>
+                Math.abs(line.colX - hitBox.x) < 1 &&
+                Math.abs(line.boxY - hitBox.y) < 1
+              );
+              if (!boxHasLines && storyEntry) {
+                e.stopImmediatePropagation();
+                this._activateStoryForBox(hitBox.id);
+                const ed = storyEntry.editor;
+                const lastPara = ed.story.length - 1;
+                const lastParaText = ed.story[lastPara]
+                  ?.map(r => r.text).join('') || '';
+                ed.moveCursor({
+                  paraIndex: lastPara,
+                  charOffset: lastParaText.length,
+                });
+                await this.update();
+                return;
+              }
+              return;
+            }
           }
         }
         if (this.mode === 'text' || this.selectedBoxId) {
@@ -1136,6 +1162,34 @@ export class SpreadEditorApp {
         // Prevent dragging the box body when in text mode
         // (TextInteractionController handles internal text dragging instead)
         if (this.mode === 'text' && handle === 'body') {
+          // If the clicked box has no rendered lines, intercept the
+          // click and place the cursor at the end of the story rather
+          // than letting TextInteractionController map it to the
+          // geometrically nearest line in another frame.
+          const clickedBox = this.boxes.find(b => b.id === boxId);
+          if (clickedBox) {
+            const storyEntry = this._findStoryForBox(boxId);
+            const storyLineMap = storyEntry?.lineMap || [];
+            const boxHasLines = storyLineMap.some(line =>
+              Math.abs(line.colX - clickedBox.x) < 1 &&
+              Math.abs(line.boxY - clickedBox.y) < 1
+            );
+            if (!boxHasLines && storyEntry) {
+              e.stopImmediatePropagation();
+              this._activateStoryForBox(boxId);
+              this.selectedBoxId = boxId;
+              const ed = storyEntry.editor;
+              const lastPara = ed.story.length - 1;
+              const lastParaText = ed.story[lastPara]
+                ?.map(r => r.text).join('') || '';
+              ed.moveCursor({
+                paraIndex: lastPara,
+                charOffset: lastParaText.length,
+              });
+              await this.update();
+              return;
+            }
+          }
           return;
         }
 
