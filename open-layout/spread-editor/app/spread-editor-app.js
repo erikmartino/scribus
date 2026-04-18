@@ -41,6 +41,10 @@ export class SpreadEditorApp {
     // _stories is an array of { id, editor, boxIds, lineMap }.
     this._stories = [];
     this._activeStory = null;
+
+    // Link mode: when set, the user is linking a box's output to another frame.
+    // { sourceBoxId: string } or null.
+    this._linkSource = null;
     
     this._fontSize = 20;
     this._lineHeight = 138;
@@ -150,6 +154,8 @@ export class SpreadEditorApp {
       this._initClipboard(shell);
       this._registerCreatables(shell);
 
+      shell.addEventListener('delete-requested', () => this._deleteSelectedBox());
+
       await this.update();
       this.setMode('object');
       this.setStatus('Ready - spread editor active.', 'ok');
@@ -204,6 +210,146 @@ export class SpreadEditorApp {
         }
       }
     }
+  }
+
+  /**
+   * Enter link mode: the user clicked an output port on `sourceBoxId`.
+   * If the port is filled (has a successor), unlink instead.
+   */
+  _handleOutputPortClick(sourceBoxId) {
+    const story = this._findStoryForBox(sourceBoxId);
+    if (!story) return;
+
+    const posInChain = story.boxIds.indexOf(sourceBoxId);
+    const isLast = posInChain === story.boxIds.length - 1;
+
+    if (!isLast) {
+      // Filled output port: unlink the chain at this point
+      this._unlinkAt(sourceBoxId);
+    } else {
+      // Empty output port or overflow marker: enter link mode
+      this._enterLinkMode(sourceBoxId);
+    }
+  }
+
+  /** Enter link mode — waiting for the user to click a target frame. */
+  _enterLinkMode(sourceBoxId) {
+    this._linkSource = { sourceBoxId };
+    this.mode = 'link';
+    const shellEl = this.root.querySelector('scribus-app-shell');
+    if (shellEl) shellEl.setAttribute('data-mode', 'link');
+    this.update({ full: false });
+  }
+
+  /** Exit link mode without linking. */
+  _exitLinkMode() {
+    this._linkSource = null;
+    if (this.mode === 'link') {
+      this.setMode('object');
+    }
+  }
+
+  /**
+   * Link: append the target story's boxes to the source story's chain.
+   * The target story's text content is merged into the source story
+   * (appended as additional paragraphs).
+   */
+  _linkBoxes(targetBoxId) {
+    const sourceStory = this._findStoryForBox(this._linkSource.sourceBoxId);
+    const targetStory = this._findStoryForBox(targetBoxId);
+    if (!sourceStory || !targetStory || sourceStory === targetStory) {
+      this._exitLinkMode();
+      return;
+    }
+
+    this.submitAction('Link Text Frames', () => {
+      // Append target story's box IDs to source story's chain
+      sourceStory.boxIds = [...sourceStory.boxIds, ...targetStory.boxIds];
+
+      // Merge the target story's text into the source story.
+      // If the target story is empty (single paragraph with empty text),
+      // don't add extra content.
+      const targetText = targetStory.editor.story
+        .map(p => p.map(r => r.text).join('')).join('');
+      if (targetText.length > 0) {
+        sourceStory.editor.insertStory(
+          targetStory.editor.story,
+          targetStory.editor.paragraphStyles,
+        );
+      }
+
+      // Remove the target story
+      this._stories = this._stories.filter(s => s !== targetStory);
+
+      this._linkSource = null;
+      this.setMode('object');
+    });
+  }
+
+  /**
+   * Unlink: split the chain at `boxId`, creating a new independent story
+   * from all boxes after `boxId` in the chain.
+   */
+  _unlinkAt(boxId) {
+    const story = this._findStoryForBox(boxId);
+    if (!story) return;
+
+    const posInChain = story.boxIds.indexOf(boxId);
+    if (posInChain < 0 || posInChain >= story.boxIds.length - 1) return;
+
+    const keepBoxIds = story.boxIds.slice(0, posInChain + 1);
+    const splitBoxIds = story.boxIds.slice(posInChain + 1);
+
+    this.submitAction('Unlink Text Frames', () => {
+      // Create a new story for the split-off boxes with empty content
+      const emptyStory = [[{ text: '', style: { bold: false, italic: false } }]];
+      const emptyStyles = [{ fontSize: this._fontSize }];
+      const newStoryEntry = {
+        id: `story-${this._storyCounter++}`,
+        editor: new EditorState(emptyStory, emptyStyles),
+        boxIds: splitBoxIds,
+        lineMap: [],
+        overflow: false,
+      };
+
+      story.boxIds = keepBoxIds;
+      this._stories = [...this._stories, newStoryEntry];
+    });
+  }
+
+  /**
+   * Delete the currently selected box (text or image).
+   * For text boxes: removes the box from its story chain. If the box is the
+   * only member of the story, the entire story is removed. If the box is
+   * part of a multi-box chain, it is spliced out and the remaining boxes
+   * stay linked.
+   */
+  _deleteSelectedBox() {
+    if (this.mode !== 'object' || !this.selectedBoxId) return;
+
+    const boxId = this.selectedBoxId;
+    const isImage = this.imageBoxes.some(b => b.id === boxId);
+
+    this.submitAction('Delete Frame', () => {
+      if (isImage) {
+        this.imageBoxes = this.imageBoxes.filter(b => b.id !== boxId);
+      } else {
+        // Remove from the story chain
+        const story = this._findStoryForBox(boxId);
+        if (story) {
+          story.boxIds = story.boxIds.filter(id => id !== boxId);
+          // If no boxes remain, remove the story entirely
+          if (story.boxIds.length === 0) {
+            this._stories = this._stories.filter(s => s !== story);
+            if (this._activeStory === story) {
+              this._activeStory = this._stories[0] || null;
+            }
+          }
+        }
+        this.boxes = this.boxes.filter(b => b.id !== boxId);
+      }
+      this.selectedBoxId = null;
+    });
   }
 
   _registerCommands(shell) {
@@ -596,6 +742,31 @@ export class SpreadEditorApp {
       const boxId = target?.dataset?.boxId;
       const handle = target?.dataset?.handle;
 
+      // --- Port clicks (output port or overflow marker) ---
+      const portType = target?.dataset?.port;
+      const portBox = target?.dataset?.portBox;
+      const isOverflow = target?.dataset?.overflow === 'true';
+
+      if ((portType === 'output' || isOverflow) && portBox) {
+        e.stopPropagation();
+        this._handleOutputPortClick(portBox);
+        return;
+      }
+
+      // --- Link mode: target click ---
+      if (this.mode === 'link' && target?.dataset?.linkTarget === 'true' && boxId) {
+        e.stopPropagation();
+        this._linkBoxes(boxId);
+        return;
+      }
+
+      // --- Link mode: background/cancel click ---
+      if (this.mode === 'link') {
+        // Any click that isn't on a valid target cancels link mode
+        this._exitLinkMode();
+        return;
+      }
+
       // If not clicking a box or handle, it might be a background click
       // or a click on text/selection/cursor elements inside the text frame.
       if (!boxId && !handle) {
@@ -655,6 +826,14 @@ export class SpreadEditorApp {
         // Just selecting a box in object mode
         this.selectedBoxId = boxId;
         await this.update();
+      }
+    });
+
+    // Escape key cancels link mode
+    this.container.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.mode === 'link') {
+        e.preventDefault();
+        this._exitLinkMode();
       }
     });
 
@@ -845,6 +1024,7 @@ export class SpreadEditorApp {
         boxIds: s.boxIds,
         overflow: s.overflow || false,
       })),
+      linkMode: this._linkSource,
     });
     svg.setAttribute('width', String(spread.pasteboardRect.width));
     svg.setAttribute('height', String(spread.pasteboardRect.height));

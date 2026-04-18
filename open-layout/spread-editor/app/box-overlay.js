@@ -38,10 +38,11 @@ function handlePosition(box, handle) {
  * @param {{
  *   boxes: Box[],
  *   selectedBoxId: string|null,
- *   stories?: { boxIds: string[], overflow: boolean }[]
+ *   stories?: { boxIds: string[], overflow: boolean }[],
+ *   linkMode?: { sourceBoxId: string } | null
  * }} opts
  */
-export function drawBoxOverlay(svg, { boxes, selectedBoxId, stories }) {
+export function drawBoxOverlay(svg, { boxes, selectedBoxId, stories, linkMode }) {
   let layer = svg.querySelector('[data-layer="box-overlay"]');
   if (!layer) {
     layer = document.createElementNS(SVG_NS, 'g');
@@ -116,6 +117,9 @@ export function drawBoxOverlay(svg, { boxes, selectedBoxId, stories }) {
 
   // 3. Draw text frame ports and overflow indicators
   _drawPorts(layer, boxes, stories);
+
+  // 4. Link mode visual feedback
+  _drawLinkModeOverlay(layer, boxes, stories, linkMode);
 }
 
 /**
@@ -218,7 +222,8 @@ function _drawOutputPort(parent, box, filled) {
   tri.setAttribute('vector-effect', 'non-scaling-stroke');
   tri.setAttribute('data-port', 'output');
   tri.setAttribute('data-port-box', box.id);
-  tri.style.pointerEvents = 'none';
+  tri.style.pointerEvents = 'auto';
+  tri.style.cursor = 'pointer';
   parent.appendChild(tri);
 }
 
@@ -242,7 +247,8 @@ function _drawOverflowMarker(parent, box) {
   bg.setAttribute('fill', '#d44');
   bg.setAttribute('data-overflow', 'true');
   bg.setAttribute('data-port-box', box.id);
-  bg.style.pointerEvents = 'none';
+  bg.style.pointerEvents = 'auto';
+  bg.style.cursor = 'pointer';
   parent.appendChild(bg);
 
   // Plus sign (two lines)
@@ -268,4 +274,61 @@ function _drawOverflowMarker(parent, box) {
   vLine.setAttribute('vector-effect', 'non-scaling-stroke');
   vLine.style.pointerEvents = 'none';
   parent.appendChild(vLine);
+}
+
+/**
+ * Draw link-mode visual feedback: highlight valid target boxes and
+ * show a crosshair cursor on all text boxes.
+ */
+function _drawLinkModeOverlay(layer, boxes, stories, linkMode) {
+  let linkG = layer.querySelector('[data-sublayer="link-mode"]');
+  if (linkG) linkG.remove();
+
+  if (!linkMode || !stories) return;
+
+  // Determine which story the source box belongs to
+  const sourceStory = stories.find(s => s.boxIds.includes(linkMode.sourceBoxId));
+  if (!sourceStory) return;
+
+  // Build set of box IDs that belong to the source story (not valid targets)
+  const sourceBoxIds = new Set(sourceStory.boxIds);
+
+  // Valid targets: first box of any OTHER story's chain, or any standalone
+  // box that belongs to a different story
+  const targetBoxIds = new Set();
+  for (const story of stories) {
+    if (story.boxIds.includes(linkMode.sourceBoxId)) continue;
+    // The entire target story will be appended, so highlight all its boxes
+    for (const id of story.boxIds) targetBoxIds.add(id);
+  }
+
+  linkG = document.createElementNS(SVG_NS, 'g');
+  linkG.setAttribute('data-sublayer', 'link-mode');
+  layer.appendChild(linkG);
+
+  for (const box of boxes) {
+    if (box.imageUrl) continue; // skip image boxes
+    if (sourceBoxIds.has(box.id)) continue; // skip source story boxes
+
+    const isTarget = targetBoxIds.has(box.id);
+    if (!isTarget) continue;
+
+    // Draw highlight overlay on valid target boxes
+    const highlight = document.createElementNS(SVG_NS, 'rect');
+    highlight.setAttribute('x', String(box.x));
+    highlight.setAttribute('y', String(box.y));
+    highlight.setAttribute('width', String(box.width));
+    highlight.setAttribute('height', String(box.height));
+    highlight.setAttribute('fill', 'rgba(43, 110, 164, 0.08)');
+    highlight.setAttribute('stroke', '#2b6ea4');
+    highlight.setAttribute('stroke-width', '2');
+    highlight.setAttribute('stroke-dasharray', '6 3');
+    highlight.setAttribute('vector-effect', 'non-scaling-stroke');
+    highlight.setAttribute('data-link-target', 'true');
+    highlight.setAttribute('data-box-id', box.id);
+    highlight.setAttribute('data-handle', 'body');
+    highlight.style.cursor = 'cell';
+    highlight.style.pointerEvents = 'auto';
+    linkG.appendChild(highlight);
+  }
 }

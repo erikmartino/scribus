@@ -18,39 +18,28 @@ export class ShapesDemoPlugin {
     // Listen for marquee selection
     shell.addEventListener('marquee-end', (e) => this._handleMarquee(e));
 
-    // Register Commands
-    shell.commands.register({
-      id: 'shape.delete',
-      label: 'Delete',
-      icon: `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          <line x1="10" y1="11" x2="10" y2="17"></line>
-          <line x1="14" y1="11" x2="14" y2="17"></line>
-        </svg>`,
-      execute: () => {
-        const items = selection.all.slice(); // Copy current selection
-        if (items.length > 0) {
-          this.shell.history.submit({
-            label: 'Delete Shapes',
-            execute: () => {
-              items.forEach(item => {
-                item.element.remove();
-                activeDocument.removeItem(item.id);
-              });
-              selection.clear();
-            },
-            undo: () => {
-              items.forEach(item => {
-                const data = item.serialize();
-                data.isUndo = true;
-                this._createShapeFromData(data);
-              });
-            }
-          });
-        }
-      },
-      isEnabled: () => selection.all.length > 0
+    // Listen for the shell-level delete command
+    shell.addEventListener('delete-requested', () => {
+      const items = selection.all.slice();
+      if (items.length > 0) {
+        this.shell.history.submit({
+          label: 'Delete Shapes',
+          execute: () => {
+            items.forEach(item => {
+              item.element.remove();
+              activeDocument.removeItem(item.id);
+            });
+            selection.clear();
+          },
+          undo: () => {
+            items.forEach(item => {
+              const data = item.serialize();
+              data.isUndo = true;
+              this._createShapeFromData(data);
+            });
+          }
+        });
+      }
     });
 
     shell.commands.register({
@@ -360,11 +349,6 @@ export class ShapesDemoPlugin {
     // Selection-specific tools
     if (selected) {
       sections.push(AppShell.createRibbonSection(`${selected.type.toUpperCase()} TOOLS`, (container) => {
-        container.appendChild(this.shell.ui.createButton({
-          commandId: 'shape.delete',
-          primary: true
-        }));
-
         container.appendChild(this.shell.ui.createButton({
           commandId: 'shape.randomColor'
         }));

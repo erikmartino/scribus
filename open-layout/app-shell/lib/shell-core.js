@@ -140,6 +140,12 @@ export class AppShell extends EventTarget {
            this.clipboard.paste();
         }
       }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isMod) {
+        if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+          this.commands.execute('object.delete');
+        }
+      }
     });
   }
 
@@ -314,6 +320,19 @@ class SystemPlugin {
       execute: () => shell.clipboard.paste(),
       shortcut: 'Ctrl+V'
     });
+
+    shell.commands.register({
+      id: 'object.delete',
+      label: 'Delete',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+      </svg>`,
+      execute: () => {
+        shell.dispatchEvent(new CustomEvent('delete-requested'));
+      },
+    });
   }
 
   getRibbonSections(selected) {
@@ -356,6 +375,10 @@ class SystemPlugin {
       }));
       container.appendChild(this.shell.ui.createButton({
         commandId: 'app.paste',
+        iconOnly: true
+      }));
+      container.appendChild(this.shell.ui.createButton({
+        commandId: 'object.delete',
         iconOnly: true
       }));
     }));
