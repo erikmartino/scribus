@@ -166,6 +166,45 @@ describe('serializeStory', () => {
     const result = serializeStory('blank', editor);
     assert.equal(result.paragraphs[0].runs[0].text, '');
   });
+
+  it('uses styleRef from paragraphStyles when available', () => {
+    const editor = {
+      story: [
+        [{ text: 'Heading', style: { bold: false, italic: false, fontFamily: '' } }],
+        [{ text: 'Body text', style: { bold: false, italic: false, fontFamily: '' } }],
+      ],
+      paragraphStyles: [
+        { styleRef: 'heading-2', fontSize: 18, fontFamily: 'EB Garamond' },
+        { styleRef: 'body', fontSize: 12, fontFamily: 'EB Garamond' },
+      ],
+    };
+    const result = serializeStory('s', editor);
+    assert.equal(result.paragraphs[0].styleRef, 'heading-2');
+    assert.equal(result.paragraphs[1].styleRef, 'body');
+  });
+
+  it('defaults to body when paragraphStyles has no styleRef', () => {
+    const editor = {
+      story: [
+        [{ text: 'Text', style: { bold: false, italic: false, fontFamily: '' } }],
+      ],
+      paragraphStyles: [
+        { fontSize: 14, fontFamily: 'Arial' },
+      ],
+    };
+    const result = serializeStory('s', editor);
+    assert.equal(result.paragraphs[0].styleRef, 'body');
+  });
+
+  it('defaults to body when paragraphStyles array is missing', () => {
+    const editor = {
+      story: [
+        [{ text: 'Text', style: { bold: false, italic: false, fontFamily: '' } }],
+      ],
+    };
+    const result = serializeStory('s', editor);
+    assert.equal(result.paragraphs[0].styleRef, 'body');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -554,5 +593,59 @@ describe('loadStoryFromStore', () => {
       () => loadStoryFromStore('alice/doc', 'story-missing'),
       { message: /Failed to load story/ }
     );
+  });
+
+  it('preserves styleRef on paragraph styles for round-trip', async () => {
+    const storyJson = {
+      id: 'story-1',
+      paragraphs: [
+        { styleRef: 'heading-2', runs: [{ text: 'Title', style: {} }] },
+        { styleRef: 'body', runs: [{ text: 'Body text', style: {} }] },
+      ],
+    };
+    const paraStyles = [
+      { id: 'heading-2', fontSize: 18, fontFamily: 'EB Garamond' },
+      { id: 'body', fontSize: 12, fontFamily: 'EB Garamond' },
+    ];
+    fetchMock.on('story-1.json', { ok: true, json: storyJson });
+    fetchMock.on('paragraph.aggregate.json', { ok: true, json: paraStyles });
+
+    const result = await loadStoryFromStore('alice/doc', 'story-1');
+    assert.equal(result.paragraphStyles[0].styleRef, 'heading-2');
+    assert.equal(result.paragraphStyles[0].fontSize, 18);
+    assert.equal(result.paragraphStyles[1].styleRef, 'body');
+    assert.equal(result.paragraphStyles[1].fontSize, 12);
+  });
+
+  it('round-trips styleRef through load then serialize', async () => {
+    const storyJson = {
+      id: 'story-rt',
+      paragraphs: [
+        { styleRef: 'heading-1', runs: [{ text: 'H1', style: {} }] },
+        { styleRef: 'body', runs: [{ text: 'Content', style: { bold: true } }] },
+      ],
+    };
+    const paraStyles = [
+      { id: 'heading-1', fontSize: 28, fontFamily: 'EB Garamond' },
+      { id: 'body', fontSize: 12, fontFamily: 'EB Garamond' },
+    ];
+    fetchMock.on('story-rt.json', { ok: true, json: storyJson });
+    fetchMock.on('paragraph.aggregate.json', { ok: true, json: paraStyles });
+
+    // Load
+    const loaded = await loadStoryFromStore('alice/doc', 'story-rt');
+
+    // Create an editor-like object from the loaded data
+    const editor = {
+      story: loaded.story,
+      paragraphStyles: loaded.paragraphStyles,
+    };
+
+    // Serialize back
+    const serialized = serializeStory('story-rt', editor);
+
+    // styleRef must survive the round trip
+    assert.equal(serialized.paragraphs[0].styleRef, 'heading-1');
+    assert.equal(serialized.paragraphs[1].styleRef, 'body');
   });
 });

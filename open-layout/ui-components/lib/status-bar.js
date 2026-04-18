@@ -49,7 +49,7 @@ export class ScribusStatusBar extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host {
-          position: absolute;
+          position: fixed;
           bottom: 0;
           left: 0;
           padding: 4px 12px;

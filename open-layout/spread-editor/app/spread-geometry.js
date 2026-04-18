@@ -47,6 +47,7 @@ export function computeSpreadLayout({
     pageRects,
     spreadRect,
     pasteboardRect,
+    margin,
     spreadWidth: spreadRect.width,
     spreadHeight: spreadRect.height,
   };

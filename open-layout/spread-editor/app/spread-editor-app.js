@@ -52,6 +52,12 @@ export class SpreadEditorApp {
     this._fontSize = 20;
     this._lineHeight = 138;
 
+    // Zoom: 1.0 = 100%, >1 = zoomed in, <1 = zoomed out
+    this._zoom = 1.0;
+    this._zoomMin = 0.25;
+    this._zoomMax = 4.0;
+    this._zoomStep = 1.1; // multiplicative step per wheel tick
+
     // Document store path (e.g. "alice/brochure-q2").
     // When set, the Save button writes back to /store/{docPath}/...
     this._docPath = null;
@@ -314,6 +320,7 @@ export class SpreadEditorApp {
 
         const def = styleMap[para.styleRef] || {};
         paragraphStyles.push(cloneParagraphStyle({
+          styleRef: para.styleRef || 'body',
           fontSize: def.fontSize ?? this._fontSize,
           fontFamily: def.fontFamily ?? 'EB Garamond',
         }));
@@ -594,6 +601,94 @@ export class SpreadEditorApp {
         }
       }
     });
+
+    // Zoom commands
+    shell.commands.register({
+      id: 'view.zoom-in',
+      label: 'Zoom In',
+      execute: () => this.zoomBy(this._zoomStep),
+      shortcut: 'Ctrl+=',
+    });
+    shell.commands.register({
+      id: 'view.zoom-out',
+      label: 'Zoom Out',
+      execute: () => this.zoomBy(1 / this._zoomStep),
+      shortcut: 'Ctrl+-',
+    });
+    shell.commands.register({
+      id: 'view.zoom-fit',
+      label: 'Zoom to Fit',
+      execute: () => this.zoomToFit(),
+      shortcut: 'Ctrl+0',
+    });
+
+    // Ctrl+scroll wheel zoom
+    this.container.addEventListener('wheel', (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? this._zoomStep : 1 / this._zoomStep;
+      this.zoomBy(factor);
+    }, { passive: false });
+
+    // Keyboard zoom shortcuts (intercept globally to prevent browser zoom)
+    window.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        shell.commands.execute('view.zoom-in');
+      } else if (e.key === '-') {
+        e.preventDefault();
+        shell.commands.execute('view.zoom-out');
+      } else if (e.key === '0') {
+        e.preventDefault();
+        shell.commands.execute('view.zoom-fit');
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Zoom
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Multiply the current zoom level by the given factor.
+   * @param {number} factor - e.g. 1.1 to zoom in, 1/1.1 to zoom out
+   */
+  zoomBy(factor) {
+    this._zoom = Math.max(this._zoomMin, Math.min(this._zoomMax, this._zoom * factor));
+    this._applyZoom();
+  }
+
+  /**
+   * Set the zoom level to fit the full spread in the container.
+   */
+  zoomToFit() {
+    this._zoom = 1.0;
+    this._applyZoom();
+  }
+
+  /**
+   * Apply current zoom level to the SVG viewBox without a full re-layout.
+   */
+  _applyZoom() {
+    const svg = this._svg;
+    const spread = this.currentSpread;
+    if (!svg || !spread) return;
+
+    const pb = spread.pasteboardRect;
+    const vbW = pb.width / this._zoom;
+    const vbH = pb.height / this._zoom;
+    // Center the zoomed view on the spread center
+    const cx = pb.x + pb.width / 2;
+    const cy = pb.y + pb.height / 2;
+    const vbX = cx - vbW / 2;
+    const vbY = cy - vbH / 2;
+
+    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+
+    // Update the status bar with zoom percentage
+    const pct = Math.round(this._zoom * 100);
+    this.setStatus(`${pct}%`, 'ok');
   }
 
   // ---------------------------------------------------------------------------
@@ -1181,14 +1276,22 @@ export class SpreadEditorApp {
 
 
   decorateSpread(svg, pageRects, spread) {
+    const mg = spread.margin || 0;
+    // Collect decoration elements so we can insert them in correct
+    // z-order: pasteboard → spread shadow → pages → spine → margin guides.
+    // All decorations go before existing SVG content (text, boxes, etc.).
+    const firstContent = svg.firstChild;
+
+    // 1. Pasteboard background (bottom-most)
     const bg = document.createElementNS(SVG_NS, 'rect');
     bg.setAttribute('x', String(spread.pasteboardRect.x));
     bg.setAttribute('y', String(spread.pasteboardRect.y));
     bg.setAttribute('width', String(spread.pasteboardRect.width));
     bg.setAttribute('height', String(spread.pasteboardRect.height));
     bg.setAttribute('fill', '#ccc8bc');
-    svg.insertBefore(bg, svg.firstChild);
+    svg.insertBefore(bg, firstContent);
 
+    // 2. Spread shadow (sits behind pages, visible as a border effect)
     const spreadShadow = document.createElementNS(SVG_NS, 'rect');
     spreadShadow.setAttribute('x', String(spread.spreadRect.x));
     spreadShadow.setAttribute('y', String(spread.spreadRect.y));
@@ -1197,21 +1300,22 @@ export class SpreadEditorApp {
     spreadShadow.setAttribute('fill', '#e9e3d6');
     spreadShadow.setAttribute('stroke', '#b9b09f');
     spreadShadow.setAttribute('stroke-width', '1.2');
-    svg.insertBefore(spreadShadow, svg.firstChild.nextSibling);
+    svg.insertBefore(spreadShadow, firstContent);
 
-    for (let i = pageRects.length - 1; i >= 0; i--) {
-      const page = pageRects[i];
+    // 3. Pages (white, on top of spread shadow)
+    for (const page of pageRects) {
       const r = document.createElementNS(SVG_NS, 'rect');
       r.setAttribute('x', String(page.x));
       r.setAttribute('y', String(page.y));
       r.setAttribute('width', String(page.width));
       r.setAttribute('height', String(page.height));
-      r.setAttribute('fill', '#fffef8');
+      r.setAttribute('fill', '#ffffff');
       r.setAttribute('stroke', '#c7c1b5');
       r.setAttribute('stroke-width', '1.2');
-      svg.insertBefore(r, svg.firstChild.nextSibling);
+      svg.insertBefore(r, firstContent);
     }
 
+    // 4. Spine (center divider between pages)
     const spine = document.createElementNS(SVG_NS, 'line');
     const spineX = spread.spreadRect.x + spread.spreadRect.width / 2;
     spine.setAttribute('x1', String(spineX));
@@ -1221,7 +1325,23 @@ export class SpreadEditorApp {
     spine.setAttribute('stroke', '#aba18d');
     spine.setAttribute('stroke-width', '1');
     spine.setAttribute('stroke-dasharray', '4 4');
-    svg.insertBefore(spine, svg.firstChild.nextSibling);
+    svg.insertBefore(spine, firstContent);
+
+    // 5. Margin guides (type area rectangles, on top of everything)
+    if (mg > 0) {
+      for (const page of pageRects) {
+        const guide = document.createElementNS(SVG_NS, 'rect');
+        guide.setAttribute('x', String(page.x + mg));
+        guide.setAttribute('y', String(page.y + mg));
+        guide.setAttribute('width', String(page.width - mg * 2));
+        guide.setAttribute('height', String(page.height - mg * 2));
+        guide.setAttribute('fill', 'none');
+        guide.setAttribute('stroke', '#b0d0f0');
+        guide.setAttribute('stroke-width', '0.5');
+        guide.classList.add('margin-guide');
+        svg.appendChild(guide);
+      }
+    }
   }
 
   async update(options = { full: true }) {
@@ -1365,11 +1485,17 @@ export class SpreadEditorApp {
       })),
       linkMode: this._linkSource,
     });
-    svg.setAttribute('width', String(spread.pasteboardRect.width));
-    svg.setAttribute('height', String(spread.pasteboardRect.height));
+    const pb = spread.pasteboardRect;
+    svg.setAttribute('width', String(pb.width));
+    svg.setAttribute('height', String(pb.height));
+    // Apply zoom: a smaller viewBox = zoomed in, larger = zoomed out
+    const vbW = pb.width / this._zoom;
+    const vbH = pb.height / this._zoom;
+    const cx = pb.x + pb.width / 2;
+    const cy = pb.y + pb.height / 2;
     svg.setAttribute(
       'viewBox',
-      `${spread.pasteboardRect.x} ${spread.pasteboardRect.y} ${spread.pasteboardRect.width} ${spread.pasteboardRect.height}`,
+      `${cx - vbW / 2} ${cy - vbH / 2} ${vbW} ${vbH}`,
     );
 
     if (this.cursor) {

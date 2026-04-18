@@ -19,6 +19,7 @@ import { cloneParagraphStyle } from '../../story-editor/lib/paragraph-style.js';
  */
 export function serializeStory(id, editor) {
   const paragraphs = [];
+  const pStyles = editor.paragraphStyles || [];
 
   for (let pi = 0; pi < editor.story.length; pi++) {
     const runs = editor.story[pi].map(run => ({
@@ -30,7 +31,7 @@ export function serializeStory(id, editor) {
       },
     }));
     paragraphs.push({
-      styleRef: 'body',
+      styleRef: pStyles[pi]?.styleRef || 'body',
       runs,
     });
   }
@@ -191,6 +192,7 @@ export async function loadStoryFromStore(docPath, storyId, options = {}) {
 
     const def = styleMap[para.styleRef] || {};
     paragraphStyles.push(cloneParagraphStyle({
+      styleRef: para.styleRef || 'body',
       fontSize: def.fontSize ?? baseFontSize,
       fontFamily: def.fontFamily ?? 'EB Garamond',
     }));
