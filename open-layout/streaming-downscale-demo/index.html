@@ -322,12 +322,39 @@
       }
 
       // --- Shared TIFF callback wiring (avoids duplication) ---
+
+      /** Whether the Worker already downscaled (vips resize). */
+      let workerDownscaled = false;
+
       /** @param {ReadableStream<Uint8Array> | ArrayBuffer} source */
       async function runTiffDecode(source) {
         setStatus('Streaming TIFF to disk...');
         await decodeTiff(source, {
-          onHeader: handleHeader,
-          onRow: handleRow,
+          onHeader(header) {
+            statSrc.textContent = `${header.width} × ${header.height}`;
+
+            if (header.outWidth && header.outHeight) {
+              // Worker already downscaled via vips — render rows directly
+              workerDownscaled = true;
+              totalOutRows = header.outHeight;
+              renderer = createRenderer(canvas, header.outWidth, header.outHeight);
+              statOut.textContent = `${header.outWidth} × ${header.outHeight}`;
+              setStatus('Decoding & downscaling (vips)...');
+            } else {
+              // Fallback path — use JS downscaler
+              handleHeader(header);
+            }
+          },
+          onRow(rowIndex, rgba) {
+            if (workerDownscaled) {
+              // Rows are already at output resolution — draw directly
+              if (renderer) renderer.drawRow(rowIndex, rgba);
+              outRows++;
+              updateStats();
+            } else {
+              handleRow(rowIndex, rgba);
+            }
+          },
           onEnd: handleEnd,
           scale
         }, {

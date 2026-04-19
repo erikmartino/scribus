@@ -8,11 +8,12 @@
  *     { type: 'decode', opfsFileName: string, scale: number }
  *
  *   Worker -> Main:
- *     { type: 'header', width, height }
- *     { type: 'row',    rowIndex, rgba: Uint8Array }  (transferable)
+ *     { type: 'header', srcWidth, srcHeight, outWidth, outHeight }
+ *     { type: 'rows',   startRow, count, rgba: Uint8Array }  (transferable, batched)
  *     { type: 'end' }
  *     { type: 'error',  message: string }
  *     { type: 'log',    message: string }
+ *     { type: 'ready' }
  *
  * The caller is responsible for writing the image data to OPFS before
  * sending the 'decode' message, and for cleaning up the OPFS file after
@@ -23,21 +24,45 @@
 
 const VIPS_CDN = 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js';
 
+/** How many rows to batch into a single postMessage. */
+const ROW_BATCH_SIZE = 32;
+
 let vips = null;
+
+/** @type {Promise<void>} */
+let initPromise;
 
 /**
  * Initialize wasm-vips (once).
+ *
+ * wasm-vips uses `mainScriptUrlOrBlob` to spawn internal threading Workers.
+ * A cross-origin CDN URL would be rejected by the browser, so we wrap it
+ * in a same-origin blob URL that simply re-exports the CDN module.
  */
 async function initVips() {
   if (vips) return;
 
   const Vips = (await import(VIPS_CDN)).default;
+
+  const workerCode = `import "${VIPS_CDN}";`;
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const blobUrl = URL.createObjectURL(blob);
+
   vips = await Vips({
-    mainScriptUrlOrBlob: VIPS_CDN,
+    mainScriptUrlOrBlob: blobUrl,
     locateFile: (fileName) =>
       `https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/${fileName}`,
   });
+
+  URL.revokeObjectURL(blobUrl);
+  self.postMessage({ type: 'ready' });
 }
+
+// Start loading wasm-vips immediately when the Worker is constructed,
+// not on the first decode request.
+initPromise = initVips().catch((err) => {
+  self.postMessage({ type: 'error', message: 'vips init failed: ' + err.message });
+});
 
 /**
  * Ensure the vips image has exactly 4 bands of uchar sRGB + alpha.
@@ -97,11 +122,14 @@ function ensureRGBA(srcImage) {
  * Decode a TIFF from an OPFS file using SourceCustom for streaming I/O.
  * The file is read via a synchronous access handle (only available in Workers).
  *
+ * When scale > 1, vips resizes the image before writing raw output,
+ * so only the downscaled pixels cross the IPC boundary.
+ *
  * @param {string} opfsFileName
- * @param {number} _scale - unused here but forwarded for future tile support
+ * @param {number} scale - downscale factor (1 = no downscaling)
  */
-async function decodeFromOPFS(opfsFileName, _scale) {
-  await initVips();
+async function decodeFromOPFS(opfsFileName, scale) {
+  await initPromise;
 
   const root = await navigator.storage.getDirectory();
   const fileHandle = await root.getFileHandle(opfsFileName);
@@ -144,18 +172,56 @@ async function decodeFromOPFS(opfsFileName, _scale) {
     throw new Error('vips decode failed: ' + err.message);
   }
 
-  const width = image.width;
-  const height = image.height;
+  const srcWidth = image.width;
+  const srcHeight = image.height;
 
-  self.postMessage({ type: 'header', width, height });
-  self.postMessage({ type: 'log', message: `TIFF streaming decode: ${width}x${height}, file=${(fileSize / 1048576).toFixed(1)}MB` });
+  // Colour-space + band normalization before resize so vips can
+  // operate on a consistent 4-band sRGB uchar image.
+  let rgbaImage = ensureRGBA(image);
 
-  const rgbaImage = ensureRGBA(image);
+  // --- Downscale via vips shrink (box averaging) ---
+  // shrink() uses simple box averaging which only needs `scale` rows buffered,
+  // making it compatible with sequential access.  resize() uses Lanczos3
+  // which needs a large vertical context window and defeats sequential mode.
+  let outputImage = rgbaImage;
+  if (scale > 1) {
+    const shrunk = rgbaImage.shrink(scale, scale);
+    if (shrunk !== rgbaImage) {
+      if (rgbaImage !== image) rgbaImage.delete();
+      outputImage = shrunk;
+    }
+  }
 
-  const rowBytes = width * 4;
+  const outWidth = outputImage.width;
+  const outHeight = outputImage.height;
+
+  self.postMessage({ type: 'header', srcWidth, srcHeight, outWidth, outHeight });
+  self.postMessage({ type: 'log', message: `TIFF decode: ${srcWidth}x${srcHeight} → ${outWidth}x${outHeight}, file=${(fileSize / 1048576).toFixed(1)}MB` });
+
+  // --- Emit downscaled rows via TargetCustom ---
+  const rowBytes = outWidth * 4;
   let y = 0;
-  const leftover = new Uint8Array(rowBytes);
+
+  // Accumulate up to ROW_BATCH_SIZE rows before sending a single
+  // postMessage with a transferred buffer.
+  const batchBytes = rowBytes * ROW_BATCH_SIZE;
+  let batch = new Uint8Array(batchBytes);
+  let batchStart = 0;
+  let batchCount = 0;
+
+  function flushBatch() {
+    if (batchCount === 0) return;
+    const payload = batch.slice(0, batchCount * rowBytes);
+    self.postMessage(
+      { type: 'rows', startRow: batchStart, count: batchCount, rgba: payload },
+      [payload.buffer]
+    );
+    batch = new Uint8Array(batchBytes);
+    batchCount = 0;
+  }
+
   let leftoverBytes = 0;
+  const leftover = new Uint8Array(rowBytes);
 
   const target = new vips.TargetCustom();
   target.onWrite = (chunk) => {
@@ -165,16 +231,22 @@ async function decodeFromOPFS(opfsFileName, _scale) {
       const available = chunk.length - offset;
 
       if (available >= needed) {
-        leftover.set(chunk.subarray(offset, offset + needed), leftoverBytes);
-        // Transfer a copy so the main thread owns the buffer
-        const rowCopy = new Uint8Array(leftover);
-        self.postMessage(
-          { type: 'row', rowIndex: y, rgba: rowCopy },
-          [rowCopy.buffer]
-        );
+        if (leftoverBytes > 0) {
+          leftover.set(chunk.subarray(offset, offset + needed), leftoverBytes);
+          batch.set(leftover, batchCount * rowBytes);
+        } else {
+          batch.set(chunk.subarray(offset, offset + needed), batchCount * rowBytes);
+        }
+
+        if (batchCount === 0) batchStart = y;
+        batchCount++;
         y++;
         offset += needed;
         leftoverBytes = 0;
+
+        if (batchCount === ROW_BATCH_SIZE) {
+          flushBatch();
+        }
       } else {
         leftover.set(chunk.subarray(offset, chunk.length), leftoverBytes);
         leftoverBytes += available;
@@ -184,10 +256,13 @@ async function decodeFromOPFS(opfsFileName, _scale) {
     return chunk.length;
   };
 
-  rgbaImage.writeToTarget(target, '.raw');
+  outputImage.writeToTarget(target, '.raw');
+
+  flushBatch();
 
   target.delete();
-  if (rgbaImage !== image) rgbaImage.delete();
+  if (outputImage !== image) outputImage.delete();
+  if (rgbaImage !== image && rgbaImage !== outputImage) rgbaImage.delete();
   image.delete();
   source.delete();
   accessHandle.close();

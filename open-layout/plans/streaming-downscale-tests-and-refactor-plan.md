@@ -125,6 +125,43 @@ Playwright tests were run. Console logs were checked via terminal output.
 One expected `BROWSER [error]` from the intentional 404 fetch test.
 No unexpected console errors found.
 
+## Phase 4: Downscale Performance Fix (complete)
+
+### Problem
+
+`image.resize(1/scale)` uses Lanczos3 interpolation which requires a large
+vertical context window (multiple rows above and below). This defeats
+`access: sequential` mode — vips must load the entire image into memory to
+satisfy the kernel's vertical lookups. The user reported no speedup from
+Worker-side downscaling.
+
+### Fix
+
+Replaced `image.resize(1/scale)` with `image.shrink(scale, scale)`.
+
+`shrink()` uses simple box averaging with integer reduction factors. It only
+needs exactly `scale` input rows buffered at a time, which is fully compatible
+with sequential access. For a 4x downscale this means 4 rows buffered instead
+of the entire image.
+
+### Modified files
+- `lib/vips-worker.js` — replaced `resize(1/scale)` with `shrink(scale, scale)`
+
+### Verification
+
+```
+npm test
+# 354 unit tests, 0 failures
+
+npm run test:e2e
+# 153 passed, 1 failed (unrelated: document-store asset count mismatch
+# from pre-existing data change in store/alice/brochure-q2/assets/)
+# All 11 streaming-downscale-demo tests passed.
+```
+
+Playwright tests were run. Console logs were checked via terminal output.
+No unexpected console errors found in streaming-downscale-demo tests.
+
 ## Remaining Work
 
 None — all planned items complete.

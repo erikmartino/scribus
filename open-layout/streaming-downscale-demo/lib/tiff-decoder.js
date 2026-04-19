@@ -15,7 +15,7 @@
 
 /**
  * @typedef {Object} TiffCallbacks
- * @property {(header: { width: number, height: number }) => void} onHeader
+ * @property {(header: { width: number, height: number, outWidth?: number, outHeight?: number }) => void} onHeader
  * @property {(rowIndex: number, rgba: Uint8Array) => void} onRow
  * @property {() => void} onEnd
  * @property {number} scale
@@ -35,6 +35,16 @@ function canUseStreamingDecode() {
     typeof Worker !== 'undefined' &&
     typeof SharedArrayBuffer !== 'undefined'
   );
+}
+
+/**
+ * Pre-warm the vips Worker so wasm-vips is downloaded and compiled
+ * before the first decode request. Called at module load time.
+ */
+function warmUpWorker() {
+  if (canUseStreamingDecode()) {
+    getWorker();
+  }
 }
 
 /**
@@ -126,14 +136,23 @@ async function decodeTiffStreaming(source, callbacks, opts = {}) {
       switch (msg.type) {
         case 'header':
           callbacks.onHeader({
-            width: msg.width,
-            height: msg.height,
+            width: msg.srcWidth,
+            height: msg.srcHeight,
+            outWidth: msg.outWidth,
+            outHeight: msg.outHeight,
           });
           break;
 
-        case 'row':
-          callbacks.onRow(msg.rowIndex, msg.rgba);
+        case 'rows': {
+          // Batched rows: unpack and deliver individually to the callback
+          const { startRow, count, rgba } = msg;
+          const rowBytes = rgba.byteLength / count;
+          for (let i = 0; i < count; i++) {
+            const off = i * rowBytes;
+            callbacks.onRow(startRow + i, rgba.subarray(off, off + rowBytes));
+          }
           break;
+        }
 
         case 'end':
           callbacks.onEnd();
@@ -148,6 +167,10 @@ async function decodeTiffStreaming(source, callbacks, opts = {}) {
 
         case 'log':
           console.log('[vips-worker]', msg.message);
+          break;
+
+        case 'ready':
+          // Worker finished loading wasm-vips (pre-warm complete)
           break;
       }
     };
@@ -339,10 +362,43 @@ async function decodeTiffFallback(buffer, callbacks) {
 // --- Public API ---
 
 /**
+ * Consume a ReadableStream into a single ArrayBuffer.
+ *
+ * @param {ReadableStream<Uint8Array>} stream
+ * @param {(bytes: number) => void} [onProgress]
+ * @returns {Promise<ArrayBuffer>}
+ */
+async function streamToBuffer(stream, onProgress) {
+  const reader = stream.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalBytes += value.byteLength;
+    if (onProgress) onProgress(totalBytes);
+  }
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged.buffer;
+}
+
+/**
  * Decode a TIFF and emit rows.
  *
  * Automatically selects the streaming OPFS path when available,
  * falling back to the in-memory buffer path otherwise.
+ *
+ * A ReadableStream can only be consumed once. If the streaming path
+ * is selected, the stream is written to OPFS and cannot be re-read.
+ * Therefore the streaming path does NOT fall back to the buffer path
+ * after the stream has been consumed — any Worker-side decode error
+ * propagates directly.
  *
  * @param {ArrayBuffer | ReadableStream<Uint8Array>} source
  * @param {TiffCallbacks} callbacks
@@ -350,41 +406,17 @@ async function decodeTiffFallback(buffer, callbacks) {
  */
 export async function decodeTiff(source, callbacks, opts = {}) {
   if (canUseStreamingDecode()) {
-    try {
-      return await decodeTiffStreaming(source, callbacks, opts);
-    } catch (err) {
-      console.warn(
-        'Streaming TIFF decode failed, falling back to buffer:',
-        err.message
-      );
-      // Fall through to buffer path
-    }
+    return decodeTiffStreaming(source, callbacks, opts);
   }
 
   // Buffer path: need an ArrayBuffer
-  let buffer;
-  if (source instanceof ArrayBuffer) {
-    buffer = source;
-  } else {
-    // Consume the stream into a buffer
-    const reader = source.getReader();
-    const chunks = [];
-    let totalBytes = 0;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      totalBytes += value.byteLength;
-      if (opts.onProgress) opts.onProgress(totalBytes);
-    }
-    const merged = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    buffer = merged.buffer;
-  }
+  const buffer = source instanceof ArrayBuffer
+    ? source
+    : await streamToBuffer(source, opts.onProgress);
 
   return decodeTiffBuffer(buffer, callbacks);
 }
+
+// Eagerly construct the Worker so wasm-vips starts downloading immediately
+// when the page loads, rather than waiting for the first decode request.
+warmUpWorker();
