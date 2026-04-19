@@ -4,7 +4,7 @@ Status: **Draft v0.4** — 2026-04-18
 
 ### Implementation progress
 
-- [x] Server GET/PUT/DELETE under `/store/` (`server.js`)
+- [x] Server GET/HEAD/PUT/DELETE under `/store/` (`server.js`)
 - [x] `?aggregate` endpoint for directory-level JSON collection
 - [x] Per-asset metadata + low-res preview sidecars
 - [x] One-file-per-entry for styles (paragraph + character)
@@ -16,6 +16,7 @@ Status: **Draft v0.4** — 2026-04-18
 - [x] Spread editor loads from store via `?doc=` URL param (`_loadFromStore()`)
 - [x] Document browser with template cloning and per-document Open routing
 - [x] Story editor save-back
+- [x] Asset upload pipeline: dropped/pasted images stored as proper assets with dedup
 
 ## Goals
 
@@ -25,7 +26,7 @@ Status: **Draft v0.4** — 2026-04-18
 2. **AI-editable** — an LLM with file-read/write tools can create or modify a
    document without understanding a binary container.  Human-readable JSON
    everywhere; binary assets kept separate.
-3. **Trivial server** — the HTTP layer is a thin GET/PUT file store.  No
+3. **Trivial server** — the HTTP layer is a thin GET/HEAD/PUT file store.  No
    sessions, no database, no query language.
 4. **User separation** — the user-id appears in the URL path so that future
    authorization can be a simple path-prefix check.
@@ -234,6 +235,7 @@ The server exposes a flat file-shaped REST surface under `/store/`.
 | `GET` | `/store/{user}/{doc}/{dir}.aggregate.json` | Aggregate: read all `.json` files in `{dir}/`, return as JSON array |
 | `GET` | `/store/{user}/{doc}/stories/{id}/edit` | Serve the story editor for this story |
 | `GET` | `/store/{user}/{doc}/{file...}` | Return file content |
+| `HEAD` | `/store/{user}/{doc}/{file...}` | Check file existence; returns 200 with Content-Type/Content-Length, or 404 |
 | `PUT` | `/store/{user}/{doc}/{file...}` | Create or overwrite file; parent dirs created automatically |
 | `POST`  | `/store/{user}/{newDoc}` | Copy a document from a template (see §3.6) |
 | `DELETE`| `/store/{user}/{doc}/{file...}` | Remove a file (optional, for cleanup) |
@@ -292,7 +294,7 @@ because they are not JSON.
 
 | Code | When |
 |---|---|
-| 200 | Success (GET, PUT) |
+| 200 | Success (GET, HEAD, PUT) |
 | 201 | Created (PUT, new file) |
 | 204 | Deleted (DELETE) |
 | 400 | Malformed path / traversal attempt |
