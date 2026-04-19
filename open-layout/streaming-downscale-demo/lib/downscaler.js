@@ -19,10 +19,14 @@
  * Create a streaming downscaler that box-filter averages NxN source pixels
  * into one output pixel.
  *
+ * **Shared buffer contract:** The `rgba` buffer passed to `onOutputRow` is
+ * reused across calls. Consumers must copy the data (e.g. via
+ * `new Uint8Array(rgba)`) if they need to retain it beyond the callback.
+ *
  * @param {number} srcWidth - source image width in pixels
  * @param {number} srcHeight - source image height in pixels
  * @param {number} scale - downscale factor (e.g. 4 means 4x smaller)
- * @param {(outRowIndex: number, rgba: Uint8Array) => void} onOutputRow - called for each output row
+ * @param {(outRowIndex: number, rgba: Uint8Array) => void} onOutputRow - called for each output row; buffer is reused
  * @returns {Downscaler}
  */
 export function createDownscaler(srcWidth, srcHeight, scale, onOutputRow) {

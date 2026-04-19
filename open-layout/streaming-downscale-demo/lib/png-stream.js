@@ -8,6 +8,8 @@
  * @module png-stream
  */
 
+import { rowToRGBA } from './pixel-convert.js';
+
 /** @typedef {{ width: number, height: number, bitDepth: number, colorType: number, channels: number, bytesPerPixel: number, stride: number }} PngHeader */
 /** @typedef {(header: PngHeader) => void} OnHeader */
 /** @typedef {(rowIndex: number, rgba: Uint8Array) => void} OnRow */
@@ -252,91 +254,14 @@ export async function streamPng(source, onHeader, onRow, onEnd, opts = {}) {
     // Save unfiltered row for next row's filter reference
     prevRowRaw.set(raw);
 
-    // Convert to RGBA
+    // Convert to RGBA via shared pixel-convert module
     const w = header.width;
-    const is16 = header.bitDepth === 16;
-
-    if (is16) {
-      // 16-bit: read big-endian pairs, convert to 8-bit via >> 8
-      if (header.colorType === 6) {
-        // RGBA 16-bit
-        for (let x = 0; x < w; x++) {
-          const s = x * 8;
-          rgbaBuf[x * 4]     = raw[s];     // high byte of R
-          rgbaBuf[x * 4 + 1] = raw[s + 2]; // high byte of G
-          rgbaBuf[x * 4 + 2] = raw[s + 4]; // high byte of B
-          rgbaBuf[x * 4 + 3] = raw[s + 6]; // high byte of A
-        }
-      } else if (header.colorType === 2) {
-        // RGB 16-bit → RGBA 8-bit
-        for (let x = 0; x < w; x++) {
-          const s = x * 6;
-          rgbaBuf[x * 4]     = raw[s];
-          rgbaBuf[x * 4 + 1] = raw[s + 2];
-          rgbaBuf[x * 4 + 2] = raw[s + 4];
-          rgbaBuf[x * 4 + 3] = 255;
-        }
-      } else if (header.colorType === 0) {
-        // Greyscale 16-bit → RGBA 8-bit
-        for (let x = 0; x < w; x++) {
-          const v = raw[x * 2]; // high byte
-          rgbaBuf[x * 4]     = v;
-          rgbaBuf[x * 4 + 1] = v;
-          rgbaBuf[x * 4 + 2] = v;
-          rgbaBuf[x * 4 + 3] = 255;
-        }
-      } else if (header.colorType === 4) {
-        // Greyscale+Alpha 16-bit → RGBA 8-bit
-        for (let x = 0; x < w; x++) {
-          const v = raw[x * 4];     // high byte of grey
-          rgbaBuf[x * 4]     = v;
-          rgbaBuf[x * 4 + 1] = v;
-          rgbaBuf[x * 4 + 2] = v;
-          rgbaBuf[x * 4 + 3] = raw[x * 4 + 2]; // high byte of alpha
-        }
-      }
-    } else {
-      // 8-bit paths (unchanged)
-      if (header.colorType === 6) {
-        // Already RGBA
-        rgbaBuf.set(raw.subarray(0, w * 4));
-      } else if (header.colorType === 2) {
-        // RGB → RGBA
-        for (let x = 0; x < w; x++) {
-          rgbaBuf[x * 4] = raw[x * 3];
-          rgbaBuf[x * 4 + 1] = raw[x * 3 + 1];
-          rgbaBuf[x * 4 + 2] = raw[x * 3 + 2];
-          rgbaBuf[x * 4 + 3] = 255;
-        }
-      } else if (header.colorType === 0) {
-        // Greyscale → RGBA
-        for (let x = 0; x < w; x++) {
-          const v = raw[x];
-          rgbaBuf[x * 4] = v;
-          rgbaBuf[x * 4 + 1] = v;
-          rgbaBuf[x * 4 + 2] = v;
-          rgbaBuf[x * 4 + 3] = 255;
-        }
-      } else if (header.colorType === 4) {
-        // Greyscale+Alpha → RGBA
-        for (let x = 0; x < w; x++) {
-          const v = raw[x * 2];
-          rgbaBuf[x * 4] = v;
-          rgbaBuf[x * 4 + 1] = v;
-          rgbaBuf[x * 4 + 2] = v;
-          rgbaBuf[x * 4 + 3] = raw[x * 2 + 1];
-        }
-      } else if (header.colorType === 3 && palette) {
-        // Indexed → RGBA
-        for (let x = 0; x < w; x++) {
-          const idx = raw[x];
-          rgbaBuf[x * 4] = palette[idx * 3];
-          rgbaBuf[x * 4 + 1] = palette[idx * 3 + 1];
-          rgbaBuf[x * 4 + 2] = palette[idx * 3 + 2];
-          rgbaBuf[x * 4 + 3] = trns && idx < trns.length ? trns[idx] : 255;
-        }
-      }
-    }
+    const convertOpts = {
+      bitDepth: header.bitDepth,
+      palette: header.colorType === 3 ? palette : undefined,
+      trns: header.colorType === 3 ? trns : undefined,
+    };
+    rowToRGBA(raw, rgbaBuf, w, header.channels, convertOpts);
 
     onRow(currentRow, rgbaBuf);
     currentRow++;

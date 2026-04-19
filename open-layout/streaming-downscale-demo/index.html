@@ -152,8 +152,8 @@
   <h1>Streaming Image Downscaler</h1>
   <p class="description">
     Downscales large images on the fly using a box filter.
-    Supports PNG (8/16-bit), TIFF (stripped/tiled, CMYK), and JPEG2000.
-    PNG streams row-by-row; TIFF and JP2 decode fully then feed the downscaler.
+    Supports PNG (8/16-bit), TIFF (stripped and tiled, CMYK), and JPEG2000.
+    PNG streams row-by-row; TIFF and JP2 decode then feed the downscaler.
   </p>
 
   <div class="controls">
@@ -321,6 +321,38 @@
         controller = null;
       }
 
+      // --- Shared TIFF callback wiring (avoids duplication) ---
+      /** @param {ReadableStream<Uint8Array> | ArrayBuffer} source */
+      async function runTiffDecode(source) {
+        setStatus('Streaming TIFF to disk...');
+        await decodeTiff(source, {
+          onHeader: handleHeader,
+          onRow: handleRow,
+          onEnd: handleEnd,
+          scale
+        }, {
+          onProgress: (bytes) => {
+            statBytes.textContent = (bytes / 1024).toFixed(0) + ' KB';
+          }
+        });
+      }
+
+      /**
+       * Re-assemble a ReadableStream from a consumed first chunk + the
+       * remaining body reader. Used after peeking at the format header.
+       */
+      function reassembleStream(firstChunkValue, bodyReader) {
+        return new ReadableStream({
+          start(ctrl) { ctrl.enqueue(firstChunkValue); },
+          async pull(ctrl) {
+            const { value, done } = await bodyReader.read();
+            if (done) { ctrl.close(); return; }
+            if (value) ctrl.enqueue(value);
+          },
+          cancel() { bodyReader.cancel(); }
+        });
+      }
+
       try {
         if (file) {
           // Local file path
@@ -338,31 +370,8 @@
               { signal: controller.signal }
             );
           } else if (format === 'tiff') {
-            setStatus('Decoding TIFF...');
-            const buffer = await file.arrayBuffer();
-            await decodeTiff(buffer, {
-              onHeader(header) {
-                if (header.tiled) {
-                  // For tiled TIFFs, set up canvas but skip row-based downscaler
-                  statSrc.textContent = `${header.width} × ${header.height}`;
-                  const outW = Math.floor(header.width / scale);
-                  const outH = Math.floor(header.height / scale);
-                  renderer = createRenderer(canvas, outW, outH);
-                  statOut.textContent = `${outW} × ${outH}`;
-                  setStatus('Decoding tiled TIFF...');
-                } else {
-                  handleHeader(header);
-                }
-              },
-              onRow: handleRow,
-              onTile(tileX, tileY, rgba, tileW, tileH) {
-                if (renderer) renderer.drawTile(tileX, tileY, rgba, tileW, tileH);
-                outRows += tileH;
-                updateStats();
-              },
-              onEnd: handleEnd,
-              scale
-            });
+            // Stream the file directly — OPFS path avoids loading into RAM
+            await runTiffDecode(file.stream());
           } else if (format === 'jp2') {
             setStatus('Decoding JPEG2000...');
             const buffer = await file.arrayBuffer();
@@ -394,19 +403,8 @@
           statFmt.textContent = format ? format.toUpperCase() : 'unknown';
 
           if (format === 'png') {
-            // Re-assemble stream from first chunk + rest of body
-            const reassembled = new ReadableStream({
-              start(ctrl) { ctrl.enqueue(firstChunk.value); },
-              async pull(ctrl) {
-                const { value, done } = await bodyReader.read();
-                if (done) { ctrl.close(); return; }
-                if (value) ctrl.enqueue(value);
-              },
-              cancel() { bodyReader.cancel(); }
-            });
-
             await streamPng(
-              reassembled,
+              reassembleStream(firstChunk.value, bodyReader),
               handleHeader, handleRow, handleEnd,
               {
                 signal: controller.signal,
@@ -415,9 +413,13 @@
                 }
               }
             );
-          } else if (format === 'tiff' || format === 'jp2') {
-            // Collect full buffer
-            setStatus(`Downloading ${format.toUpperCase()}...`);
+          } else if (format === 'tiff') {
+            // Stream fetch body through to TIFF decoder (OPFS or buffer fallback)
+            setStatus('Streaming TIFF...');
+            await runTiffDecode(reassembleStream(firstChunk.value, bodyReader));
+          } else if (format === 'jp2') {
+            // JP2 still needs full buffer (openjpeg limitation)
+            setStatus('Downloading JPEG2000...');
             const chunks = [firstChunk.value];
             let totalBytes = firstChunk.value.length;
             while (true) {
@@ -429,48 +431,19 @@
                 statBytes.textContent = (totalBytes / 1024).toFixed(0) + ' KB';
               }
             }
-
-            // Merge chunks into a single ArrayBuffer
             const merged = new Uint8Array(totalBytes);
             let offset = 0;
             for (const chunk of chunks) {
               merged.set(chunk, offset);
               offset += chunk.length;
             }
-            const buffer = merged.buffer;
 
-            if (format === 'tiff') {
-              setStatus('Decoding TIFF...');
-              await decodeTiff(buffer, {
-                onHeader(header) {
-                  if (header.tiled) {
-                    statSrc.textContent = `${header.width} × ${header.height}`;
-                    const outW = Math.floor(header.width / scale);
-                    const outH = Math.floor(header.height / scale);
-                    renderer = createRenderer(canvas, outW, outH);
-                    statOut.textContent = `${outW} × ${outH}`;
-                    setStatus('Decoding tiled TIFF...');
-                  } else {
-                    handleHeader(header);
-                  }
-                },
-                onRow: handleRow,
-                onTile(tileX, tileY, rgba, tileW, tileH) {
-                  if (renderer) renderer.drawTile(tileX, tileY, rgba, tileW, tileH);
-                  outRows += tileH;
-                  updateStats();
-                },
-                onEnd: handleEnd,
-                scale
-              });
-            } else {
-              setStatus('Decoding JPEG2000...');
-              await decodeJp2(buffer, {
-                onHeader: handleHeader,
-                onRow: handleRow,
-                onEnd: handleEnd
-              });
-            }
+            setStatus('Decoding JPEG2000...');
+            await decodeJp2(merged.buffer, {
+              onHeader: handleHeader,
+              onRow: handleRow,
+              onEnd: handleEnd
+            });
           } else {
             setStatus('Unrecognized format from URL.', 'error');
             startBtn.textContent = 'Start';

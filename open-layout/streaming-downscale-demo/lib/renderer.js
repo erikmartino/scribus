@@ -13,7 +13,6 @@ const BATCH_SIZE = 32;
  * @typedef {Object} Renderer
  * @property {(rowIndex: number, rgba: Uint8Array) => void} drawRow
  * @property {() => void} flush
- * @property {(x: number, y: number, rgba: Uint8Array, w: number, h: number) => void} drawTile
  */
 
 /**
@@ -77,21 +76,5 @@ export function createRenderer(canvas, outWidth, outHeight) {
     }
   }
 
-  /**
-   * Draw a pre-downscaled tile at a given canvas position.
-   *
-   * @param {number} x - canvas X offset
-   * @param {number} y - canvas Y offset
-   * @param {Uint8Array} rgba - RGBA pixel data for the tile
-   * @param {number} w - tile width in pixels
-   * @param {number} h - tile height in pixels
-   */
-  function drawTile(x, y, rgba, w, h) {
-    flush(); // flush any pending row batch first
-    const tileImg = ctx.createImageData(w, h);
-    tileImg.data.set(rgba.subarray(0, w * h * 4));
-    ctx.putImageData(tileImg, x, y);
-  }
-
-  return { drawRow, flush, drawTile };
+  return { drawRow, flush };
 }
