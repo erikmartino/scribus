@@ -177,6 +177,7 @@ export class SpreadEditorApp {
       new ResizeObserver(() => this._updateOverlay()).observe(this.container);
 
       this.bindEvents();
+      this._initDragDrop();
 
       // Register Text Commands & Clipboard Integration
       this._registerCommands(shell);
@@ -1187,6 +1188,139 @@ export class SpreadEditorApp {
       });
     };
     img.src = dataUrl;
+  }
+
+  /**
+   * Place an image box at a specific content-space position.
+   * Used by drag-and-drop to place images where the user drops them.
+   */
+  _placeImageBoxAt(dataUrl, cx, cy) {
+    if (!this.currentSpread) return;
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 300;
+      const scale = Math.min(1, maxW / img.width);
+      const w = img.width * scale;
+      const h = img.height * scale;
+
+      // Center the box on the drop point
+      const x = cx - w / 2;
+      const y = cy - h / 2;
+
+      const boxId = `image-${++this._imageBoxCounter}`;
+      const imageBox = {
+        id: boxId,
+        x, y, width: w, height: h,
+        minWidth: 20, minHeight: 20,
+        imageUrl: dataUrl,
+      };
+
+      this.submitAction('Drop Image', () => {
+        this.imageBoxes = [...this.imageBoxes, imageBox];
+        this.selectedBoxId = boxId;
+      });
+    };
+    img.src = dataUrl;
+  }
+
+  /** Set up HTML5 drag-and-drop for image files on the container. */
+  _initDragDrop() {
+    const container = this.container;
+    let dragCounter = 0;  // Track nested dragenter/dragleave
+
+    container.addEventListener('dragover', (e) => {
+      // Only accept drags that contain files
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+
+    container.addEventListener('dragenter', (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      e.preventDefault();
+      dragCounter++;
+      if (dragCounter === 1) {
+        this._showDropHighlight();
+      }
+    });
+
+    container.addEventListener('dragleave', (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        this._hideDropHighlight();
+      }
+    });
+
+    container.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      this._hideDropHighlight();
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      // Convert drop point to content-space coordinates
+      const svg = this._svg;
+      if (!svg) return;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+      const contentPt = new DOMPoint(e.clientX, e.clientY)
+        .matrixTransform(ctm.inverse());
+
+      // Process each image file
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        const dataUrl = await this._blobToDataUrl(file);
+        if (this.mode === 'text') {
+          // Insert inline image at cursor position
+          this.submitAction('Drop Inline Image', () => {
+            const run = {
+              text: '\uFFFC',
+              style: { bold: false, italic: false, inlineImage: dataUrl },
+            };
+            this.editor.insertStory([[run]]);
+          });
+        } else {
+          // Place image box at drop coordinates
+          this._placeImageBoxAt(dataUrl, contentPt.x, contentPt.y);
+        }
+      }
+    });
+  }
+
+  /** Show a drop-zone highlight in the overlay SVG. */
+  _showDropHighlight() {
+    if (!this._overlaySvg || !this._svg) return;
+    // Remove any existing highlight
+    this._hideDropHighlight();
+
+    const overlay = this._overlaySvg;
+    const vw = parseFloat(overlay.getAttribute('width') || '0');
+    const vh = parseFloat(overlay.getAttribute('height') || '0');
+    if (!vw || !vh) return;
+
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('x', '0');
+    rect.setAttribute('y', '0');
+    rect.setAttribute('width', String(vw));
+    rect.setAttribute('height', String(vh));
+    rect.setAttribute('fill', 'rgba(47, 110, 164, 0.08)');
+    rect.setAttribute('stroke', '#2f6ea4');
+    rect.setAttribute('stroke-width', '2');
+    rect.setAttribute('stroke-dasharray', '8 4');
+    rect.setAttribute('rx', '4');
+    rect.setAttribute('data-drop-highlight', 'true');
+    rect.style.pointerEvents = 'none';
+    overlay.appendChild(rect);
+  }
+
+  /** Remove the drop-zone highlight from the overlay SVG. */
+  _hideDropHighlight() {
+    if (!this._overlaySvg) return;
+    const el = this._overlaySvg.querySelector('[data-drop-highlight]');
+    if (el) el.remove();
   }
 
   /** Render all image boxes as SVG <image> elements inside the given SVG. */
