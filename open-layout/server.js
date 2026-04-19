@@ -499,6 +499,26 @@ function handleStoreRequest(req, res, pathname) {
     return;
   }
 
+  // --- HEAD: check if a file exists (returns 200 with Content-Length, or 404) ---
+  if (method === 'HEAD') {
+    fs.stat(filePath, (statErr, stat) => {
+      if (statErr || stat.isDirectory()) {
+        res.statusCode = 404;
+        setIsolationHeaders(res);
+        res.end();
+        return;
+      }
+      res.statusCode = 200;
+      setIsolationHeaders(res);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = MIME[ext] || 'application/octet-stream';
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Length', stat.size);
+      res.end();
+    });
+    return;
+  }
+
   // --- GET: serve file or directory listing ---
   if (method !== 'GET') {
     sendError(res, 405, 'Method Not Allowed');

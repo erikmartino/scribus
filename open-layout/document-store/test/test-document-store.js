@@ -59,6 +59,11 @@ const {
   loadSpread,
   loadStoryFromStore,
   loadStoryRaw,
+  putAsset,
+  headAsset,
+  assetNameFromFilename,
+  extFromMime,
+  uploadImageAsset,
 } = await import('../lib/document-store.js');
 
 // ---------------------------------------------------------------------------
@@ -647,5 +652,188 @@ describe('loadStoryFromStore', () => {
     // styleRef must survive the round trip
     assert.equal(serialized.paragraphs[0].styleRef, 'heading-1');
     assert.equal(serialized.paragraphs[1].styleRef, 'body');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Asset helpers
+// ---------------------------------------------------------------------------
+
+describe('assetNameFromFilename', () => {
+  it('strips extension and lowercases', () => {
+    assert.equal(assetNameFromFilename('Hero-Photo.PNG'), 'hero-photo');
+  });
+
+  it('replaces spaces and special chars with hyphens', () => {
+    assert.equal(assetNameFromFilename('My Cool Image (1).jpeg'), 'my-cool-image-1');
+  });
+
+  it('collapses multiple hyphens', () => {
+    assert.equal(assetNameFromFilename('a---b...c.png'), 'a-b-c');
+  });
+
+  it('strips leading and trailing hyphens', () => {
+    assert.equal(assetNameFromFilename('--photo--.jpg'), 'photo');
+  });
+
+  it('handles names with no extension', () => {
+    assert.equal(assetNameFromFilename('screenshot'), 'screenshot');
+  });
+
+  it('handles dotfiles by stripping leading dot', () => {
+    assert.equal(assetNameFromFilename('.hidden.png'), 'hidden');
+  });
+});
+
+describe('extFromMime', () => {
+  it('maps image/png to png', () => {
+    assert.equal(extFromMime('image/png'), 'png');
+  });
+
+  it('maps image/jpeg to jpg', () => {
+    assert.equal(extFromMime('image/jpeg'), 'jpg');
+  });
+
+  it('maps image/webp to webp', () => {
+    assert.equal(extFromMime('image/webp'), 'webp');
+  });
+
+  it('maps image/svg+xml to svg', () => {
+    assert.equal(extFromMime('image/svg+xml'), 'svg');
+  });
+
+  it('returns bin for unknown types', () => {
+    assert.equal(extFromMime('application/pdf'), 'bin');
+  });
+});
+
+describe('putAsset', () => {
+  beforeEach(() => fetchMock.reset());
+
+  it('sends PUT with correct content type', async () => {
+    fetchMock.on('assets/photo/photo.png', { ok: true, status: 201, text: 'Created' });
+    const data = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const res = await putAsset('/store/alice/doc/assets/photo/photo.png', data, 'image/png');
+    assert.equal(res.ok, true);
+
+    const call = fetchMock.calls.find(c => c.url.includes('photo.png'));
+    assert.equal(call.opts.method, 'PUT');
+    assert.equal(call.opts.headers['Content-Type'], 'image/png');
+  });
+});
+
+describe('headAsset', () => {
+  beforeEach(() => fetchMock.reset());
+
+  it('returns exists=true and size when file exists', async () => {
+    fetchMock.on('assets/photo/photo.png', {
+      ok: true,
+      status: 200,
+      text: '',
+    });
+    // Mock needs headers — extend fetch mock to support HEAD
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      if (opts?.method === 'HEAD' && url.includes('photo.png')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Map([['Content-Length', '12345']]),
+        };
+      }
+      return origFetch(url, opts);
+    };
+
+    const result = await headAsset('/store/alice/doc/assets/photo/photo.png');
+    assert.equal(result.exists, true);
+    assert.equal(result.size, 12345);
+
+    globalThis.fetch = origFetch;
+  });
+
+  it('returns exists=false when file does not exist', async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      if (opts?.method === 'HEAD') {
+        return { ok: false, status: 404, headers: new Map() };
+      }
+      return origFetch(url, opts);
+    };
+
+    const result = await headAsset('/store/alice/doc/assets/missing/missing.png');
+    assert.equal(result.exists, false);
+    assert.equal(result.size, 0);
+
+    globalThis.fetch = origFetch;
+  });
+});
+
+describe('uploadImageAsset', () => {
+  beforeEach(() => fetchMock.reset());
+
+  it('uploads image and meta.json to unique folder', async () => {
+    const calls = [];
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url, method: opts?.method || 'GET' });
+      if (opts?.method === 'HEAD') {
+        // Nothing exists yet
+        return { ok: false, status: 404, headers: new Map() };
+      }
+      if (opts?.method === 'PUT') {
+        return { ok: true, status: 201, text: async () => 'Created' };
+      }
+      return origFetch(url, opts);
+    };
+
+    const blob = new Blob([new Uint8Array(100)], { type: 'image/png' });
+    Object.defineProperty(blob, 'size', { value: 100 });
+    const result = await uploadImageAsset('alice/doc', 'photo', blob, {
+      mime: 'image/png', width: 200, height: 150,
+    });
+
+    assert.equal(result.assetRef, 'photo');
+    assert.equal(result.ext, 'png');
+
+    // Should have: 1 HEAD check, 2 PUTs (image + meta.json)
+    const headCalls = calls.filter(c => c.method === 'HEAD');
+    const putCalls = calls.filter(c => c.method === 'PUT');
+    assert.equal(headCalls.length, 1);
+    assert.equal(putCalls.length, 2);
+    assert.ok(putCalls.some(c => c.url.includes('photo/photo.png')));
+    assert.ok(putCalls.some(c => c.url.includes('photo/meta.json')));
+
+    globalThis.fetch = origFetch;
+  });
+
+  it('appends suffix when name already exists', async () => {
+    const origFetch = globalThis.fetch;
+    let headCount = 0;
+    globalThis.fetch = async (url, opts) => {
+      if (opts?.method === 'HEAD') {
+        headCount++;
+        // First HEAD (photo/photo.jpg) exists, second HEAD (photo-2/photo-2.jpg) does not
+        if (url.includes('photo/photo.jpg')) {
+          return { ok: true, status: 200, headers: new Map([['Content-Length', '500']]) };
+        }
+        return { ok: false, status: 404, headers: new Map() };
+      }
+      if (opts?.method === 'PUT') {
+        return { ok: true, status: 201, text: async () => 'Created' };
+      }
+      return origFetch(url, opts);
+    };
+
+    const blob = new Blob([new Uint8Array(50)], { type: 'image/jpeg' });
+    Object.defineProperty(blob, 'size', { value: 50 });
+    const result = await uploadImageAsset('alice/doc', 'photo', blob, {
+      mime: 'image/jpeg', width: 100, height: 80,
+    });
+
+    assert.equal(result.assetRef, 'photo-2');
+    assert.equal(result.ext, 'jpg');
+    assert.equal(headCount, 2);
+
+    globalThis.fetch = origFetch;
   });
 });

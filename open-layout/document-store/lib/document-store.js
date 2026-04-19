@@ -74,6 +74,126 @@ export async function updateDocTimestamp(docPath) {
 }
 
 // ---------------------------------------------------------------------------
+// Asset helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * PUT binary data to a store path.
+ *
+ * @param {string} url - Full URL path (e.g. "/store/alice/doc/assets/photo/photo.png")
+ * @param {Blob|ArrayBuffer|Uint8Array} data - Binary data
+ * @param {string} contentType - MIME type (e.g. "image/png")
+ * @returns {Promise<Response>}
+ */
+export function putAsset(url, data, contentType) {
+  return fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: data,
+  });
+}
+
+/**
+ * HEAD request to check if a store file exists.
+ *
+ * @param {string} url - Full URL path
+ * @returns {Promise<{ exists: boolean, size: number }>}
+ */
+export async function headAsset(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    if (res.ok) {
+      const size = parseInt(res.headers.get('Content-Length') || '0', 10);
+      return { exists: true, size };
+    }
+    return { exists: false, size: 0 };
+  } catch {
+    return { exists: false, size: 0 };
+  }
+}
+
+/**
+ * Derive a filesystem-safe asset name from a filename.
+ * Strips the extension, lowercases, replaces non-alphanumeric with hyphens,
+ * and collapses runs of hyphens.
+ *
+ * @param {string} filename - Original filename (e.g. "Hero Photo.PNG")
+ * @returns {string} - Asset name (e.g. "hero-photo")
+ */
+export function assetNameFromFilename(filename) {
+  const stem = filename.replace(/\.[^.]+$/, '');  // strip extension
+  return stem
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Derive the file extension from a MIME type.
+ *
+ * @param {string} mime - e.g. "image/png"
+ * @returns {string} - e.g. "png"
+ */
+export function extFromMime(mime) {
+  const map = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+    'image/bmp': 'bmp',
+    'image/tiff': 'tiff',
+  };
+  return map[mime] || 'bin';
+}
+
+/**
+ * Upload an image as a document asset.
+ *
+ * Creates the asset folder structure:
+ *   assets/{name}/{name}.{ext}   — the image file
+ *   assets/{name}/meta.json      — metadata (mime, width, height, sizeBytes)
+ *
+ * If an asset with the same name already exists, appends a numeric suffix
+ * (e.g. "photo-2") to avoid overwriting.
+ *
+ * @param {string} docPath - Document path (e.g. "alice/brochure-q2")
+ * @param {string} name - Desired asset name (e.g. "hero-photo")
+ * @param {Blob} blob - Image data
+ * @param {{ mime: string, width: number, height: number }} meta - Image metadata
+ * @returns {Promise<{ assetRef: string, ext: string }>}
+ */
+export async function uploadImageAsset(docPath, name, blob, meta) {
+  const ext = extFromMime(meta.mime);
+  let assetRef = name;
+  let suffix = 1;
+
+  // Find a unique asset name via HEAD checks
+  while (true) {
+    const fileUrl = `/store/${docPath}/assets/${assetRef}/${assetRef}.${ext}`;
+    const { exists } = await headAsset(fileUrl);
+    if (!exists) break;
+    suffix++;
+    assetRef = `${name}-${suffix}`;
+  }
+
+  const basePath = `/store/${docPath}/assets/${assetRef}`;
+
+  // Upload the image file and meta.json in parallel
+  await Promise.all([
+    putAsset(`${basePath}/${assetRef}.${ext}`, blob, meta.mime),
+    putJson(`${basePath}/meta.json`, {
+      mime: meta.mime,
+      width: meta.width,
+      height: meta.height,
+      sizeBytes: blob.size,
+    }),
+  ]);
+
+  return { assetRef, ext };
+}
+
+// ---------------------------------------------------------------------------
 // Load helpers
 // ---------------------------------------------------------------------------
 

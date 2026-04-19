@@ -10,7 +10,14 @@ import {
   cloneStyle,
   cloneParagraphStyle,
 } from '../lib/story-editor-core.js';
-import { serializeStory, putJson, updateDocTimestamp } from '../../document-store/lib/document-store.js';
+import {
+  serializeStory,
+  putJson,
+  updateDocTimestamp,
+  uploadImageAsset,
+  assetNameFromFilename,
+  extFromMime,
+} from '../../document-store/lib/document-store.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
 import { drawBoxOverlay } from './box-overlay.js';
@@ -274,8 +281,32 @@ export class SpreadEditorApp {
     // Map from storyRef -> ordered list of box IDs in that story chain
     const storyBoxMap = new Map();
 
+    // Pre-load asset metadata so we can resolve assetRefs to URLs
+    let assetMeta = {};
+    try {
+      const aggRes = await fetch(`/store/${this._docPath}/assets.aggregate.json`);
+      if (aggRes.ok) {
+        const arr = await aggRes.json();
+        for (const m of arr) if (m.id) assetMeta[m.id] = m;
+      }
+    } catch { /* assets are optional */ }
+
     for (const frame of spreadJson.frames || []) {
       if (frame.type === 'image') {
+        let imageUrl;
+        let assetRef;
+        let assetExt;
+
+        if (frame.assetRef) {
+          // Resolve assetRef to a URL using metadata or fallback
+          assetRef = frame.assetRef;
+          const meta = assetMeta[assetRef];
+          assetExt = meta ? extFromMime(meta.mime) : 'jpg';
+          imageUrl = `/store/${this._docPath}/assets/${assetRef}/${assetRef}.${assetExt}`;
+        } else {
+          imageUrl = frame.imageUrl || this._emptyImagePlaceholder();
+        }
+
         this.imageBoxes.push({
           id: frame.id,
           x: frame.x,
@@ -284,7 +315,8 @@ export class SpreadEditorApp {
           height: frame.height,
           minWidth: 20,
           minHeight: 20,
-          imageUrl: frame.imageUrl || this._emptyImagePlaceholder(),
+          imageUrl,
+          ...(assetRef ? { assetRef, assetExt } : {}),
         });
         this._imageBoxCounter++;
       } else {
@@ -875,17 +907,22 @@ export class SpreadEditorApp {
       frames.push(frame);
     }
 
-    // Image frames
+    // Image frames — prefer assetRef (spec convention) over inline imageUrl
     for (const box of this.imageBoxes) {
-      frames.push({
+      const frame = {
         id: box.id,
         type: 'image',
         x: Math.round(box.x * 100) / 100,
         y: Math.round(box.y * 100) / 100,
         width: Math.round(box.width * 100) / 100,
         height: Math.round(box.height * 100) / 100,
-        imageUrl: box.imageUrl,
-      });
+      };
+      if (box.assetRef) {
+        frame.assetRef = box.assetRef;
+      } else {
+        frame.imageUrl = box.imageUrl;
+      }
+      frames.push(frame);
     }
 
     return {
@@ -1093,16 +1130,16 @@ export class SpreadEditorApp {
     // 1. Image paste
     const imageItem = payload.items.find(it => it && it.type === 'image');
     if (imageItem) {
-      const dataUrl = await this._blobToDataUrl(imageItem.data);
       if (this.mode === 'text') {
         // Insert inline image placeholder in text flow
+        const dataUrl = await this._blobToDataUrl(imageItem.data);
         this.submitAction('Paste Inline Image', () => {
           const run = { text: '\uFFFC', style: { bold: false, italic: false, inlineImage: dataUrl } };
           this.editor.insertStory([[run]]);
         });
       } else {
-        // Object mode: place image box on the pasteboard
-        this._placeImageBox(dataUrl);
+        // Object mode: place image box on the pasteboard (upload as asset if possible)
+        await this._placeImageBox(imageItem.data, imageItem.data.name || 'pasted-image');
       }
       return;
     }
@@ -1158,69 +1195,113 @@ export class SpreadEditorApp {
     });
   }
 
-  /** Place an image box on the pasteboard centered in the current view. */
-  _placeImageBox(dataUrl) {
-    if (!this.currentSpread) return;
-    const img = new Image();
-    img.onload = () => {
-      // Size the box proportionally, capped at 300px wide
-      const maxW = 300;
-      const scale = Math.min(1, maxW / img.width);
-      const w = img.width * scale;
-      const h = img.height * scale;
-
-      // Place near center of the first page
-      const page = this.currentSpread.pageRects[0];
-      const x = page.x + (page.width - w) / 2;
-      const y = page.y + (page.height - h) / 2;
-
-      const boxId = `image-${++this._imageBoxCounter}`;
-      const imageBox = {
-        id: boxId,
-        x, y, width: w, height: h,
-        minWidth: 20, minHeight: 20,
-        imageUrl: dataUrl,
+  /**
+   * Load an image blob to get its natural dimensions.
+   * @param {Blob} blob
+   * @returns {Promise<{ width: number, height: number, dataUrl: string }>}
+   */
+  _loadImageBlob(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const img = new Image();
+        img.onload = () => resolve({ width: img.width, height: img.height, dataUrl });
+        img.onerror = () => reject(new Error('Failed to decode image'));
+        img.src = dataUrl;
       };
+      reader.readAsDataURL(blob);
+    });
+  }
 
-      this.submitAction('Paste Image Box', () => {
-        this.imageBoxes = [...this.imageBoxes, imageBox];
-        this.selectedBoxId = boxId;
-      });
+  /**
+   * Prepare an image for placement: upload as an asset if the editor is
+   * connected to a document store, otherwise keep as a data URL.
+   *
+   * @param {Blob} blob - Image data
+   * @param {string} filename - Original filename (e.g. "photo.png")
+   * @returns {Promise<{ imageUrl: string, assetRef?: string, assetExt?: string, width: number, height: number }>}
+   */
+  async _prepareImageAsset(blob, filename) {
+    const { width, height, dataUrl } = await this._loadImageBlob(blob);
+    const mime = blob.type || 'image/png';
+
+    if (this._docPath) {
+      try {
+        const name = assetNameFromFilename(filename || 'image');
+        const { assetRef, ext } = await uploadImageAsset(
+          this._docPath, name, blob, { mime, width, height },
+        );
+        // Build the URL to the uploaded file for rendering
+        const imageUrl = `/store/${this._docPath}/assets/${assetRef}/${assetRef}.${ext}`;
+        return { imageUrl, assetRef, assetExt: ext, width, height };
+      } catch (err) {
+        console.warn('Asset upload failed, falling back to data URL:', err);
+      }
+    }
+
+    return { imageUrl: dataUrl, width, height };
+  }
+
+  /** Place an image box on the pasteboard centered in the current view. */
+  async _placeImageBox(blob, filename) {
+    if (!this.currentSpread) return;
+    const asset = await this._prepareImageAsset(blob, filename);
+
+    const maxW = 300;
+    const scale = Math.min(1, maxW / asset.width);
+    const w = asset.width * scale;
+    const h = asset.height * scale;
+
+    const page = this.currentSpread.pageRects[0];
+    const x = page.x + (page.width - w) / 2;
+    const y = page.y + (page.height - h) / 2;
+
+    const boxId = `image-${++this._imageBoxCounter}`;
+    const imageBox = {
+      id: boxId,
+      x, y, width: w, height: h,
+      minWidth: 20, minHeight: 20,
+      imageUrl: asset.imageUrl,
+      ...(asset.assetRef ? { assetRef: asset.assetRef, assetExt: asset.assetExt } : {}),
     };
-    img.src = dataUrl;
+
+    this.submitAction('Paste Image Box', () => {
+      this.imageBoxes = [...this.imageBoxes, imageBox];
+      this.selectedBoxId = boxId;
+    });
   }
 
   /**
    * Place an image box at a specific content-space position.
    * Used by drag-and-drop to place images where the user drops them.
    */
-  _placeImageBoxAt(dataUrl, cx, cy) {
+  async _placeImageBoxAt(blob, filename, cx, cy) {
     if (!this.currentSpread) return;
-    const img = new Image();
-    img.onload = () => {
-      const maxW = 300;
-      const scale = Math.min(1, maxW / img.width);
-      const w = img.width * scale;
-      const h = img.height * scale;
+    const asset = await this._prepareImageAsset(blob, filename);
 
-      // Center the box on the drop point
-      const x = cx - w / 2;
-      const y = cy - h / 2;
+    const maxW = 300;
+    const scale = Math.min(1, maxW / asset.width);
+    const w = asset.width * scale;
+    const h = asset.height * scale;
 
-      const boxId = `image-${++this._imageBoxCounter}`;
-      const imageBox = {
-        id: boxId,
-        x, y, width: w, height: h,
-        minWidth: 20, minHeight: 20,
-        imageUrl: dataUrl,
-      };
+    const x = cx - w / 2;
+    const y = cy - h / 2;
 
-      this.submitAction('Drop Image', () => {
-        this.imageBoxes = [...this.imageBoxes, imageBox];
-        this.selectedBoxId = boxId;
-      });
+    const boxId = `image-${++this._imageBoxCounter}`;
+    const imageBox = {
+      id: boxId,
+      x, y, width: w, height: h,
+      minWidth: 20, minHeight: 20,
+      imageUrl: asset.imageUrl,
+      ...(asset.assetRef ? { assetRef: asset.assetRef, assetExt: asset.assetExt } : {}),
     };
-    img.src = dataUrl;
+
+    this.submitAction('Drop Image', () => {
+      this.imageBoxes = [...this.imageBoxes, imageBox];
+      this.selectedBoxId = boxId;
+    });
   }
 
   /** Set up HTML5 drag-and-drop for image files on the container. */
@@ -1272,9 +1353,9 @@ export class SpreadEditorApp {
       // Process each image file
       for (const file of files) {
         if (!file.type.startsWith('image/')) continue;
-        const dataUrl = await this._blobToDataUrl(file);
         if (this.mode === 'text') {
           // Insert inline image at cursor position
+          const dataUrl = await this._blobToDataUrl(file);
           this.submitAction('Drop Inline Image', () => {
             const run = {
               text: '\uFFFC',
@@ -1283,8 +1364,8 @@ export class SpreadEditorApp {
             this.editor.insertStory([[run]]);
           });
         } else {
-          // Place image box at drop coordinates
-          this._placeImageBoxAt(dataUrl, contentPt.x, contentPt.y);
+          // Place image box at drop coordinates (upload as asset if possible)
+          await this._placeImageBoxAt(file, file.name, contentPt.x, contentPt.y);
         }
       }
     });
