@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const STORE_DIR = path.resolve(import.meta.dirname, '../../store');
+const USER = process.env.E2E_STORE_USER;
 
 test.describe('Document Save', () => {
-  /** Create a throwaway document from the demo template before each test. */
+  /** Create a throwaway document from the seed template before each test. */
   let testDocSlug;
   let testDocDir;
 
@@ -19,15 +20,15 @@ test.describe('Document Save', () => {
 
     // Create a unique test document via the POST copy endpoint
     testDocSlug = `test-save-${Date.now()}`;
-    testDocDir = path.join(STORE_DIR, 'alice', testDocSlug);
+    testDocDir = path.join(STORE_DIR, USER, testDocSlug);
 
-    const res = await request.post(`/store/alice/${testDocSlug}`, {
+    const res = await request.post(`/store/${USER}/${testDocSlug}`, {
       data: { from: 'demo/typography-sampler' },
     });
     expect(res.status()).toBe(201);
 
     // Open the spread editor with the doc param
-    await page.goto(`/spread-editor/index.html?doc=alice/${testDocSlug}`);
+    await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}`);
     await page.waitForSelector('scribus-app-shell:defined');
     const statusEl = page.locator('#status');
     await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });

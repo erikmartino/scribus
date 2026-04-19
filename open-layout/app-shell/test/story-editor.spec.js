@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const USER = process.env.E2E_STORE_USER;
+
 /** Wire up browser console/error forwarding for diagnostics. */
 function forwardBrowserLogs(page) {
     page.on('console', msg => {
@@ -187,17 +189,17 @@ test.describe('Story Editor Integration', () => {
     test('Ctrl+S saves story back to store', async ({ page, request }) => {
         const STORE_DIR = path.resolve(import.meta.dirname, '../../store');
         const testSlug = `test-story-save-${Date.now()}`;
-        const testDir = path.join(STORE_DIR, 'alice', testSlug);
+        const testDir = path.join(STORE_DIR, USER, testSlug);
 
         try {
             // Create a test document from the template
-            const res = await request.post(`/store/alice/${testSlug}`, {
+            const res = await request.post(`/store/${USER}/${testSlug}`, {
                 data: { from: 'demo/typography-sampler' },
             });
             expect(res.status()).toBe(201);
 
             // Open the story editor for the cloned document
-            await page.goto(`/store/alice/${testSlug}/stories/story-main/edit`);
+            await page.goto(`/store/${USER}/${testSlug}/stories/story-main/edit`);
             await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
 
             // Type something distinctive
@@ -238,15 +240,15 @@ test.describe('Story Editor Integration', () => {
     test('clicking Save button persists story', async ({ page, request }) => {
         const STORE_DIR = path.resolve(import.meta.dirname, '../../store');
         const testSlug = `test-story-btn-${Date.now()}`;
-        const testDir = path.join(STORE_DIR, 'alice', testSlug);
+        const testDir = path.join(STORE_DIR, USER, testSlug);
 
         try {
-            const res = await request.post(`/store/alice/${testSlug}`, {
+            const res = await request.post(`/store/${USER}/${testSlug}`, {
                 data: { from: 'demo/typography-sampler' },
             });
             expect(res.status()).toBe(201);
 
-            await page.goto(`/store/alice/${testSlug}/stories/story-main/edit`);
+            await page.goto(`/store/${USER}/${testSlug}/stories/story-main/edit`);
             await page.waitForSelector('#svg-container svg text', { timeout: 60000 });
 
             // Click the Save button

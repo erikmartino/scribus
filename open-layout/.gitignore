@@ -4,6 +4,7 @@
 *.log
 *.out
 test-results
+*.tmp
 playwright-report/
 node_modules/
 vendor/

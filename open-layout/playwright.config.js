@@ -7,6 +7,10 @@ export default defineConfig({
   testDir: '.',
   testMatch: /.*\.spec\.js/,
   outputDir: './test-results',
+
+  globalSetup: './test/global-setup.js',
+  globalTeardown: './test/global-teardown.js',
+
   /* Run tests in files in parallel */
   fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

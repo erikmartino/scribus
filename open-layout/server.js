@@ -7,10 +7,32 @@ import path from 'node:path';
 import url from 'node:url';
 
 const rootDir = process.cwd();
-const storeDir = path.join(rootDir, 'store');
-const portArg = process.argv[2];
-const parsedPort = Number(portArg);
-const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 8000;
+
+// --- CLI argument parsing ---
+// Supports: node server.js [port]
+//           node server.js --port <n> --store-root <path>
+function parseArgs(argv) {
+  const args = { port: 8000, storeRoot: path.join(rootDir, 'store') };
+  let i = 2; // skip node and script
+  while (i < argv.length) {
+    if (argv[i] === '--port' && i + 1 < argv.length) {
+      const n = Number(argv[++i]);
+      if (Number.isInteger(n) && n > 0) args.port = n;
+    } else if (argv[i] === '--store-root' && i + 1 < argv.length) {
+      args.storeRoot = path.resolve(argv[++i]);
+    } else {
+      // Legacy positional port: node server.js 9000
+      const n = Number(argv[i]);
+      if (Number.isInteger(n) && n > 0) args.port = n;
+    }
+    i++;
+  }
+  return args;
+}
+
+const cliArgs = parseArgs(process.argv);
+const storeDir = cliArgs.storeRoot;
+const port = cliArgs.port;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -613,4 +635,5 @@ server.listen(port, () => {
   console.log(`Serving heavily-threaded webapps at http://localhost:${port}`);
   console.log('Cross-Origin-Isolation headers are ACTIVE (SAB enabled).');
   console.log(`Document store API at http://localhost:${port}/store/`);
+  console.log(`Store root: ${storeDir}`);
 });
