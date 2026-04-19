@@ -14,6 +14,8 @@ Reference specifications live in `../specs/`.
 
 Completed plans are removed per convention. Previously completed:
 
+- `overlay-layer-plan.md` — Non-zoomed overlay SVG for box frames, handles, ports, margin guides (completed).
+- `image-drag-drop-plan.md` — Drag-and-drop image files onto the spread editor canvas (completed).
 - `document-store-module-plan.md` — Centralized document-store module with load/save API and debug inspector page (completed).
 - `box-overflow-linking-plan.md` — Overflow markers, linking ports, link/unlink interaction (completed).
 - `document-browser-plan.md` — Document browser with template cloning and Open routing (completed).
