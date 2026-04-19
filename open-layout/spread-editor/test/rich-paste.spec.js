@@ -11,7 +11,7 @@ test.describe('Spread Editor Rich Paste', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto('/spread-editor/index.html');
     await page.waitForSelector('scribus-app-shell', { timeout: 30000 });
-    await page.waitForSelector('#svg-container svg', { timeout: 30000 });
+    await page.waitForSelector('#svg-container svg.content-svg', { timeout: 30000 });
   });
 
   test('pasting HTML with bold/italic in text mode preserves styling', async ({ page }) => {
@@ -45,7 +45,7 @@ test.describe('Spread Editor Rich Paste', () => {
 
     // Check that the SVG contains bold and italic tspans
     const tspanInfo = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       const tspans = svg.querySelectorAll('tspan');
       return Array.from(tspans).map(ts => ({
         text: ts.textContent,
@@ -85,19 +85,18 @@ test.describe('Spread Editor Rich Paste', () => {
 
     // Check for an SVG <image> element
     const imgCount = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       return svg.querySelectorAll('image[data-image-box]').length;
     });
     expect(imgCount).toBeGreaterThan(0);
 
     // Verify resize handles are drawn for the image box
     const handleInfo = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
-      // Find the box-id of the image box overlay
-      const imageBoxRect = svg.querySelector('[data-box-id^="image-"]');
+      const overlay = document.querySelector('#svg-container svg.overlay-svg');
+      const imageBoxRect = overlay.querySelector('[data-box-id^="image-"]');
       if (!imageBoxRect) return { boxId: null, handleCount: 0 };
       const boxId = imageBoxRect.dataset.boxId;
-      const handles = svg.querySelectorAll(`[data-sublayer="handles"] [data-box-id="${boxId}"]`);
+      const handles = overlay.querySelectorAll(`[data-sublayer="handles"] [data-box-id="${boxId}"]`);
       return { boxId, handleCount: handles.length };
     });
     expect(handleInfo.boxId).toBeTruthy();
@@ -129,7 +128,7 @@ test.describe('Spread Editor Rich Paste', () => {
 
     // Confirm image exists
     let imgCount = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       return svg.querySelectorAll('image[data-image-box]').length;
     });
     expect(imgCount).toBe(1);
@@ -141,7 +140,7 @@ test.describe('Spread Editor Rich Paste', () => {
 
     // Image should still exist after click
     imgCount = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       return svg.querySelectorAll('image[data-image-box]').length;
     });
     expect(imgCount).toBe(1);
@@ -152,7 +151,7 @@ test.describe('Spread Editor Rich Paste', () => {
 
     // Image should still exist after background click
     imgCount = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       return svg.querySelectorAll('image[data-image-box]').length;
     });
     expect(imgCount).toBe(1);
@@ -185,7 +184,7 @@ test.describe('Spread Editor Rich Paste', () => {
 
     // Check for an SVG <image> element (inline image rendered by svg-renderer)
     const imgCount = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       return svg.querySelectorAll('image').length;
     });
     expect(imgCount).toBeGreaterThan(0);

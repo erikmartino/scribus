@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
  */
 async function clickPort(page, boxId, portType) {
   const found = await page.evaluate(({ boxId, portType }) => {
-    const svg = document.querySelector('#svg-container svg');
+    const svg = document.querySelector('#svg-container svg.overlay-svg');
     let el;
     if (portType === 'overflow') {
       el = svg.querySelector(`[data-overflow="true"][data-port-box="${boxId}"]`);
@@ -33,7 +33,7 @@ async function clickPort(page, boxId, portType) {
  */
 async function clickBoxBody(page, boxId) {
   const found = await page.evaluate((boxId) => {
-    const svg = document.querySelector('#svg-container svg');
+    const svg = document.querySelector('#svg-container svg.overlay-svg');
     // Prefer the link-target overlay (rendered on top during link mode)
     let body = svg.querySelector(`[data-link-target="true"][data-box-id="${boxId}"]`);
     if (!body) {
@@ -103,7 +103,7 @@ test.describe('Text Frame Linking', () => {
 
     // Should see link target highlights
     const targetCount = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-link-target="true"]').length;
     });
     expect(targetCount).toBeGreaterThan(0);

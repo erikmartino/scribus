@@ -18,7 +18,7 @@ test.describe('Text Frame Ports and Overflow', () => {
   test('default text boxes have input and output port indicators', async ({ page }) => {
     // The default 4-box chain should show ports on each box
     const ports = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const inputs = svg.querySelectorAll('[data-port="input"]');
       const outputs = svg.querySelectorAll('[data-port="output"]');
       return {
@@ -30,7 +30,7 @@ test.describe('Text Frame Ports and Overflow', () => {
     // (unless one has overflow, in which case the last output is replaced
     //  by an overflow marker — check for that too)
     const overflowCount = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-overflow="true"]').length;
     });
     expect(ports.inputCount).toBe(4);
@@ -47,7 +47,7 @@ test.describe('Text Frame Ports and Overflow', () => {
     expect(firstBoxId).toBeTruthy();
 
     const portFill = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const port = svg.querySelector(`[data-port="input"][data-port-box="${boxId}"]`);
       return port?.getAttribute('fill');
     }, firstBoxId);
@@ -64,7 +64,7 @@ test.describe('Text Frame Ports and Overflow', () => {
     expect(secondBoxId).toBeTruthy();
 
     const portFill = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const port = svg.querySelector(`[data-port="input"][data-port-box="${boxId}"]`);
       return port?.getAttribute('fill');
     }, secondBoxId);
@@ -81,7 +81,7 @@ test.describe('Text Frame Ports and Overflow', () => {
     });
 
     const portFill = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const port = svg.querySelector(`[data-port="output"][data-port-box="${boxId}"]`);
       return port?.getAttribute('fill');
     }, firstBoxId);
@@ -98,7 +98,7 @@ test.describe('Text Frame Ports and Overflow', () => {
 
     // Find the new box (starts with "text-")
     const newBoxId = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
       for (const r of rects) {
         if (r.dataset.boxId.startsWith('text-')) return r.dataset.boxId;
@@ -108,7 +108,7 @@ test.describe('Text Frame Ports and Overflow', () => {
     expect(newBoxId).not.toBeNull();
 
     const ports = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const input = svg.querySelector(`[data-port="input"][data-port-box="${boxId}"]`);
       const output = svg.querySelector(`[data-port="output"][data-port-box="${boxId}"]`);
       const overflow = svg.querySelector(`[data-overflow="true"][data-port-box="${boxId}"]`);
@@ -135,7 +135,7 @@ test.describe('Text Frame Ports and Overflow', () => {
 
     // Image box should NOT have ports
     const imageBoxId = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
       for (const r of rects) {
         if (r.dataset.boxId.startsWith('image-')) return r.dataset.boxId;
@@ -145,7 +145,7 @@ test.describe('Text Frame Ports and Overflow', () => {
     expect(imageBoxId).not.toBeNull();
 
     const ports = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const input = svg.querySelector(`[data-port="input"][data-port-box="${boxId}"]`);
       const output = svg.querySelector(`[data-port="output"][data-port-box="${boxId}"]`);
       return { hasInput: !!input, hasOutput: !!output };
@@ -165,7 +165,7 @@ test.describe('Text Frame Ports and Overflow', () => {
     await page.waitForTimeout(500);
 
     const newBoxId = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
       for (const r of rects) {
         if (r.dataset.boxId.startsWith('text-')) return r.dataset.boxId;
@@ -175,14 +175,14 @@ test.describe('Text Frame Ports and Overflow', () => {
     expect(newBoxId).not.toBeNull();
 
     // Double-click to enter text mode on the new frame
-    const svgBox = await page.locator('#svg-container svg').boundingBox();
+    const svgBox = await page.locator('#svg-container svg.content-svg').boundingBox();
     const svgViewBox = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       const vb = svg.viewBox.baseVal;
       return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
     });
     const newBox = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const r = svg.querySelector(`[data-box-id="${boxId}"][data-handle="body"]`);
       return {
         x: parseFloat(r.getAttribute('x')),
@@ -211,14 +211,14 @@ test.describe('Text Frame Ports and Overflow', () => {
 
     // Check for the overflow marker
     const hasOverflow = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return !!svg.querySelector(`[data-overflow="true"][data-port-box="${boxId}"]`);
     }, newBoxId);
     expect(hasOverflow).toBe(true);
 
     // The output port should NOT exist (replaced by overflow marker)
     const hasOutputPort = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return !!svg.querySelector(`[data-port="output"][data-port-box="${boxId}"]`);
     }, newBoxId);
     expect(hasOutputPort).toBe(false);

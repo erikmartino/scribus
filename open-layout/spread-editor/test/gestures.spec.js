@@ -5,7 +5,7 @@ test.describe('Spread Editor Interaction Gestures', () => {
     // page.on('console', msg => console.log(`BROWSER [${msg.type()}]: ${msg.text()}`));
     await page.goto('/spread-editor/index.html');
     await page.waitForSelector('scribus-app-shell', { timeout: 30000 });
-    await page.waitForSelector('#svg-container svg', { timeout: 30000 });
+    await page.waitForSelector('#svg-container svg.content-svg', { timeout: 30000 });
   });
 
   test('double clicking box should enter text mode and place cursor', async ({ page }) => {

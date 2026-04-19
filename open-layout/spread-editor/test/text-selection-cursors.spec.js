@@ -53,7 +53,7 @@ test.describe('Shift+Click and Shift+Drag Selection', () => {
     page.on('console', msg => console.log(`BROWSER [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', err => console.error(`BROWSER [error]: ${err.message}`));
     await page.goto('/spread-editor/index.html');
-    await page.waitForSelector('#svg-container svg', { timeout: 30000 });
+    await page.waitForSelector('#svg-container svg.content-svg', { timeout: 30000 });
     const statusEl = page.locator('#status');
     await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
   });
@@ -219,7 +219,7 @@ test.describe('Cursor Styles per Mode', () => {
     page.on('console', msg => console.log(`BROWSER [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', err => console.error(`BROWSER [error]: ${err.message}`));
     await page.goto('/spread-editor/index.html');
-    await page.waitForSelector('#svg-container svg', { timeout: 30000 });
+    await page.waitForSelector('#svg-container svg.content-svg', { timeout: 30000 });
     const statusEl = page.locator('#status');
     await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
   });
@@ -284,7 +284,7 @@ test.describe('Visual State Transitions', () => {
     page.on('console', msg => console.log(`BROWSER [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', err => console.error(`BROWSER [error]: ${err.message}`));
     await page.goto('/spread-editor/index.html');
-    await page.waitForSelector('#svg-container svg', { timeout: 30000 });
+    await page.waitForSelector('#svg-container svg.content-svg', { timeout: 30000 });
     const statusEl = page.locator('#status');
     await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
   });

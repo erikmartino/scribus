@@ -33,7 +33,7 @@ test.describe('Text Frame Deletion', () => {
     await page.waitForTimeout(300);
 
     const before = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
 
@@ -43,7 +43,7 @@ test.describe('Text Frame Deletion', () => {
     await page.waitForTimeout(500);
 
     const after = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
     expect(after).toBe(before - 1);
@@ -61,7 +61,7 @@ test.describe('Text Frame Deletion', () => {
     await page.waitForTimeout(300);
 
     const before = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
 
@@ -70,7 +70,7 @@ test.describe('Text Frame Deletion', () => {
     await page.waitForTimeout(500);
 
     const after = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
     expect(after).toBe(before - 1);
@@ -112,7 +112,7 @@ test.describe('Text Frame Deletion', () => {
     await page.waitForTimeout(500);
 
     const before = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
 
@@ -125,7 +125,7 @@ test.describe('Text Frame Deletion', () => {
     await page.waitForTimeout(500);
 
     const afterUndo = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
     expect(afterUndo).toBe(before);
@@ -148,7 +148,7 @@ test.describe('Text Frame Deletion', () => {
   test('delete does nothing in text mode', async ({ page }) => {
     // Enter text mode on first box (click twice)
     const boxInfo = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const body = svg.querySelector('[data-box-id="p1-c1"][data-handle="body"]');
       const rect = body.getBoundingClientRect();
       return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
@@ -166,7 +166,7 @@ test.describe('Text Frame Deletion', () => {
     expect(mode).toBe('text');
 
     const before = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
 
@@ -176,7 +176,7 @@ test.describe('Text Frame Deletion', () => {
     await page.waitForTimeout(500);
 
     const after = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       return svg.querySelectorAll('[data-handle="body"]').length;
     });
     expect(after).toBe(before);

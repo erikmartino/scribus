@@ -167,6 +167,15 @@ export class SpreadEditorApp {
       this._lastBoxClickTime = 0;
       this._lastBoxClickId = null;
 
+      // Create the overlay SVG — sits on top of the content SVG, not zoomed.
+      this._overlaySvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      this._overlaySvg.classList.add('overlay-svg');
+      this.container.appendChild(this._overlaySvg);
+
+      // Refresh overlay when the container scrolls or the window resizes
+      this.container.addEventListener('scroll', () => this._updateOverlay());
+      new ResizeObserver(() => this._updateOverlay()).observe(this.container);
+
       this.bindEvents();
 
       // Register Text Commands & Clipboard Integration
@@ -682,15 +691,117 @@ export class SpreadEditorApp {
     const pb = spread.pasteboardRect;
     svg.setAttribute('width', String(pb.width * this._zoom));
     svg.setAttribute('height', String(pb.height * this._zoom));
-    // viewBox stays at full pasteboard — SVG scales to fit width/height
     svg.setAttribute(
       'viewBox',
       `${pb.x} ${pb.y} ${pb.width} ${pb.height}`,
     );
 
-    // Update the status bar with zoom percentage
+    this._updateOverlay();
+
     const pct = Math.round(this._zoom * 100);
     this.setStatus(`${pct}%`, 'ok');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Overlay — non-zoomed SVG layer for handles, ports, page decoration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Project a content-SVG coordinate to overlay-SVG coordinate.
+   * The overlay is position:sticky so it stays at the container's
+   * visible viewport corner. Coordinates are relative to the viewport.
+   */
+  _projectPoint(x, y) {
+    const svg = this._svg;
+    if (!svg) return { x: 0, y: 0 };
+
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+
+    const pt = new DOMPoint(x, y).matrixTransform(ctm);
+    const cr = this.container.getBoundingClientRect();
+    return {
+      x: pt.x - cr.left,
+      y: pt.y - cr.top,
+    };
+  }
+
+  /**
+   * Project a content-SVG distance (width/height) to overlay pixels.
+   */
+  _projectSize(size) {
+    const svg = this._svg;
+    if (!svg) return size;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return size;
+    return size * ctm.a;
+  }
+
+  /**
+   * Redraw the overlay SVG with current box/decoration state.
+   * Called on zoom, scroll, resize, and after full update().
+   */
+  _updateOverlay() {
+    const overlay = this._overlaySvg;
+    const spread = this.currentSpread;
+    if (!overlay || !spread) return;
+
+    // Size the overlay to match the container's visible viewport,
+    // positioned at the current scroll offset so it tracks the viewport.
+    const vw = this.container.clientWidth;
+    const vh = this.container.clientHeight;
+    overlay.setAttribute('width', String(vw));
+    overlay.setAttribute('height', String(vh));
+    overlay.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+    overlay.style.top = `${this.container.scrollTop}px`;
+    overlay.style.left = `${this.container.scrollLeft}px`;
+
+    // Clear previous content
+    overlay.innerHTML = '';
+
+    const project = (x, y) => this._projectPoint(x, y);
+    const projectSize = (s) => this._projectSize(s);
+
+    // 1. Spread decoration (pasteboard, pages, spine, margin guides)
+    this._decorateSpreadOverlay(overlay, spread, project, projectSize);
+
+    // 2. Box overlay (frames, handles, ports, link highlights)
+    drawBoxOverlay(overlay, {
+      boxes: [...this.boxes, ...this.imageBoxes],
+      selectedBoxId: this.selectedBoxId,
+      stories: this._stories.map(s => ({
+        boxIds: s.boxIds,
+        overflow: s.overflow || false,
+      })),
+      linkMode: this._linkSource,
+      project,
+      projectSize,
+    });
+  }
+
+  /**
+   * Draw margin guides into the overlay SVG using projected coordinates.
+   * Only UI chrome goes here — page backgrounds stay in the content SVG.
+   */
+  _decorateSpreadOverlay(overlay, spread, project, projectSize) {
+    const mg = spread.margin || 0;
+    if (mg <= 0) return;
+
+    for (const page of spread.pageRects) {
+      const gTL = project(page.x + mg, page.y + mg);
+      const gW = projectSize(page.width - mg * 2);
+      const gH = projectSize(page.height - mg * 2);
+      const guide = document.createElementNS(SVG_NS, 'rect');
+      guide.setAttribute('x', String(gTL.x));
+      guide.setAttribute('y', String(gTL.y));
+      guide.setAttribute('width', String(gW));
+      guide.setAttribute('height', String(gH));
+      guide.setAttribute('fill', 'none');
+      guide.setAttribute('stroke', '#b0d0f0');
+      guide.setAttribute('stroke-width', '0.5');
+      guide.classList.add('margin-guide');
+      overlay.appendChild(guide);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1274,17 +1385,14 @@ export class SpreadEditorApp {
       if (this._textInteraction) this._textInteraction.destroy();
     });
   }
-
-
-
-  decorateSpread(svg, pageRects, spread) {
-    const mg = spread.margin || 0;
-    // Collect decoration elements so we can insert them in correct
-    // z-order: pasteboard → spread shadow → pages → spine → margin guides.
-    // All decorations go before existing SVG content (text, boxes, etc.).
+  /**
+   * Draw spread decoration (pasteboard, pages, spine) into the content SVG.
+   * These zoom with the content — they represent the physical page surfaces.
+   */
+  _decorateSpreadContent(svg, spread) {
     const firstContent = svg.firstChild;
 
-    // 1. Pasteboard background (bottom-most)
+    // Pasteboard background
     const bg = document.createElementNS(SVG_NS, 'rect');
     bg.setAttribute('x', String(spread.pasteboardRect.x));
     bg.setAttribute('y', String(spread.pasteboardRect.y));
@@ -1293,19 +1401,19 @@ export class SpreadEditorApp {
     bg.setAttribute('fill', '#ccc8bc');
     svg.insertBefore(bg, firstContent);
 
-    // 2. Spread shadow (sits behind pages, visible as a border effect)
-    const spreadShadow = document.createElementNS(SVG_NS, 'rect');
-    spreadShadow.setAttribute('x', String(spread.spreadRect.x));
-    spreadShadow.setAttribute('y', String(spread.spreadRect.y));
-    spreadShadow.setAttribute('width', String(spread.spreadRect.width));
-    spreadShadow.setAttribute('height', String(spread.spreadRect.height));
-    spreadShadow.setAttribute('fill', '#e9e3d6');
-    spreadShadow.setAttribute('stroke', '#b9b09f');
-    spreadShadow.setAttribute('stroke-width', '1.2');
-    svg.insertBefore(spreadShadow, firstContent);
+    // Spread shadow
+    const shadow = document.createElementNS(SVG_NS, 'rect');
+    shadow.setAttribute('x', String(spread.spreadRect.x));
+    shadow.setAttribute('y', String(spread.spreadRect.y));
+    shadow.setAttribute('width', String(spread.spreadRect.width));
+    shadow.setAttribute('height', String(spread.spreadRect.height));
+    shadow.setAttribute('fill', '#e9e3d6');
+    shadow.setAttribute('stroke', '#b9b09f');
+    shadow.setAttribute('stroke-width', '1.2');
+    svg.insertBefore(shadow, firstContent);
 
-    // 3. Pages (white, on top of spread shadow)
-    for (const page of pageRects) {
+    // Pages (white)
+    for (const page of spread.pageRects) {
       const r = document.createElementNS(SVG_NS, 'rect');
       r.setAttribute('x', String(page.x));
       r.setAttribute('y', String(page.y));
@@ -1317,9 +1425,9 @@ export class SpreadEditorApp {
       svg.insertBefore(r, firstContent);
     }
 
-    // 4. Spine (center divider between pages)
-    const spine = document.createElementNS(SVG_NS, 'line');
+    // Spine
     const spineX = spread.spreadRect.x + spread.spreadRect.width / 2;
+    const spine = document.createElementNS(SVG_NS, 'line');
     spine.setAttribute('x1', String(spineX));
     spine.setAttribute('y1', String(spread.spreadRect.y));
     spine.setAttribute('x2', String(spineX));
@@ -1328,22 +1436,6 @@ export class SpreadEditorApp {
     spine.setAttribute('stroke-width', '1');
     spine.setAttribute('stroke-dasharray', '4 4');
     svg.insertBefore(spine, firstContent);
-
-    // 5. Margin guides (type area rectangles, on top of everything)
-    if (mg > 0) {
-      for (const page of pageRects) {
-        const guide = document.createElementNS(SVG_NS, 'rect');
-        guide.setAttribute('x', String(page.x + mg));
-        guide.setAttribute('y', String(page.y + mg));
-        guide.setAttribute('width', String(page.width - mg * 2));
-        guide.setAttribute('height', String(page.height - mg * 2));
-        guide.setAttribute('fill', 'none');
-        guide.setAttribute('stroke', '#b0d0f0');
-        guide.setAttribute('stroke-width', '0.5');
-        guide.classList.add('margin-guide');
-        svg.appendChild(guide);
-      }
-    }
   }
 
   async update(options = { full: true }) {
@@ -1466,6 +1558,12 @@ export class SpreadEditorApp {
 
       svg = baseSvg || this._svg;
       this._svg = svg;
+
+      // renderToContainer clears the container (innerHTML = ''), which
+      // removes the overlay SVG. Re-append it so it stays on top.
+      if (this._overlaySvg && !this.container.contains(this._overlaySvg)) {
+        this.container.appendChild(this._overlaySvg);
+      }
     }
 
     if (!svg) return;
@@ -1473,27 +1571,24 @@ export class SpreadEditorApp {
     // Determine the active story's lineMap for cursor operations
     const activeLineMap = this._activeStory?.lineMap || [];
 
-    this.decorateSpread(svg, spread.pageRects, spread);
-
     // Render image boxes into the SVG (they are not part of text layout)
     this._renderImageBoxes(svg);
 
-    drawBoxOverlay(svg, {
-      boxes: [...this.boxes, ...this.imageBoxes],
-      selectedBoxId: this.selectedBoxId,
-      stories: this._stories.map(s => ({
-        boxIds: s.boxIds,
-        overflow: s.overflow || false,
-      })),
-      linkMode: this._linkSource,
-    });
     const pb = spread.pasteboardRect;
+    svg.classList.add('content-svg');
     svg.setAttribute('width', String(pb.width * this._zoom));
     svg.setAttribute('height', String(pb.height * this._zoom));
     svg.setAttribute(
       'viewBox',
       `${pb.x} ${pb.y} ${pb.width} ${pb.height}`,
     );
+
+    // Draw spread decoration (pasteboard, pages, spine) in the content SVG
+    // so it zooms with the content. These are the physical page backgrounds.
+    this._decorateSpreadContent(svg, spread);
+
+    // Redraw the non-zoomed overlay (handles, ports, margin guides, box frames)
+    this._updateOverlay();
 
     if (this.cursor) {
       this.cursor.setStory(this.editor.story);

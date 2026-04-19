@@ -37,7 +37,7 @@ test.describe('Spread Editor Create Menu', () => {
   test('creating a text frame adds a new box overlay', async ({ page }) => {
     // Count unique box IDs before
     const countBefore = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       if (!svg) return 0;
       const ids = new Set();
       svg.querySelectorAll('[data-box-id]').forEach(el => ids.add(el.dataset.boxId));
@@ -53,7 +53,7 @@ test.describe('Spread Editor Create Menu', () => {
     // Wait for update and verify a new unique box ID appeared
     await expect(async () => {
       const countAfter = await page.evaluate(() => {
-        const svg = document.querySelector('#svg-container svg');
+        const svg = document.querySelector('#svg-container svg.overlay-svg');
         if (!svg) return 0;
         const ids = new Set();
         svg.querySelectorAll('[data-box-id]').forEach(el => ids.add(el.dataset.boxId));
@@ -65,7 +65,7 @@ test.describe('Spread Editor Create Menu', () => {
 
   test('creating a text frame is undoable', async ({ page }) => {
     const boxIdsBefore = await page.evaluate(() => {
-      const overlays = document.querySelector('#svg-container svg');
+      const overlays = document.querySelector('#svg-container svg.overlay-svg');
       if (!overlays) return [];
       const ids = new Set();
       overlays.querySelectorAll('[data-box-id]').forEach(el => ids.add(el.dataset.boxId));
@@ -81,7 +81,7 @@ test.describe('Spread Editor Create Menu', () => {
     await page.waitForTimeout(500);
 
     const boxIdsAfter = await page.evaluate(() => {
-      const overlays = document.querySelector('#svg-container svg');
+      const overlays = document.querySelector('#svg-container svg.overlay-svg');
       if (!overlays) return [];
       const ids = new Set();
       overlays.querySelectorAll('[data-box-id]').forEach(el => ids.add(el.dataset.boxId));
@@ -95,7 +95,7 @@ test.describe('Spread Editor Create Menu', () => {
     await page.waitForTimeout(500);
 
     const boxIdsUndo = await page.evaluate(() => {
-      const overlays = document.querySelector('#svg-container svg');
+      const overlays = document.querySelector('#svg-container svg.overlay-svg');
       if (!overlays) return [];
       const ids = new Set();
       overlays.querySelectorAll('[data-box-id]').forEach(el => ids.add(el.dataset.boxId));
@@ -126,7 +126,7 @@ test.describe('Spread Editor Create Menu', () => {
 
     // Find the new frame's box overlay (starts with "text-")
     const newBoxRect = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
       for (const r of rects) {
         if (r.dataset.boxId.startsWith('text-')) {
@@ -145,9 +145,9 @@ test.describe('Spread Editor Create Menu', () => {
 
     // Convert SVG coordinates to screen coordinates and click twice
     // (first click selects, second click enters text mode)
-    const svgBox = await page.locator('#svg-container svg').boundingBox();
+    const svgBox = await page.locator('#svg-container svg.content-svg').boundingBox();
     const svgViewBox = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       const vb = svg.viewBox.baseVal;
       return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
     });
@@ -176,7 +176,7 @@ test.describe('Spread Editor Create Menu', () => {
     // end of story, and blinking is enabled (cursor has a valid position).
     const state = await page.evaluate(() => {
       const shell = document.querySelector('scribus-app-shell');
-      const cursor = document.querySelector('#svg-container svg #text-cursor');
+      const cursor = document.querySelector('#svg-container svg.content-svg #text-cursor');
       // Access the SpreadEditorApp plugin to check editor state
       const app = window.scribusShell?.plugins?.find(p => p.mode !== undefined);
       return {
@@ -250,7 +250,7 @@ test.describe('Spread Editor Create Menu', () => {
 
     // Find the new frame and double-click to enter text mode
     const newBoxRect = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.overlay-svg');
       const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
       for (const r of rects) {
         if (r.dataset.boxId.startsWith('text-')) {
@@ -267,9 +267,9 @@ test.describe('Spread Editor Create Menu', () => {
     });
     expect(newBoxRect).not.toBeNull();
 
-    const svgBox = await page.locator('#svg-container svg').boundingBox();
+    const svgBox = await page.locator('#svg-container svg.content-svg').boundingBox();
     const svgViewBox = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg');
+      const svg = document.querySelector('#svg-container svg.content-svg');
       const vb = svg.viewBox.baseVal;
       return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
     });
