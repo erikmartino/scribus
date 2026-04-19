@@ -162,6 +162,62 @@ npm run test:e2e
 Playwright tests were run. Console logs were checked via terminal output.
 No unexpected console errors found in streaming-downscale-demo tests.
 
+## Phase 5: Pyramid-Aware Thumbnail Decode (complete)
+
+### Problem
+
+Even with `shrink()`, large pyramidal TIFFs like CMU-1.tiff (46,000 x 32,000,
+195 MB) were slow because the Worker decoded the full-resolution level first,
+then box-averaged down. For a 4x downscale, this means decompressing ~4.4 GB
+of raw pixels from the highest-resolution pyramid level.
+
+### Fix
+
+Replaced `newFromSource() + ensureRGBA() + shrink()` with `thumbnailSource()`
+when scale > 1. `thumbnailSource()` is pyramid-aware:
+
+1. Opens the TIFF and discovers sub-IFD pyramid levels
+2. Picks the smallest level still larger than the target width
+3. Loads only that level (skipping the full-resolution data entirely)
+4. Shrinks the rest of the way to the target width
+
+For CMU-1.tiff at 4x downscale (target ~11,500px wide), vips picks a pyramid
+level that's close to that size instead of decoding all 46,000 columns.
+
+### Architecture
+
+The Worker now has two code paths:
+- `decodeWithThumbnail()` — scale > 1: header-only open to get source dims,
+  then `thumbnailSource(source, targetWidth, { size: 'down' })`, then
+  `ensureRGBA()` and `emitRows()`.
+- `decodeFullResolution()` — scale = 1: `newFromSource` with sequential
+  access, `ensureRGBA()`, `emitRows()`.
+
+Helper functions extracted:
+- `createOPFSSource(accessHandle, fileSize)` — creates a seekable
+  `SourceCustom` backed by an OPFS sync access handle. Returns
+  `{ source, getPosition, resetPosition }`.
+- `emitRows(outputImage, outWidth, outHeight)` — writes raw RGBA via
+  `TargetCustom`, batches rows, sends via `postMessage` with transfer.
+
+### Modified files
+- `lib/vips-worker.js` — replaced monolithic `decodeFromOPFS` with
+  `decodeWithThumbnail` + `decodeFullResolution` + shared helpers
+
+### Verification
+
+```
+npm test
+# 354 unit tests, 0 failures
+
+npm run test:e2e
+# 153 passed, 1 failed (unrelated: document-store asset count mismatch)
+# All 11 streaming-downscale-demo tests passed.
+```
+
+Playwright tests were run. Console logs were checked via terminal output.
+No unexpected console errors found in streaming-downscale-demo tests.
+
 ## Remaining Work
 
 None — all planned items complete.
