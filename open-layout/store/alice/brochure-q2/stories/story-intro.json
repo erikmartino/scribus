@@ -4,17 +4,39 @@
     {
       "styleRef": "body",
       "runs": [
-        { "text": "This quarter we are excited to share three new products that push the boundaries of open-source desktop publishing.", "style": {} }
+        {
+          "text": "This quarter we are excited to share three new products that push the boundaries of open-source desktop publishing.",
+          "style": {}
+        }
       ]
     },
     {
       "styleRef": "body",
       "runs": [
-        { "text": "Each product has been designed with ", "style": {} },
-        { "text": "collaboration", "style": { "italic": true } },
-        { "text": " and ", "style": {} },
-        { "text": "accessibility", "style": { "italic": true } },
-        { "text": " at its core.", "style": {} }
+        {
+          "text": "Each product has been designed with ",
+          "style": {}
+        },
+        {
+          "text": "collaboration",
+          "style": {
+            "italic": true
+          }
+        },
+        {
+          "text": " and ",
+          "style": {}
+        },
+        {
+          "text": "accessibility",
+          "style": {
+            "italic": true
+          }
+        },
+        {
+          "text": " at its core.",
+          "style": {}
+        }
       ]
     }
   ]

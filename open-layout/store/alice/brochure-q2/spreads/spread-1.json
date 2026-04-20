@@ -1,36 +1,42 @@
 {
   "id": "spread-1",
   "pages": [
-    { "index": 0, "label": "1" }
+    {
+      "index": 0,
+      "label": "1"
+    },
+    {
+      "index": 1,
+      "label": "2"
+    }
   ],
   "frames": [
     {
       "id": "frame-title",
       "type": "text",
-      "x": 20,
-      "y": 30,
+      "x": 266.78,
+      "y": 53.39,
       "width": 170,
-      "height": 40,
+      "height": 60,
       "storyRef": "story-title"
     },
     {
       "id": "frame-intro",
       "type": "text",
       "x": 20,
-      "y": 80,
+      "y": 80.11,
       "width": 170,
       "height": 180,
-      "storyRef": "story-intro"
+      "storyRef": "story-title"
     },
     {
-      "id": "frame-hero",
+      "id": "image-2",
       "type": "image",
-      "x": 30,
-      "y": 200,
-      "width": 150,
-      "height": 80,
-      "assetRef": "hero-photo",
-      "fitting": "proportional"
+      "x": 223.45,
+      "y": 171.55,
+      "width": 314.11,
+      "height": 372.87,
+      "assetRef": "hund1-jpg"
     }
   ]
 }
