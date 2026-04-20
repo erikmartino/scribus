@@ -170,6 +170,7 @@
       <input type="range" id="scale-input" min="2" max="64" value="4" step="1">
     </label>
     <button id="start-btn">Start</button>
+    <button id="download-btn" disabled>Download JPEG</button>
   </div>
 
   <div id="status"></div>
@@ -192,7 +193,7 @@
     import { createDownscaler } from './lib/downscaler.js';
     import { createRenderer } from './lib/renderer.js';
     import { detectFormat } from './lib/format-detect.js';
-    import { decodeTiff } from './lib/tiff-decoder.js';
+    import { decodeTiff, exportImage, cleanupOPFS } from './lib/tiff-decoder.js';
     import { decodeJp2 } from './lib/jp2-decoder.js';
 
     const urlInput = /** @type {HTMLInputElement} */ (document.getElementById('url-input'));
@@ -200,6 +201,7 @@
     const scaleInput = /** @type {HTMLInputElement} */ (document.getElementById('scale-input'));
     const scaleLabel = /** @type {HTMLSpanElement} */ (document.getElementById('scale-label'));
     const startBtn = /** @type {HTMLButtonElement} */ (document.getElementById('start-btn'));
+    const downloadBtn = /** @type {HTMLButtonElement} */ (document.getElementById('download-btn'));
     const statusEl = /** @type {HTMLDivElement} */ (document.getElementById('status'));
     const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('output-canvas'));
 
@@ -212,6 +214,10 @@
 
     /** @type {AbortController | null} */
     let controller = null;
+
+    /** OPFS staging file from the last TIFF decode (null for PNG/JP2). */
+    /** @type {string | null} */
+    let currentOPFSFile = null;
 
     /**
      * @param {string} msg
@@ -256,7 +262,14 @@
       const scale = parseInt(scaleInput.value, 10);
       controller = new AbortController();
       startBtn.textContent = 'Stop';
+      downloadBtn.disabled = true;
       resetStats();
+
+      // Clean up previous OPFS staging file
+      if (currentOPFSFile) {
+        cleanupOPFS(currentOPFSFile);
+        currentOPFSFile = null;
+      }
 
       const t0 = performance.now();
       let srcRows = 0;
@@ -329,7 +342,7 @@
       /** @param {ReadableStream<Uint8Array> | ArrayBuffer} source */
       async function runTiffDecode(source) {
         setStatus('Streaming TIFF to disk...');
-        await decodeTiff(source, {
+        const result = await decodeTiff(source, {
           onHeader(header) {
             statSrc.textContent = `${header.width} × ${header.height}`;
 
@@ -362,6 +375,12 @@
             statBytes.textContent = (bytes / 1024).toFixed(0) + ' KB';
           }
         });
+
+        // Keep OPFS filename for export
+        if (result.opfsFileName) {
+          currentOPFSFile = result.opfsFileName;
+          downloadBtn.disabled = false;
+        }
       }
 
       /**
@@ -483,6 +502,39 @@
         }
         startBtn.textContent = 'Start';
         controller = null;
+      }
+    });
+
+    downloadBtn.addEventListener('click', async () => {
+      if (!currentOPFSFile) return;
+
+      const scale = parseInt(scaleInput.value, 10);
+      downloadBtn.disabled = true;
+      setStatus('Exporting JPEG...');
+
+      try {
+        const { blob, width, height } = await exportImage(currentOPFSFile, {
+          scale,
+          quality: 85,
+          format: 'jpeg',
+        });
+
+        // Trigger browser download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `downscaled-${width}x${height}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        const sizeMB = (blob.size / 1048576).toFixed(1);
+        setStatus(`Exported ${width}x${height} JPEG (${sizeMB} MB)`, 'ok');
+      } catch (err) {
+        setStatus(`Export error: ${/** @type {Error} */ (err).message}`, 'error');
+      } finally {
+        downloadBtn.disabled = false;
       }
     });
   </script>

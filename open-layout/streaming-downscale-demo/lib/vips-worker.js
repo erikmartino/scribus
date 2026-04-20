@@ -5,14 +5,16 @@
  *
  * Protocol (postMessage):
  *   Main -> Worker:
- *     { type: 'decode', opfsFileName: string, scale: number }
+ *     { type: 'decode',  opfsFileName: string, scale: number }
+ *     { type: 'export',  opfsFileName: string, scale: number, quality?: number, format?: string }
  *
  *   Worker -> Main:
- *     { type: 'header', srcWidth, srcHeight, outWidth, outHeight }
- *     { type: 'rows',   startRow, count, rgba: Uint8Array }  (transferable, batched)
+ *     { type: 'header',  srcWidth, srcHeight, outWidth, outHeight }
+ *     { type: 'rows',    startRow, count, rgba: Uint8Array }  (transferable, batched)
  *     { type: 'end' }
- *     { type: 'error',  message: string }
- *     { type: 'log',    message: string }
+ *     { type: 'exported', buffer: ArrayBuffer, mimeType: string, width, height }
+ *     { type: 'error',   message: string }
+ *     { type: 'log',     message: string }
  *     { type: 'ready' }
  *
  * The caller is responsible for writing the image data to OPFS before
@@ -119,46 +121,6 @@ function ensureRGBA(srcImage) {
 }
 
 /**
- * Create a SourceCustom backed by an OPFS sync access handle.
- *
- * @param {FileSystemSyncAccessHandle} accessHandle
- * @param {number} fileSize
- * @returns {{ source: InstanceType<typeof vips.SourceCustom>, getPosition: () => number, resetPosition: () => void }}
- */
-function createOPFSSource(accessHandle, fileSize) {
-  let position = 0;
-
-  const source = new vips.SourceCustom();
-
-  source.onRead = (length) => {
-    if (position >= fileSize) return undefined;
-    const toRead = Math.min(length, fileSize - position);
-    const buf = new Uint8Array(toRead);
-    const nRead = accessHandle.read(buf, { at: position });
-    position += nRead;
-    if (nRead === 0) return undefined;
-    return buf.subarray(0, nRead);
-  };
-
-  source.onSeek = (offset, whence) => {
-    if (whence === 0) {        // SEEK_SET
-      position = offset;
-    } else if (whence === 1) { // SEEK_CUR
-      position += offset;
-    } else if (whence === 2) { // SEEK_END
-      position = fileSize + offset;
-    }
-    return position;
-  };
-
-  return {
-    source,
-    getPosition: () => position,
-    resetPosition: () => { position = 0; },
-  };
-}
-
-/**
  * Emit an RGBA image as batched rows via postMessage.
  *
  * @param {InstanceType<typeof vips.Image>} outputImage - must be 4-band uchar sRGB
@@ -227,12 +189,35 @@ function emitRows(outputImage, outWidth, outHeight) {
 }
 
 /**
- * Decode a TIFF from an OPFS file using SourceCustom for streaming I/O.
- * The file is read via a synchronous access handle (only available in Workers).
+ * Read an entire OPFS file into a Uint8Array in one shot.
+ * Much faster than thousands of small SourceCustom onRead callbacks.
  *
- * When scale > 1, uses thumbnailSource() which is pyramid-aware:
- * for pyramidal TIFFs it reads an appropriate sub-IFD level directly
- * instead of decoding the full-resolution image, then shrinks to target.
+ * @param {string} opfsFileName
+ * @returns {Promise<Uint8Array>}
+ */
+async function readOPFSFile(opfsFileName) {
+  const root = await navigator.storage.getDirectory();
+  const fileHandle = await root.getFileHandle(opfsFileName);
+  const accessHandle = await fileHandle.createSyncAccessHandle();
+  try {
+    const fileSize = accessHandle.getSize();
+    const buffer = new Uint8Array(fileSize);
+    accessHandle.read(buffer, { at: 0 });
+    return buffer;
+  } finally {
+    accessHandle.close();
+  }
+}
+
+/**
+ * Decode a TIFF from an OPFS file and emit rows for canvas rendering.
+ *
+ * Reads the file in bulk into memory, then uses thumbnailBuffer (scale > 1)
+ * or newFromBuffer (scale = 1). This avoids the overhead of thousands of
+ * SourceCustom callbacks while still using OPFS as the staging layer.
+ *
+ * thumbnailBuffer is pyramid-aware: for pyramidal TIFFs it reads an
+ * appropriate sub-IFD level directly instead of decoding the full image.
  *
  * @param {string} opfsFileName
  * @param {number} scale - downscale factor (1 = no downscaling)
@@ -240,131 +225,141 @@ function emitRows(outputImage, outWidth, outHeight) {
 async function decodeFromOPFS(opfsFileName, scale) {
   await initPromise;
 
-  const root = await navigator.storage.getDirectory();
-  const fileHandle = await root.getFileHandle(opfsFileName);
-  const accessHandle = await fileHandle.createSyncAccessHandle();
-  const fileSize = accessHandle.getSize();
+  const fileData = await readOPFSFile(opfsFileName);
+  const fileSizeMB = (fileData.byteLength / 1048576).toFixed(1);
 
-  try {
-    if (scale > 1) {
-      await decodeWithThumbnail(accessHandle, fileSize, scale);
-    } else {
-      await decodeFullResolution(accessHandle, fileSize);
-    }
-  } finally {
-    accessHandle.close();
+  // Get source dimensions from header (lazy, fast)
+  const headerImg = vips.Image.newFromBuffer(fileData);
+  const srcWidth = headerImg.width;
+  const srcHeight = headerImg.height;
+  headerImg.delete();
+
+  let outputImage;
+  if (scale > 1) {
+    const targetWidth = Math.max(1, Math.floor(srcWidth / scale));
+    outputImage = vips.Image.thumbnailBuffer(fileData, targetWidth, {
+      size: vips.Size.down,
+    });
+  } else {
+    const image = vips.Image.newFromBuffer(fileData, '', {
+      access: vips.Access.sequential,
+    });
+    outputImage = ensureRGBA(image);
+    if (outputImage !== image) image.delete();
   }
+
+  // thumbnailBuffer handles colorspace, but ensure 4-band uchar RGBA
+  if (scale > 1) {
+    const tmp = outputImage;
+    outputImage = ensureRGBA(tmp);
+    if (outputImage !== tmp) tmp.delete();
+  }
+
+  const outWidth = outputImage.width;
+  const outHeight = outputImage.height;
+
+  self.postMessage({ type: 'header', srcWidth, srcHeight, outWidth, outHeight });
+  self.postMessage({
+    type: 'log',
+    message: scale > 1
+      ? `TIFF thumbnail: ${srcWidth}x${srcHeight} → ${outWidth}x${outHeight}, scale=${scale}, file=${fileSizeMB}MB`
+      : `TIFF decode: ${srcWidth}x${srcHeight}, file=${fileSizeMB}MB`,
+  });
+
+  emitRows(outputImage, outWidth, outHeight);
+  outputImage.delete();
 
   self.postMessage({ type: 'end' });
 }
 
 /**
- * Pyramid-aware decode + downscale using thumbnailSource().
+ * Export a downscaled JPEG (or PNG) from an OPFS file.
  *
- * thumbnailSource picks the best pyramid level automatically, then
- * shrinks to the target width. This avoids decoding the full-resolution
- * image for pyramidal TIFFs.
+ * Reads the file in bulk, creates a thumbnail, and writes to the
+ * requested format. The compressed buffer is sent back via postMessage
+ * with transfer (zero-copy).
  *
- * We first do a quick header-only open to get source dimensions (lazy,
- * reads only the IFD), then seek back and call thumbnailSource with
- * the computed target width.
+ * @param {string} opfsFileName
+ * @param {number} scale
+ * @param {number} quality - JPEG quality 1-100
+ * @param {string} format - 'jpeg' or 'png'
  */
-async function decodeWithThumbnail(accessHandle, fileSize, scale) {
-  // --- Step 1: header-only open to get source dimensions ---
-  // newFromSource is lazy — it only reads the IFD header, not pixel data.
-  const { source: headerSource } = createOPFSSource(accessHandle, fileSize);
+async function exportFromOPFS(opfsFileName, scale, quality, format) {
+  await initPromise;
 
-  let srcWidth, srcHeight;
-  try {
-    const headerImg = vips.Image.newFromSource(headerSource, '');
-    srcWidth = headerImg.width;
-    srcHeight = headerImg.height;
-    headerImg.delete();
-  } finally {
-    headerSource.delete();
-  }
-
-  // --- Step 2: fresh source (position=0) for thumbnailSource ---
-  const { source } = createOPFSSource(accessHandle, fileSize);
-
-  const targetWidth = Math.max(1, Math.floor(srcWidth / scale));
+  const fileData = await readOPFSFile(opfsFileName);
 
   let image;
-  try {
-    image = vips.Image.thumbnailSource(source, targetWidth, {
-      // size: 'down' means only downsize, never upsize
+  if (scale > 1) {
+    const headerImg = vips.Image.newFromBuffer(fileData);
+    const targetWidth = Math.max(1, Math.floor(headerImg.width / scale));
+    headerImg.delete();
+
+    image = vips.Image.thumbnailBuffer(fileData, targetWidth, {
       size: vips.Size.down,
     });
-  } catch (err) {
-    source.delete();
-    throw new Error('vips thumbnail failed: ' + err.message);
+  } else {
+    image = vips.Image.newFromBuffer(fileData);
   }
 
-  // thumbnailSource returns sRGB, but we need to ensure 4-band uchar RGBA
+  // Ensure correct band count for output
   let outputImage = ensureRGBA(image);
 
   const outWidth = outputImage.width;
   const outHeight = outputImage.height;
 
-  self.postMessage({ type: 'header', srcWidth, srcHeight, outWidth, outHeight });
-  self.postMessage({
-    type: 'log',
-    message: `TIFF thumbnail: ${srcWidth}x${srcHeight} → ${outWidth}x${outHeight}, ` +
-      `scale=${scale}, file=${(fileSize / 1048576).toFixed(1)}MB`,
-  });
-
-  emitRows(outputImage, outWidth, outHeight);
-
-  if (outputImage !== image) outputImage.delete();
-  image.delete();
-  source.delete();
-}
-
-/**
- * Full-resolution decode (scale=1). Uses sequential access.
- */
-async function decodeFullResolution(accessHandle, fileSize) {
-  const { source } = createOPFSSource(accessHandle, fileSize);
-
-  let image;
-  try {
-    image = vips.Image.newFromSource(source, '', {
-      access: vips.Access.sequential,
-    });
-  } catch (err) {
-    source.delete();
-    throw new Error('vips decode failed: ' + err.message);
+  let outBuffer, mimeType, suffix;
+  if (format === 'png') {
+    outBuffer = outputImage.writeToBuffer('.png');
+    mimeType = 'image/png';
+    suffix = '.png';
+  } else {
+    // For JPEG: drop alpha channel (JPEG doesn't support it)
+    let jpegImage = outputImage;
+    if (outputImage.bands === 4) {
+      jpegImage = outputImage.flatten({ background: [255, 255, 255] });
+    }
+    outBuffer = jpegImage.writeToBuffer('.jpg', { Q: quality });
+    mimeType = 'image/jpeg';
+    suffix = '.jpg';
+    if (jpegImage !== outputImage) jpegImage.delete();
   }
 
-  const srcWidth = image.width;
-  const srcHeight = image.height;
-  let outputImage = ensureRGBA(image);
-
-  const outWidth = outputImage.width;
-  const outHeight = outputImage.height;
-
-  self.postMessage({ type: 'header', srcWidth, srcHeight, outWidth, outHeight });
-  self.postMessage({
-    type: 'log',
-    message: `TIFF decode: ${srcWidth}x${srcHeight}, file=${(fileSize / 1048576).toFixed(1)}MB`,
-  });
-
-  emitRows(outputImage, outWidth, outHeight);
-
   if (outputImage !== image) outputImage.delete();
   image.delete();
-  source.delete();
+
+  // Transfer the buffer (zero-copy) to the main thread
+  const ab = outBuffer.buffer.slice(
+    outBuffer.byteOffset,
+    outBuffer.byteOffset + outBuffer.byteLength,
+  );
+
+  self.postMessage(
+    { type: 'exported', buffer: ab, mimeType, width: outWidth, height: outHeight },
+    [ab],
+  );
 }
 
 // --- Worker message handler ---
 self.onmessage = async (e) => {
   const msg = e.data;
 
-  if (msg.type === 'decode') {
-    try {
-      await decodeFromOPFS(msg.opfsFileName, msg.scale);
-    } catch (err) {
-      self.postMessage({ type: 'error', message: err.message || String(err) });
+  try {
+    switch (msg.type) {
+      case 'decode':
+        await decodeFromOPFS(msg.opfsFileName, msg.scale);
+        break;
+
+      case 'export':
+        await exportFromOPFS(
+          msg.opfsFileName,
+          msg.scale,
+          msg.quality ?? 85,
+          msg.format ?? 'jpeg',
+        );
+        break;
     }
+  } catch (err) {
+    self.postMessage({ type: 'error', message: err.message || String(err) });
   }
 };

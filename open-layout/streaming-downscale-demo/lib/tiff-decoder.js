@@ -21,6 +21,12 @@
  * @property {number} scale
  */
 
+/**
+ * @typedef {Object} DecodeResult
+ * @property {string | null} opfsFileName - OPFS staging file name (null if buffer fallback was used).
+ *   The caller is responsible for calling cleanupOPFS(opfsFileName) when the file is no longer needed.
+ */
+
 /** @type {Worker | null} */
 let worker = null;
 
@@ -102,9 +108,14 @@ function getWorker() {
 /**
  * Decode a TIFF via the streaming OPFS + Worker path.
  *
+ * The OPFS staging file is NOT deleted on completion — the caller
+ * can use it for subsequent export operations.  Call
+ * `cleanupOPFS(result.opfsFileName)` when the file is no longer needed.
+ *
  * @param {ReadableStream<Uint8Array> | ArrayBuffer} source
  * @param {TiffCallbacks} callbacks
  * @param {{ onProgress?: (bytes: number) => void }} [opts]
+ * @returns {Promise<DecodeResult>}
  */
 async function decodeTiffStreaming(source, callbacks, opts = {}) {
   const opfsFileName = `tiff-decode-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
@@ -156,8 +167,8 @@ async function decodeTiffStreaming(source, callbacks, opts = {}) {
 
         case 'end':
           callbacks.onEnd();
-          removeOPFSFile(opfsFileName);
-          resolve();
+          // Keep OPFS file for export — caller must call cleanupOPFS()
+          resolve({ opfsFileName });
           break;
 
         case 'error':
@@ -403,6 +414,7 @@ async function streamToBuffer(stream, onProgress) {
  * @param {ArrayBuffer | ReadableStream<Uint8Array>} source
  * @param {TiffCallbacks} callbacks
  * @param {{ onProgress?: (bytes: number) => void }} [opts]
+ * @returns {Promise<DecodeResult>}
  */
 export async function decodeTiff(source, callbacks, opts = {}) {
   if (canUseStreamingDecode()) {
@@ -414,7 +426,75 @@ export async function decodeTiff(source, callbacks, opts = {}) {
     ? source
     : await streamToBuffer(source, opts.onProgress);
 
-  return decodeTiffBuffer(buffer, callbacks);
+  await decodeTiffBuffer(buffer, callbacks);
+  return { opfsFileName: null };
+}
+
+/**
+ * Export a downscaled image from an OPFS staging file.
+ *
+ * The Worker reads the OPFS file, creates a thumbnail at the given scale,
+ * and writes it to the requested format. Returns a Blob ready for download
+ * or upload.
+ *
+ * @param {string} opfsFileName - the staging file from a previous decodeTiff() call
+ * @param {object} opts
+ * @param {number} [opts.scale=1] - downscale factor
+ * @param {number} [opts.quality=85] - JPEG quality (1-100)
+ * @param {'jpeg'|'png'} [opts.format='jpeg'] - output format
+ * @returns {Promise<{ blob: Blob, width: number, height: number }>}
+ */
+export async function exportImage(opfsFileName, opts = {}) {
+  const { scale = 1, quality = 85, format = 'jpeg' } = opts;
+
+  if (!canUseStreamingDecode()) {
+    throw new Error('Export requires OPFS + Worker support');
+  }
+
+  const w = getWorker();
+
+  return new Promise((resolve, reject) => {
+    /** @param {MessageEvent} e */
+    function onMessage(e) {
+      const msg = e.data;
+      if (msg.type === 'exported') {
+        w.removeEventListener('message', onMessage);
+        w.removeEventListener('error', onError);
+        const blob = new Blob([msg.buffer], { type: msg.mimeType });
+        resolve({ blob, width: msg.width, height: msg.height });
+      } else if (msg.type === 'error') {
+        w.removeEventListener('message', onMessage);
+        w.removeEventListener('error', onError);
+        reject(new Error(msg.message));
+      } else if (msg.type === 'log') {
+        console.log('[vips-worker]', msg.message);
+      }
+    }
+
+    /** @param {ErrorEvent} err */
+    function onError(err) {
+      w.removeEventListener('message', onMessage);
+      w.removeEventListener('error', onError);
+      reject(new Error(err.message || 'Worker error'));
+    }
+
+    w.addEventListener('message', onMessage);
+    w.addEventListener('error', onError);
+
+    w.postMessage({ type: 'export', opfsFileName, scale, quality, format });
+  });
+}
+
+/**
+ * Remove an OPFS staging file. Call this when the file is no longer
+ * needed (e.g. after export, or when starting a new decode).
+ *
+ * @param {string | null} opfsFileName
+ */
+export async function cleanupOPFS(opfsFileName) {
+  if (opfsFileName) {
+    await removeOPFSFile(opfsFileName);
+  }
 }
 
 // Eagerly construct the Worker so wasm-vips starts downloading immediately
