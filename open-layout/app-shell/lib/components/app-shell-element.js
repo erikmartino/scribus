@@ -57,6 +57,7 @@ export class ScribusAppShell extends HTMLElement {
           border-bottom: 1px solid var(--border);
           display: flex;
           align-items: center;
+          gap: 16px;
           padding: 0 20px;
           z-index: 100;
           backdrop-filter: var(--glass);
@@ -66,6 +67,37 @@ export class ScribusAppShell extends HTMLElement {
         }
         .ribbon::-webkit-scrollbar {
           display: none; /* Safari/Chrome */
+        }
+
+        .global-nav-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          height: 36px;
+          padding: 0 0.85rem;
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          color: var(--text-main);
+          text-decoration: none;
+          font-size: 0.78rem;
+          font-weight: 600;
+          white-space: nowrap;
+          transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .global-nav-link:hover,
+        .global-nav-link:focus-visible {
+          color: var(--accent);
+          border-color: var(--accent);
+          background: rgba(187, 134, 252, 0.08);
+          outline: none;
+        }
+
+        .global-nav-link::before {
+          content: "←";
+          font-size: 0.95rem;
+          line-height: 1;
         }
 
         .main-body {
@@ -121,6 +153,7 @@ export class ScribusAppShell extends HTMLElement {
       </style>
       <div class="app-shell">
         <header class="ribbon">
+          <a class="global-nav-link" id="document-browser-link" href="/document-browser/" title="Go to Document Browser">Document Browser</a>
           <slot name="ribbon"></slot>
         </header>
 
