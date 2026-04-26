@@ -69,35 +69,70 @@ export class ScribusAppShell extends HTMLElement {
           display: none; /* Safari/Chrome */
         }
 
-        .global-nav-link {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.45rem;
-          height: 36px;
-          padding: 0 0.85rem;
-          border: 1px solid var(--border);
-          border-radius: 999px;
-          color: var(--text-main);
-          text-decoration: none;
-          font-size: 0.78rem;
-          font-weight: 600;
-          white-space: nowrap;
-          transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
-          background: rgba(255, 255, 255, 0.02);
+        .app-launcher {
+          position: relative;
+          flex-shrink: 0;
         }
 
-        .global-nav-link:hover,
-        .global-nav-link:focus-visible {
+        .app-launcher-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.02);
+          color: var(--text-dim);
+          cursor: pointer;
+          transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+          padding: 0;
+        }
+
+        .app-launcher-btn:hover,
+        .app-launcher-btn:focus-visible,
+        .app-launcher-btn[aria-expanded="true"] {
           color: var(--accent);
           border-color: var(--accent);
           background: rgba(187, 134, 252, 0.08);
           outline: none;
         }
 
-        .global-nav-link::before {
-          content: "←";
-          font-size: 0.95rem;
-          line-height: 1;
+        .app-launcher-btn svg {
+          width: 16px;
+          height: 16px;
+        }
+
+        .app-launcher-menu {
+          display: none;
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          min-width: 180px;
+          background: var(--shell-bg);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          box-shadow: var(--shadow-lg);
+          padding: 4px 0;
+          z-index: 200;
+        }
+
+        .app-launcher-menu[open] {
+          display: block;
+        }
+
+        .app-launcher-menu a {
+          display: block;
+          padding: 0.5rem 0.85rem;
+          color: var(--text-main);
+          text-decoration: none;
+          font-size: 0.82rem;
+          transition: background var(--transition-fast), color var(--transition-fast);
+        }
+
+        .app-launcher-menu a:hover {
+          background: rgba(187, 134, 252, 0.1);
+          color: var(--accent);
         }
 
         .main-body {
@@ -153,7 +188,14 @@ export class ScribusAppShell extends HTMLElement {
       </style>
       <div class="app-shell">
         <header class="ribbon">
-          <a class="global-nav-link" id="document-browser-link" href="/document-browser/" title="Go to Document Browser">Document Browser</a>
+          <div class="app-launcher">
+            <button class="app-launcher-btn" id="app-launcher-btn" aria-expanded="false" aria-label="Applications" title="Applications">
+              <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="6" y="1" width="4" height="4" rx="0.5"/><rect x="11" y="1" width="4" height="4" rx="0.5"/><rect x="1" y="6" width="4" height="4" rx="0.5"/><rect x="6" y="6" width="4" height="4" rx="0.5"/><rect x="11" y="6" width="4" height="4" rx="0.5"/><rect x="1" y="11" width="4" height="4" rx="0.5"/><rect x="6" y="11" width="4" height="4" rx="0.5"/><rect x="11" y="11" width="4" height="4" rx="0.5"/></svg>
+            </button>
+            <div class="app-launcher-menu" id="app-launcher-menu">
+              <a href="/document-browser/" id="document-browser-link">Document Browser</a>
+            </div>
+          </div>
           <slot name="ribbon"></slot>
         </header>
 
@@ -174,6 +216,49 @@ export class ScribusAppShell extends HTMLElement {
 
     this._setupResizing();
     this._setupMarquee();
+    this._setupAppLauncher();
+  }
+
+  _setupAppLauncher() {
+    const btn = this.shadowRoot.getElementById('app-launcher-btn');
+    const menu = this.shadowRoot.getElementById('app-launcher-menu');
+
+    const close = () => {
+      menu.removeAttribute('open');
+      btn.setAttribute('aria-expanded', 'false');
+    };
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menu.hasAttribute('open');
+      if (open) {
+        close();
+      } else {
+        menu.setAttribute('open', '');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    // Close on any click outside the launcher.
+    // Use mousedown on window to catch clicks everywhere including
+    // slotted content and elements outside the shadow root.
+    window.addEventListener('mousedown', (e) => {
+      if (!menu.hasAttribute('open')) return;
+      // Check if click is inside the launcher via composedPath
+      const path = e.composedPath();
+      const launcher = this.shadowRoot.querySelector('.app-launcher');
+      if (!path.includes(launcher) && !path.includes(btn)) {
+        close();
+      }
+    }, true);
+
+    // Close on Escape
+    this.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && menu.hasAttribute('open')) {
+        close();
+        btn.focus();
+      }
+    });
   }
 
   _setupMarquee() {
