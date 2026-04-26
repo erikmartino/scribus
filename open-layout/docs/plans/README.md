@@ -23,4 +23,8 @@ Completed plans are removed per convention. Previously completed:
 - `shared-ui-components-refactor-plan.md` — Shared `<scribus-status-bar>`, `<scribus-dialog>`, CSS utilities (completed).
 - `create-menu-plan.md` — Create menu button, creatable object registry (completed).
 - `multi-story-architecture-plan.md` — Independent stories per text frame (completed).
-- `spread-editor-user-interface-plan.md` — Interaction model and UX parity (completed, moved to `../specs/`).
+- `spread-editor-user-interface-plan.md` — Interaction model and UX parity (completed, moved to `../../specs/`).
+- `app-shell-document-browser-navigation-plan.md` — Shell-level navigation link to document browser (completed).
+- `spread-editor-ribbon-encapsulation.md` — Encapsulate ribbon control behind app shell API (completed).
+- `spread-editor-ribbon-sync-on-cursor-move.md` — Sync ribbon controls on cursor movement (completed).
+- `streaming-downscale-tests-and-refactor-plan.md` — Tests, bug fixes, OPFS streaming, pyramid-aware decode (completed).
