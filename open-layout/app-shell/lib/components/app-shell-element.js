@@ -188,6 +188,48 @@ export class ScribusAppShell extends HTMLElement {
           z-index: 10;
         }
 
+        /* Panel tabs */
+        .panel-tabs {
+          display: flex;
+          border-bottom: 1px solid var(--border);
+          flex-shrink: 0;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .panel-tabs::-webkit-scrollbar { display: none; }
+
+        .panel-tab {
+          flex: 1;
+          padding: 0.55rem 0.75rem;
+          background: none;
+          border: none;
+          border-bottom: 2px solid transparent;
+          color: var(--text-dim);
+          font-family: inherit;
+          font-size: 0.78rem;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          cursor: pointer;
+          transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+          white-space: nowrap;
+        }
+        .panel-tab:hover {
+          color: var(--text-main);
+          background: rgba(255,255,255,0.03);
+        }
+        .panel-tab.active {
+          color: var(--accent);
+          border-bottom-color: var(--accent);
+        }
+
+        /* Panel body */
+        .panel-body {
+          flex: 1;
+          overflow-y: auto;
+          padding: 1rem;
+        }
+
         .marquee {
           position: absolute;
           border: 1px solid var(--accent);
@@ -219,7 +261,10 @@ export class ScribusAppShell extends HTMLElement {
         <div class="resize-handle" id="panels-resizer"></div>
 
         <aside class="panels" id="side-panels">
-          <slot name="panels"></slot>
+          <nav class="panel-tabs" id="panel-tabs"></nav>
+          <div class="panel-body" id="panel-body">
+            <slot name="panels"></slot>
+          </div>
         </aside>
 
         <scribus-command-palette></scribus-command-palette>
@@ -398,6 +443,20 @@ export class ScribusAppShell extends HTMLElement {
    */
   get panels() {
     return this.shadowRoot.querySelector('slot[name="panels"]').assignedElements()[0];
+  }
+
+  /**
+   * Returns the panel tab bar (shadow DOM)
+   */
+  get panelTabs() {
+    return this.shadowRoot.getElementById('panel-tabs');
+  }
+
+  /**
+   * Returns the panel body container (shadow DOM)
+   */
+  get panelBody() {
+    return this.shadowRoot.getElementById('panel-body');
   }
 
   /**

@@ -2,6 +2,7 @@ import { selection } from './selection-service.js';
 import { ClipboardService } from './clipboard-service.js';
 import { activeDocument } from './document-model.js';
 import { CommandRegistry, CommandHistory } from './command-manager.js';
+import { renderPropertyGroups } from './property-descriptors.js';
 import '../../ui-components/index.js';
 import './components/command-palette.js';
 import './components/create-menu.js';
@@ -18,6 +19,10 @@ export class AppShell extends EventTarget {
     this.clipboard = new ClipboardService(this);
     this.selection = selection;
     this.doc = activeDocument;
+
+    // Panel registry
+    this._panels = [];
+    this._activePanel = 'properties';
     
     // Find the shell custom element
     this.element = document.querySelector('scribus-app-shell');
@@ -45,8 +50,12 @@ export class AppShell extends EventTarget {
     // Move logic from hardcoded IDs to element-relative lookups
     this.ribbonContainer = this.element.ribbon;
     this.panelsContainer = this.element.panels;
-    
-    // Check if we have specific sub-elements for properties
+
+    // Panel rendering targets (shadow DOM)
+    this._panelTabs = this.element.panelTabs;
+    this._panelBody = this.element.panelBody;
+
+    // Legacy: check for slotted panel sub-elements (backward compat)
     if (this.panelsContainer) {
       this.panelContent = this.panelsContainer.querySelector('#properties-view') || this.panelsContainer;
       this.panelTitle = this.panelsContainer.querySelector('#panel-title');
@@ -209,26 +218,152 @@ export class AppShell extends EventTarget {
     this.ribbonContainer.appendChild(fragment);
   }
 
+  /**
+   * Register a named side panel.
+   * @param {{ id: string, label: string, icon?: string }} descriptor
+   */
+  registerPanel({ id, label, icon }) {
+    if (this._panels.find(p => p.id === id)) return;
+    this._panels.push({ id, label, icon });
+    if (this._initialized) this.requestUpdate();
+  }
+
+  /**
+   * Switch the active side panel tab.
+   * @param {string} id
+   */
+  setActivePanel(id) {
+    if (!this._panels.find(p => p.id === id)) return;
+    this._activePanel = id;
+    this.requestUpdate();
+  }
+
+  /** @returns {string} */
+  getActivePanel() {
+    return this._activePanel;
+  }
+
   updatePanels(selected) {
-    if (!this._initialized || !this.panelContent) return;
-    
-    this.panelContent.innerHTML = '';
-    if (this.panelTitle) {
-      this.panelTitle.textContent = selected ? `Properties: ${selected.type}` : 'Properties';
+    if (!this._initialized) return;
+
+    // --- Tab bar ---
+    if (this._panelTabs) {
+      this._panelTabs.innerHTML = '';
+      for (const panel of this._panels) {
+        const tab = document.createElement('button');
+        tab.className = 'panel-tab' + (panel.id === this._activePanel ? ' active' : '');
+        tab.textContent = panel.label;
+        tab.dataset.panelId = panel.id;
+        tab.addEventListener('click', () => this.setActivePanel(panel.id));
+        this._panelTabs.appendChild(tab);
+      }
     }
-    
+
+    // --- Panel body ---
+    const body = this._panelBody;
+    if (!body) return;
+
+    // Hide the slotted fallback content
+    if (this.panelsContainer) {
+      this.panelsContainer.style.display = 'none';
+    }
+
+    // Remove any previously shell-injected content (not the slot)
+    body.querySelectorAll('.shell-panel-content').forEach(el => el.remove());
+
+    const container = document.createElement('div');
+    container.className = 'shell-panel-content';
+
+    if (this._activePanel === 'properties') {
+      this._renderPropertiesPanel(container, selected);
+    } else if (this._activePanel === 'layers') {
+      this._renderLayersPanel(container, selected);
+    }
+
+    body.appendChild(container);
+  }
+
+  _renderPropertiesPanel(container, selected) {
+    // Collect structured descriptors from plugins
+    let groups = [];
+    let hasDescriptors = false;
+
     this.plugins.forEach(plugin => {
-      if (typeof plugin.getPanelContent === 'function') {
+      if (typeof plugin.getPanelDescriptors === 'function') {
+        const descs = plugin.getPanelDescriptors(selected);
+        if (descs && descs.length > 0) {
+          groups.push(...descs);
+          hasDescriptors = true;
+        }
+      } else if (typeof plugin.getPanelContent === 'function') {
+        // Backward compat: wrap legacy DOM in a group
         const panel = plugin.getPanelContent(selected);
         if (panel) {
-          this.panelContent.appendChild(panel);
+          const wrapper = document.createElement('div');
+          wrapper.className = 'property-group';
+          wrapper.appendChild(panel);
+          container.appendChild(wrapper);
+          hasDescriptors = true;
         }
       }
     });
 
-    if (this.panelContent.innerHTML === '') {
-      this.panelContent.innerHTML = '<span style="color: var(--text-dim)">Select an object to inspect.</span>';
+    if (groups.length > 0) {
+      container.appendChild(renderPropertyGroups(groups, this.ui));
     }
+
+    if (!hasDescriptors && container.children.length === 0) {
+      container.innerHTML = '<span class="panel-empty">Select an object to inspect.</span>';
+    }
+  }
+
+  _renderLayersPanel(container) {
+    const items = this.doc.getAll();
+    if (items.length === 0) {
+      container.innerHTML = '<span class="panel-empty">No objects in document.</span>';
+      return;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'layers-list';
+
+    const selectedItems = selection.all;
+    for (const item of items) {
+      const li = document.createElement('li');
+      li.className = 'layer-item' + (selectedItems.includes(item) ? ' selected' : '');
+      li.dataset.itemId = item.id;
+
+      // Color swatch icon
+      const icon = document.createElement('span');
+      icon.className = 'layer-icon';
+      const color = this._getItemColor(item);
+      icon.style.background = color || 'var(--text-dim)';
+      li.appendChild(icon);
+
+      // Label
+      const label = document.createElement('span');
+      label.textContent = item.element?.textContent?.trim() || item.type || item.id;
+      li.appendChild(label);
+
+      // Click to select
+      li.addEventListener('click', (e) => {
+        if (e.shiftKey) {
+          selection.toggle(item);
+        } else {
+          selection.select(item);
+        }
+      });
+
+      list.appendChild(li);
+    }
+
+    container.appendChild(list);
+  }
+
+  _getItemColor(item) {
+    if (!item.element) return null;
+    if (item.type === 'triangle') return item.element.style.borderBottomColor;
+    return item.element.style.background || item.element.style.backgroundColor || null;
   }
 
   // Helper factory for building ribbon elements
@@ -270,6 +405,10 @@ class SystemPlugin {
       icon: '?',
       execute: () => alert('Scribus App Shell - Plugin based desktop-UI.')
     });
+
+    // Register built-in panels
+    shell.registerPanel({ id: 'properties', label: 'Properties' });
+    shell.registerPanel({ id: 'layers', label: 'Layers' });
 
     shell.commands.register({
       id: 'app.undo',

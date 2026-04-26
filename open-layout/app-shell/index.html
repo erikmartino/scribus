@@ -12,6 +12,7 @@
   <style>
     /* Selection styles for the demo */
     .selectable {
+      position: relative;
       width: 150px;
       height: 150px;
       margin: 20px;
@@ -63,11 +64,8 @@
       </div>
     </div>
 
-    <div slot="panels" id="panel-content" style="padding: 1.5rem;">
-      <h3 id="panel-title" class="panel-header">Properties</h3>
-      <div id="properties-view">
-        Select an object to inspect.
-      </div>
+    <div slot="panels" id="panel-content">
+      <!-- Shell-managed panel content -->
     </div>
   </scribus-app-shell>
 

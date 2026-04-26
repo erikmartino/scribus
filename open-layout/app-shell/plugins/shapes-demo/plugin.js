@@ -223,6 +223,8 @@ export class ShapesDemoPlugin {
               el.style.top = `${initialY}px`;
             }
           });
+          // Refresh panel so Position X/Y reflect the new values
+          this.shell.requestUpdate();
         }
       };
 
@@ -358,29 +360,62 @@ export class ShapesDemoPlugin {
     return sections;
   }
 
-  getPanelContent(selected) {
-    if (!selected) return null;
-    const container = document.createElement('div');
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.gap = '15px';
+  getPanelDescriptors(selected) {
+    if (!selected) return [];
+    const groups = [
+      {
+        label: 'Object',
+        properties: [
+          { key: 'type', label: 'Type', type: 'readonly', value: selected.type },
+          { key: 'id', label: 'ID', type: 'readonly', value: selected.id },
+        ]
+      },
+      {
+        label: 'Position',
+        properties: [
+          {
+            key: 'x', label: 'X', type: 'number',
+            value: parseInt(selected.element.style.left) || 0,
+            onChange: v => { selected.element.style.left = v + 'px'; }
+          },
+          {
+            key: 'y', label: 'Y', type: 'number',
+            value: parseInt(selected.element.style.top) || 0,
+            onChange: v => { selected.element.style.top = v + 'px'; }
+          },
+        ]
+      },
+      {
+        label: 'Appearance',
+        properties: [
+          {
+            key: 'color', label: 'Fill Color', type: 'color',
+            value: selected.type === 'triangle'
+              ? selected.element.style.borderBottomColor
+              : (selected.element.style.background || selected.element.style.backgroundColor),
+            onChange: v => {
+              if (selected.type === 'triangle') selected.element.style.borderBottomColor = v;
+              else selected.element.style.background = v;
+            }
+          },
+        ]
+      },
+    ];
 
-    const info = document.createElement('p');
-    info.style.color = 'var(--text-dim)';
-    info.style.fontSize = '0.8rem';
-    info.textContent = `ID: ${selected.id}`;
-    container.appendChild(info);
+    // Content group — only for non-triangle shapes
+    if (selected.type !== 'triangle') {
+      groups.push({
+        label: 'Content',
+        properties: [
+          {
+            key: 'title', label: 'Title', type: 'text',
+            value: selected.element.textContent.trim(),
+            onChange: v => { selected.element.textContent = v; }
+          },
+        ]
+      });
+    }
 
-    container.appendChild(this.shell.ui.createInput({
-      label: 'Title',
-      value: selected.element.textContent.trim() || selected.type,
-      onInput: (val) => {
-        if (selected.type !== 'triangle') {
-          selected.element.textContent = val;
-        }
-      }
-    }));
-
-    return container;
+    return groups;
   }
 }

@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Shapes Demo Integration', () => {
   test.beforeEach(async ({ page }) => {
+    page.on('console', msg => {
+      console.log(`BROWSER [${msg.type()}]: ${msg.text()}`);
+    });
+    page.on('pageerror', err => {
+      console.error(`BROWSER [error]: ${err.message}`);
+    });
+
     // Navigate to the app shell
     await page.goto('http://localhost:8000/app-shell/');
     // Wait for the shell and initial shapes to be ready
@@ -16,10 +23,11 @@ test.describe('Shapes Demo Integration', () => {
     
     // Check if it is visually selected
     await expect(circle).toHaveClass(/selected/);
-    
-    // Check properties panel input value
-    const titleInput = page.locator('scribus-input[label="Title"] input');
-    await expect(titleInput).toHaveValue('Circle');
+
+    // Properties panel should show the Object group with type=circle
+    // (Playwright auto-pierces shadow DOM with locator())
+    await expect(page.locator('.property-group-heading').filter({ hasText: 'Object' })).toBeVisible();
+    await expect(page.locator('.property-readonly').filter({ hasText: 'circle' })).toBeVisible();
   });
 
   test('marquee selection integrates with shell events', async ({ page }) => {
@@ -67,5 +75,26 @@ test.describe('Shapes Demo Integration', () => {
     await undoBtn.click();
     
     await expect(square).toBeAttached();
+  });
+
+  test('dragging a selected shape moves it', async ({ page }) => {
+    const circle = page.locator('.selectable.circle').first();
+    await circle.click();
+    await expect(circle).toHaveClass(/selected/);
+
+    const box = await circle.boundingBox();
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    // Drag the circle 80px to the right and 40px down
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + 80, cy + 40, { steps: 5 });
+    await page.mouse.up();
+
+    // Wait for CSS transition to settle
+    await page.waitForTimeout(300);
+    const newBox = await circle.boundingBox();
+    expect(newBox.x).toBeGreaterThan(box.x + 30);
   });
 });
