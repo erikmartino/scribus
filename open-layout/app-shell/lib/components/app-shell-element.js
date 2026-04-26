@@ -72,7 +72,19 @@ export class ScribusAppShell extends HTMLElement {
         .app-launcher {
           flex-shrink: 0;
           display: flex;
-          align-items: center;
+          flex-direction: column;
+          justify-content: center;
+          border-right: 1px solid var(--border);
+          padding-right: 1.5rem;
+          height: 100%;
+        }
+
+        .app-launcher-label {
+          font-size: 0.75rem;
+          color: var(--text-dim);
+          text-transform: uppercase;
+          margin-bottom: 4px;
+          letter-spacing: 0.05em;
         }
 
         .app-launcher-btn {
@@ -188,15 +200,16 @@ export class ScribusAppShell extends HTMLElement {
       <div class="app-shell">
         <header class="ribbon">
           <div class="app-launcher">
+            <span class="app-launcher-label">Apps</span>
             <button class="app-launcher-btn" id="app-launcher-btn" aria-expanded="false" aria-label="Applications" title="Applications">
               <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="6" y="1" width="4" height="4" rx="0.5"/><rect x="11" y="1" width="4" height="4" rx="0.5"/><rect x="1" y="6" width="4" height="4" rx="0.5"/><rect x="6" y="6" width="4" height="4" rx="0.5"/><rect x="11" y="6" width="4" height="4" rx="0.5"/><rect x="1" y="11" width="4" height="4" rx="0.5"/><rect x="6" y="11" width="4" height="4" rx="0.5"/><rect x="11" y="11" width="4" height="4" rx="0.5"/></svg>
             </button>
-            <div class="app-launcher-menu" id="app-launcher-menu">
-              <a href="/document-browser/" id="document-browser-link">Document Browser</a>
-            </div>
           </div>
           <slot name="ribbon"></slot>
         </header>
+        <div class="app-launcher-menu" id="app-launcher-menu">
+          <a href="/document-browser/" id="document-browser-link">Document Browser</a>
+        </div>
 
         <main class="main-body" id="workspace">
           <slot></slot>
@@ -242,15 +255,15 @@ export class ScribusAppShell extends HTMLElement {
       }
     });
 
-    // Close on any click outside the launcher.
+    // Close on any click outside the launcher or menu.
     // Use mousedown on window to catch clicks everywhere including
     // slotted content and elements outside the shadow root.
     window.addEventListener('mousedown', (e) => {
       if (!menu.hasAttribute('open')) return;
-      // Check if click is inside the launcher via composedPath
+      // Check if click is inside the launcher, button, or menu via composedPath
       const path = e.composedPath();
       const launcher = this.shadowRoot.querySelector('.app-launcher');
-      if (!path.includes(launcher) && !path.includes(btn)) {
+      if (!path.includes(launcher) && !path.includes(btn) && !path.includes(menu)) {
         close();
       }
     }, true);
