@@ -53,14 +53,6 @@
       cursor: text;
     }
 
-    /* Mode-based Ribbon Visibility */
-    [data-mode="object"] [data-only-mode="text"] {
-      display: none !important;
-    }
-    [data-mode="text"] [data-only-mode="object"] {
-      display: none !important;
-    }
-
     #sample-text {
       display: none;
     }
@@ -70,18 +62,6 @@
 <body>
   <scribus-app-shell data-mode="object">
     <div slot="ribbon" class="ribbon-controls">
-
-      <!-- Text Edit Mode Sections -->
-      <scribus-ribbon-section label="Typography" data-only-mode="text">
-        <div id="font-selector-container"></div>
-        <scribus-button id="toggle-bold" label="B" style="font-weight: bold;"></scribus-button>
-        <scribus-button id="toggle-italic" label="I" style="font-style: italic;"></scribus-button>
-      </scribus-ribbon-section>
-
-      <scribus-ribbon-section label="Formatting" data-only-mode="text">
-        <scribus-input type="range" id="font-size" label="Size" min="12" max="40" value="20" style="width: 70px;"></scribus-input>
-        <scribus-input type="range" id="line-height" label="Line %" min="105" max="190" value="138" style="width: 70px;"></scribus-input>
-      </scribus-ribbon-section>
     </div>
 
     <div id="svg-container" tabindex="0" class="selectable" contenteditable="true" spellcheck="false"></div>

@@ -45,7 +45,6 @@ export class SpreadEditorApp {
     this._isDragging = false;
     this._lastClickTime = 0;
     this.shell = shell;
-    this._ribbonSections = null; // Cache sections
 
     // Multi-story: each text frame (or chain) has its own EditorState.
     // _stories is an array of { id, editor, boxIds, lineMap }.
@@ -206,10 +205,7 @@ export class SpreadEditorApp {
 
   setMode(mode) {
     this.mode = mode;
-    const shellEl = this.root.querySelector('scribus-app-shell');
-    if (shellEl) {
-      shellEl.setAttribute('data-mode', mode);
-    }
+    this.shell?.setMode(mode);
     
     if (mode === 'text' && this.container) {
       this.container.focus();
@@ -224,7 +220,6 @@ export class SpreadEditorApp {
     }
     
     this.update({ full: false });
-    this.shell?.requestUpdate();
   }
 
   /** Find the story entry that owns the given box ID. */
@@ -440,8 +435,7 @@ export class SpreadEditorApp {
   _enterLinkMode(sourceBoxId) {
     this._linkSource = { sourceBoxId };
     this.mode = 'link';
-    const shellEl = this.root.querySelector('scribus-app-shell');
-    if (shellEl) shellEl.setAttribute('data-mode', 'link');
+    this.shell?.setMode('link');
     this.update({ full: false });
   }
 
@@ -1845,14 +1839,9 @@ export class SpreadEditorApp {
       });
     }
 
-    // Update style buttons
-    if (this.editor) {
-      const typingStyle = this.editor.getTypingStyle();
-      const boldBtn = this.root.querySelector('#toggle-bold');
-      const italicBtn = this.root.querySelector('#toggle-italic');
-      boldBtn?.toggleAttribute('active', !!typingStyle.bold);
-      italicBtn?.toggleAttribute('active', !!typingStyle.italic);
-    }
+    // Rebuild ribbon so controls (font size, line height, bold/italic)
+    // reflect the current paragraph's style after cursor movement.
+    this.shell?.requestUpdate();
   }
 
   getRibbonSections(selected) {
@@ -1874,7 +1863,9 @@ export class SpreadEditorApp {
       const paraStyle = this.editor.paragraphStyles[paraIndex] || {};
       sections.push(
         TextTools.createTypographySection(this.shell, {
-          fontFamily: typingStyle.fontFamily || 'EB Garamond'
+          fontFamily: typingStyle.fontFamily || 'EB Garamond',
+          bold: !!typingStyle.bold,
+          italic: !!typingStyle.italic
         }),
         TextTools.createFormattingSection(this.shell, {
           fontSize: paraStyle.fontSize || this._fontSize || 20,

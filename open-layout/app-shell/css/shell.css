@@ -184,3 +184,13 @@ scribus-app-shell:defined {
 .info-card strong {
   color: var(--accent);
 }
+
+/* Mode-based ribbon section visibility.
+   Plugins can set data-only-mode on ribbon sections so they are
+   hidden when the shell's data-mode does not match. */
+[data-mode="object"] [data-only-mode="text"] {
+  display: none !important;
+}
+[data-mode="text"] [data-only-mode="object"] {
+  display: none !important;
+}
