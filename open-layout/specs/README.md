@@ -3,7 +3,7 @@
 Reference specifications for the Open Layout project.
 
 These are living documents that describe formats, APIs, and design decisions.
-Unlike `plans/`, specs are not removed when implementation is complete — they
+Unlike `docs/plans/`, specs are not removed when implementation is complete — they
 remain as authoritative references.
 
 ## Specs

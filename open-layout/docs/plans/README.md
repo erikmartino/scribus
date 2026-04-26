@@ -2,13 +2,13 @@
 
 This folder consolidates active planning documents for the prototypes.
 
-All implementation planning should live under `plans/`.
+All implementation planning should live under `docs/plans/`.
 
 ## Active plans
 
 - `story-editor-do-not-implement-yet-plan.md` — Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
 
-Reference specifications live in `../specs/`.
+Reference specifications live in `../../specs/`.
 
 ## Archived/cleaned up
 
