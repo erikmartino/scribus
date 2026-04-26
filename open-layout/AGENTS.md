@@ -88,7 +88,15 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
 - Whenever work progresses on a planned task, update the corresponding plan file to reflect current status and remaining work.
 - If a plan has no remaining work, remove it and update any index/reference files that list active plans.
 
-## Architecture: App Shell / Plugin Boundary
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for a full overview of
+the codebase: module map, dependency graph, directory structure, data
+formats, server API, plugin system, testing conventions, and external
+dependencies. Read this first to orient yourself before exploring source
+files.
+
+### App Shell / Plugin Boundary
 
 See [docs/app-shell-boundary.md](docs/app-shell-boundary.md) for the
 authoritative description of the public API between the app-shell
