@@ -70,8 +70,9 @@ export class ScribusAppShell extends HTMLElement {
         }
 
         .app-launcher {
-          position: relative;
           flex-shrink: 0;
+          display: flex;
+          align-items: center;
         }
 
         .app-launcher-btn {
@@ -105,9 +106,7 @@ export class ScribusAppShell extends HTMLElement {
 
         .app-launcher-menu {
           display: none;
-          position: absolute;
-          top: calc(100% + 6px);
-          left: 0;
+          position: fixed;
           min-width: 180px;
           background: var(--shell-bg);
           border: 1px solid var(--border);
@@ -234,6 +233,10 @@ export class ScribusAppShell extends HTMLElement {
       if (open) {
         close();
       } else {
+        // Position the menu below the button using fixed coordinates
+        const rect = btn.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left}px`;
         menu.setAttribute('open', '');
         btn.setAttribute('aria-expanded', 'true');
       }
