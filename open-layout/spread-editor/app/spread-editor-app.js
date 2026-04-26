@@ -25,6 +25,7 @@ import { BoxInteractionController } from './box-interactions.js';
 import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
+import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -45,6 +46,7 @@ export class SpreadEditorApp {
     this._isDragging = false;
     this._lastClickTime = 0;
     this.shell = shell;
+    this.storyItem = new AbstractItem('Story', 'text');
 
     // Multi-story: each text frame (or chain) has its own EditorState.
     // _stories is an array of { id, editor, boxIds, lineMap }.
@@ -126,6 +128,7 @@ export class SpreadEditorApp {
         },
         onSelectBox: (boxId) => {
           this.selectedBoxId = boxId;
+          this.shell?.updatePanels();
         },
         onBodyClick: async (event, boxId, wasAlreadySelected) => {
           // Image boxes don't support text editing — skip enter-text-mode
@@ -220,6 +223,7 @@ export class SpreadEditorApp {
     }
     
     this.update({ full: false });
+    this.shell?.updatePanels();
   }
 
   /** Find the story entry that owns the given box ID. */
@@ -1875,5 +1879,133 @@ export class SpreadEditorApp {
     }
 
     return sections;
+  }
+
+  getSelection() {
+    if (this.selectedBoxId) {
+      const box = this.boxes.find(b => b.id === this.selectedBoxId) || 
+                  this.imageBoxes.find(b => b.id === this.selectedBoxId);
+      if (box) return [box];
+    }
+    return [];
+  }
+
+  getPanelDescriptors(selected) {
+    const descriptors = [];
+    const activeBox = selected && selected.length > 0 ? selected[0] : null;
+
+    if (this.mode === 'text' && this.editor) {
+      // Text Editing Mode
+      descriptors.push({
+        label: 'Text Mode',
+        properties: [
+          {
+            key: 'active-story',
+            label: 'Story ID',
+            type: 'readonly',
+            value: this._activeStory?.id || '?'
+          }
+        ]
+      });
+
+      const textGroups = getTextPropertyDescriptors(this.shell, this.editor, {
+        lineHeight: this._lineHeight 
+      });
+      descriptors.push(...textGroups);
+    } else if (activeBox) {
+      // Object Selection Mode
+      const isImage = this.imageBoxes.some(b => b.id === activeBox.id);
+
+      descriptors.push({
+        label: isImage ? 'Image Frame' : 'Text Frame',
+        properties: [
+          {
+            key: 'id',
+            label: 'ID',
+            type: 'readonly',
+            value: activeBox.id
+          },
+          {
+            key: 'x',
+            label: 'X',
+            type: 'number',
+            value: Math.round(activeBox.x),
+            onChange: (val) => {
+              this.submitAction('Move Box', () => {
+                activeBox.x = Number(val);
+              });
+            }
+          },
+          {
+            key: 'y',
+            label: 'Y',
+            type: 'number',
+            value: Math.round(activeBox.y),
+            onChange: (val) => {
+              this.submitAction('Move Box', () => {
+                activeBox.y = Number(val);
+              });
+            }
+          },
+          {
+            key: 'w',
+            label: 'Width',
+            type: 'number',
+            value: Math.round(activeBox.w),
+            onChange: (val) => {
+              this.submitAction('Resize Box', () => {
+                activeBox.w = Number(val);
+              });
+            }
+          },
+          {
+            key: 'h',
+            label: 'Height',
+            type: 'number',
+            value: Math.round(activeBox.h),
+            onChange: (val) => {
+              this.submitAction('Resize Box', () => {
+                activeBox.h = Number(val);
+              });
+            }
+          }
+        ]
+      });
+
+      if (isImage) {
+        descriptors.push({
+          label: 'Properties',
+          properties: [
+            {
+              key: 'asset',
+              label: 'Asset',
+              type: 'readonly',
+              value: activeBox.assetRef || 'None'
+            }
+          ]
+        });
+      }
+    } else {
+      // Default / Document Info
+      descriptors.push({
+        label: 'Spread Info',
+        properties: [
+          {
+            key: 'zoom',
+            label: 'Zoom',
+            type: 'readonly',
+            value: Math.round(this._zoom * 100) + '%'
+          },
+          {
+            key: 'stories',
+            label: 'Stories',
+            type: 'readonly',
+            value: this._stories.length
+          }
+        ]
+      });
+    }
+
+    return descriptors;
   }
 }

@@ -68,8 +68,8 @@ export const TextTools = {
       const fontSizeInput = shell.ui.createInput({ 
         label: 'Size', 
         type: 'range', 
-        min: 12, 
-        max: 40, 
+        min: 1, 
+        max: 200, 
         value: fontSize, 
         id: 'font-size',
         onInput: (val) => shell.commands.execute(fontSizeCommand, { fontSize: Number(val) })

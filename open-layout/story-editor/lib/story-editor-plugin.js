@@ -4,6 +4,7 @@ import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { parseHtmlToStory } from './html-paste-parser.js';
 import { serializeStory, putJson, updateDocTimestamp } from '../../document-store/lib/document-store.js';
+import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
 
 /**
  * StoryEditorPlugin - Adapts the Story Editor logic to the Scribus App Shell.
@@ -115,6 +116,33 @@ export class StoryEditorPlugin {
       execute: (args) => {
         if (!args || !args.fontFamily) return;
         this.updateTypingStyle({ fontFamily: args.fontFamily });
+      }
+    });
+
+    shell.commands.register({
+      id: 'text.font-size',
+      label: 'Font Size',
+      execute: (args) => {
+        if (!args || !args.fontSize) return;
+        this.submitAction('Change Font Size', () => {
+          const pi = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
+          this.paragraphStyles[pi].fontSize = Number(args.fontSize);
+          this.container.focus();
+        });
+      }
+    });
+
+    shell.commands.register({
+      id: 'text.line-height',
+      label: 'Line Height',
+      execute: (args) => {
+        if (!args || !args.lineHeight) return;
+        this.submitAction('Change Line Height', () => {
+          // In this simple demo, we store global line height for the whole story
+          // but we could make it per-paragraph. For now we just trigger update.
+          window.dispatchEvent(new CustomEvent('line-height-changed', { detail: args.lineHeight }));
+          this.container.focus();
+        });
       }
     });
 
@@ -298,40 +326,44 @@ export class StoryEditorPlugin {
       })
     );
 
+    const pi = this.editor.cursor.paraIndex;
+    const paraStyle = this.paragraphStyles[pi] || {};
+    sections.push(
+      TextTools.createFormattingSection(this.shell, {
+        fontSize: paraStyle.fontSize || this.state.typingStyle.fontSize || 20,
+        lineHeight: 138 // Fixed in this demo for now
+      })
+    );
+
     return sections;
   }
 
-  getPanelContent(selected) {
-    const container = document.createElement('div');
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.gap = '1rem';
+  getPanelDescriptors(selected) {
+    const descriptors = [];
 
-    container.innerHTML = `
-      <div style="color: var(--text-dim); font-size: 0.85rem;">
-        <p>Paragraph: <span id="current-para" style="color: var(--accent);">1</span></p>
-        <p>Selection: <span id="selection-status" style="color: var(--accent-secondary);">None</span></p>
-      </div>
-      <hr style="border: 0; border-top: 1px solid var(--border);">
-    `;
-
-    // Add font size input
-    const fontSizeInput = this.shell.ui.createInput({
-      label: 'Font Size',
-      type: 'number',
-      min: 8,
-      max: 200,
-      value: 22,
-      id: 'font-size',
-      onInput: (val) => {
-         this.submitAction('Change Font Size', () => {
-           const pi = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
-           this.paragraphStyles[pi].fontSize = +val;
-         });
-      }
+    // 1. Info Group
+    descriptors.push({
+      label: 'Status',
+      properties: [
+        {
+          key: 'para-index',
+          label: 'Paragraph',
+          type: 'readonly',
+          value: this.editor.cursor.paraIndex + 1
+        },
+        {
+          key: 'selection',
+          label: 'Selection',
+          type: 'readonly',
+          value: this.editor.hasSelection() ? 'Active' : 'None'
+        }
+      ]
     });
-    container.appendChild(fontSizeInput);
 
-    return container;
+    // 2. Text Groups (Typography, Paragraph)
+    const textGroups = getTextPropertyDescriptors(this.shell, this.editor);
+    descriptors.push(...textGroups);
+
+    return descriptors;
   }
 }

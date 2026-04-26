@@ -93,8 +93,43 @@ export class ScribusInput extends HTMLElement {
     this.render();
   }
 
-  attributeChangedCallback() {
-    this.render();
+  static get observedAttributes() {
+    return ['label', 'value', 'type', 'placeholder', 'min', 'max', 'step', 'layout'];
+  }
+
+  attributeChangedCallback(name, oldVal, newVal) {
+    if (oldVal === newVal) return;
+    if (this._rendered) {
+      this._updateSurgical(name, newVal);
+    } else {
+      this.render();
+    }
+  }
+
+  _updateSurgical(name, val) {
+    const input = this.shadowRoot.getElementById('input');
+    const label = this.shadowRoot.querySelector('label');
+    
+    if (name === 'value' && input) {
+      if (input.value !== val) {
+        input.value = val;
+        this._updateDisplay();
+      }
+    } else if (name === 'label' && label) {
+      label.textContent = val || '';
+      label.style.display = val ? 'block' : 'none';
+    } else if (name === 'type' && input) {
+      input.type = val || 'text';
+      this.render(); // Changing type is a structural change, full render is safer but rare
+    } else if (name === 'placeholder' && input) {
+      input.placeholder = val || '';
+    } else if (name === 'min' && input) {
+      input.min = val;
+    } else if (name === 'max' && input) {
+      input.max = val;
+    } else if (name === 'step' && input) {
+      input.step = val;
+    }
   }
 
   get value() {
@@ -119,6 +154,7 @@ export class ScribusInput extends HTMLElement {
   }
 
   render() {
+    this._rendered = true;
     const label = this.getAttribute('label') || '';
     const value = this.getAttribute('value') || '';
     const type = this.getAttribute('type') || 'text';
@@ -170,6 +206,15 @@ export class ScribusInput extends HTMLElement {
           font-family: 'JetBrains Mono', monospace;
           color: var(--accent, #bb86fc);
           font-weight: bold;
+          min-width: 2.5em;
+          display: inline-block;
+          text-align: right;
+        }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          width: 100%;
         }
         input[type="range"] {
           -webkit-appearance: none;
@@ -216,12 +261,29 @@ export class ScribusInput extends HTMLElement {
 
     input.addEventListener('input', (e) => {
       updateDisplay();
-      // Use 'change' for consistency with components but trigger on input for immediate feedback
-      this.dispatchEvent(new CustomEvent('change', { 
-        detail: e.target.value,
-        bubbles: true,
-        composed: true
-      }));
+      if (type === 'range') {
+        this.dispatchEvent(new CustomEvent('change', { 
+          detail: e.target.value,
+          bubbles: true,
+          composed: true
+        }));
+      }
+    });
+
+    input.addEventListener('change', (e) => {
+      if (type !== 'range') {
+        this.dispatchEvent(new CustomEvent('change', { 
+          detail: e.target.value,
+          bubbles: true,
+          composed: true
+        }));
+      }
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        input.blur();
+      }
     });
   }
 }

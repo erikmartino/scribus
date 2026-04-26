@@ -199,7 +199,7 @@ export class AppShell extends EventTarget {
 
   updateRibbon(selected) {
     if (!this._initialized || !this.ribbonContainer) return;
-    
+
     const fragment = document.createDocumentFragment();
 
     // Ask all plugins for their sections
@@ -212,10 +212,8 @@ export class AppShell extends EventTarget {
       }
     });
 
-    // Surgical update: Only clear and replace if content has changed 
-    // (though for now, simple clear + fragment is much smoother than multiple updates)
-    this.ribbonContainer.innerHTML = '';
-    this.ribbonContainer.appendChild(fragment);
+    // Surgical update: Reconcile new fragment into ribbonContainer
+    this._reconcileDOM(this.ribbonContainer, fragment);
   }
 
   /**
@@ -268,19 +266,88 @@ export class AppShell extends EventTarget {
       this.panelsContainer.style.display = 'none';
     }
 
-    // Remove any previously shell-injected content (not the slot)
-    body.querySelectorAll('.shell-panel-content').forEach(el => el.remove());
-
-    const container = document.createElement('div');
-    container.className = 'shell-panel-content';
-
-    if (this._activePanel === 'properties') {
-      this._renderPropertiesPanel(container, selected);
-    } else if (this._activePanel === 'layers') {
-      this._renderLayersPanel(container, selected);
+    // Ensure we have a stable content container
+    let contentWrapper = body.querySelector('.shell-panel-content');
+    if (!contentWrapper) {
+      contentWrapper = document.createElement('div');
+      contentWrapper.className = 'shell-panel-content';
+      body.appendChild(contentWrapper);
     }
 
-    body.appendChild(container);
+    const fragment = document.createDocumentFragment();
+    if (this._activePanel === 'properties') {
+      this._renderPropertiesPanel(fragment, selected);
+    } else if (this._activePanel === 'layers') {
+      this._renderLayersPanel(fragment, selected);
+    }
+
+    this._reconcileDOM(contentWrapper, fragment);
+  }
+
+  _reconcileDOM(container, newItems) {
+    const fragment = newItems instanceof DocumentFragment ? newItems : null;
+    const items = fragment ? Array.from(fragment.children) : Array.from(newItems);
+    
+    // 1. Identify existing children
+    const oldChildren = Array.from(container.children);
+    const usedOld = new Set();
+    
+    // 2. Iterate through new items and match
+    items.forEach((newItem, index) => {
+      // Identity can be ID or TagName + Label text (for sections/buttons)
+      const newItemLabel = newItem.getAttribute?.('label') || newItem.querySelector('.section-label')?.textContent;
+      const identity = newItem.id || (newItem.tagName + '-' + newItemLabel);
+      
+      const match = oldChildren.find(c => {
+        if (usedOld.has(c)) return false;
+        const oldLabel = c.getAttribute?.('label') || c.querySelector('.section-label')?.textContent;
+        const oldIdentity = c.id || (c.tagName + '-' + oldLabel);
+        return identity === oldIdentity;
+      });
+      
+      if (match) {
+        usedOld.add(match);
+        // Move to correct position
+        if (container.children[index] !== match) {
+          container.insertBefore(match, container.children[index]);
+        }
+        
+        // Update attributes and properties
+        this._updateElement(match, newItem);
+        
+        // If it has children, reconcile them recursively
+        if (newItem.children.length > 0 || match.children.length > 0) {
+          this._reconcileDOM(match, newItem.children);
+        }
+      } else {
+        // Append new
+        container.insertBefore(newItem, container.children[index]);
+      }
+    });
+    
+    // 3. Remove orphaned children
+    oldChildren.forEach(c => {
+      if (!usedOld.has(c)) c.remove();
+    });
+  }
+
+  /**
+   * Syncs attributes and basic properties from one element to another.
+   */
+  _updateElement(target, source) {
+    // Only update certain attributes to avoid resetting focus or state unintentionally
+    const attrsToSync = ['value', 'active', 'label', 'icon', 'placeholder', 'min', 'max', 'layout'];
+    attrsToSync.forEach(attr => {
+      if (source.hasAttribute(attr)) {
+        const val = source.getAttribute(attr);
+        if (target.getAttribute(attr) !== val) {
+          target.setAttribute(attr, val);
+        }
+      }
+    });
+    
+    // Special handling for Web Components if they expose properties mapping to attributes
+    // ScribusInput and ScribusButton handle attribute changes via observedAttributes
   }
 
   _renderPropertiesPanel(container, selected) {
