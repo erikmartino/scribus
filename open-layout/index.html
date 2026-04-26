@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Layout</title>
+  <link rel="stylesheet" href="app-shell/css/shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body, html {
+      overflow: auto;
+    }
+
+    .root-page {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 3rem 2rem;
+    }
+
+    .root-page h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .root-page .subtitle {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    .doc-browser-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.7rem 1.4rem;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #121214;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background var(--transition-fast);
+      margin-bottom: 2.5rem;
+    }
+
+    .doc-browser-btn:hover {
+      background: #d0a4ff;
+    }
+
+    .root-page hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+
+    .dir-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .dir-list a {
+      display: block;
+      padding: 0.35rem 0;
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-family: monospace;
+      transition: color var(--transition-fast);
+    }
+
+    .dir-list a:hover {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="root-page">
+    <h1>Open Layout</h1>
+    <p class="subtitle">Scribus text layout and editing prototypes</p>
+
+    <a href="document-browser/" class="doc-browser-btn" id="document-browser-btn">
+      Open Document Browser
+    </a>
+
+    <hr>
+    <ul class="dir-list" id="dir-listing"></ul>
+    <hr>
+  </div>
+
+  <script>
+    (async () => {
+      const list = document.getElementById('dir-listing');
+      try {
+        const res = await fetch('/?ls');
+        const entries = await res.json();
+        for (const entry of entries) {
+          const display = entry.isDir ? `${entry.name}/` : entry.name;
+          const href = entry.isDir
+            ? `${encodeURIComponent(entry.name)}/`
+            : encodeURIComponent(entry.name);
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.href = href;
+          a.textContent = display;
+          li.appendChild(a);
+          list.appendChild(li);
+        }
+      } catch {
+        list.textContent = 'Failed to load directory listing.';
+      }
+    })();
+  </script>
+</body>
+</html>

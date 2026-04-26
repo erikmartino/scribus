@@ -613,6 +613,24 @@ const server = http.createServer((req, res) => {
           return;
         }
 
+        // ?ls returns a JSON array of { name, isDir } entries for the directory.
+        if (parsed.searchParams.has('ls')) {
+          fs.readdir(filePath, { withFileTypes: true }, (dirErr, entries) => {
+            if (dirErr) { sendError(res, 500, 'Cannot read directory'); return; }
+            entries.sort((a, b) => {
+              if (a.isDirectory() && !b.isDirectory()) return -1;
+              if (!a.isDirectory() && b.isDirectory()) return 1;
+              return a.name.localeCompare(b.name);
+            });
+            const json = entries.map(e => ({ name: e.name, isDir: e.isDirectory() }));
+            res.statusCode = 200;
+            setIsolationHeaders(res);
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify(json));
+          });
+          return;
+        }
+
         const indexPath = path.join(filePath, 'index.html');
         fs.stat(indexPath, (indexErr, indexStat) => {
           if (!indexErr && indexStat.isFile()) {
