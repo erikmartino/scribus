@@ -88,6 +88,14 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
 - Whenever work progresses on a planned task, update the corresponding plan file to reflect current status and remaining work.
 - If a plan has no remaining work, remove it and update any index/reference files that list active plans.
 
+## Architecture: App Shell / Plugin Boundary
+
+See [docs/app-shell-boundary.md](docs/app-shell-boundary.md) for the
+authoritative description of the public API between the app-shell
+framework and editor plugins. Plugins must interact with the shell
+exclusively through that API -- never by querying or mutating shell DOM
+directly.
+
 ## Shared Layout and Components
 
 - Maximize reuse of shared styles and components via the app shell (`app-shell/css/shell.css` and `ui-components/`).

@@ -93,6 +93,19 @@ export class AppShell extends EventTarget {
     }
   }
 
+  /**
+   * Set the current interaction mode (e.g. 'object', 'text', 'link').
+   * Updates the `data-mode` attribute on the shell element so that
+   * CSS rules can show/hide mode-specific ribbon sections.
+   * @param {string} mode
+   */
+  setMode(mode) {
+    if (this.element) {
+      this.element.setAttribute('data-mode', mode);
+    }
+    this.requestUpdate();
+  }
+
   requestUpdate() {
     if (this._updateQueued) return;
     this._updateQueued = true;

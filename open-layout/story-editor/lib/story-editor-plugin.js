@@ -292,7 +292,9 @@ export class StoryEditorPlugin {
 
     sections.push(
       TextTools.createTypographySection(this.shell, {
-        fontFamily: this.state.typingStyle.fontFamily || 'EB Garamond'
+        fontFamily: this.state.typingStyle.fontFamily || 'EB Garamond',
+        bold: !!this.state.typingStyle.bold,
+        italic: !!this.state.typingStyle.italic
       })
     );
 

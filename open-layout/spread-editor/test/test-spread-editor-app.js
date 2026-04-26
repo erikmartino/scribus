@@ -3,10 +3,17 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { SpreadEditorApp } from '../app/spread-editor-app.js';
 
+// Mock shell element that records setAttribute calls
+const mockShellElement = globalThis.document.createElement('div');
+
 // Mock shell with all methods that setMode / getRibbonSections touch
 const mockShell = {
+  element: mockShellElement,
   registerPlugin: () => {},
   requestUpdate: () => {},
+  setMode: (mode) => {
+    mockShellElement.setAttribute('data-mode', mode);
+  },
   selection: { select: () => {}, remove: () => {} },
   commands: { execute: () => {} },
   ui: {
@@ -67,12 +74,12 @@ test('SpreadEditorApp Selection Modes', async (t) => {
   await t.test('setMode updates mode and shell attribute', () => {
     app.setMode('text');
     assert.strictEqual(app.mode, 'text');
-    // setAttribute stores value as el[key] in the dom-mock
-    assert.strictEqual(shellEl['data-mode'], 'text');
+    // shell.setMode() sets data-mode on shell.element
+    assert.strictEqual(mockShellElement['data-mode'], 'text');
     
     app.setMode('object');
     assert.strictEqual(app.mode, 'object');
-    assert.strictEqual(shellEl['data-mode'], 'object');
+    assert.strictEqual(mockShellElement['data-mode'], 'object');
   });
 
   await t.test('getRibbonSections returns empty array for object mode', () => {

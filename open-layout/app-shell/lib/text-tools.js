@@ -12,6 +12,8 @@ export const TextTools = {
    */
   createTypographySection(shell, { 
     fontFamily = 'EB Garamond',
+    bold = false,
+    italic = false,
     boldCommand = 'text.bold',
     italicCommand = 'text.italic',
     fontFamilyCommand = 'text.font-family'
@@ -35,7 +37,8 @@ export const TextTools = {
       const boldBtn = shell.ui.createButton({ 
         label: 'B', 
         id: 'toggle-bold',
-        commandId: boldCommand
+        commandId: boldCommand,
+        active: bold
       });
       container.appendChild(boldBtn);
 
@@ -43,7 +46,8 @@ export const TextTools = {
       const italicBtn = shell.ui.createButton({ 
         label: 'I', 
         id: 'toggle-italic',
-        commandId: italicCommand
+        commandId: italicCommand,
+        active: italic
       });
       container.appendChild(italicBtn);
     });
