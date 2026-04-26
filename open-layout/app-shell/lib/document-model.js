@@ -3,9 +3,10 @@
  * Consumer demos (Story Editor, Shapes) should wrap their items in this.
  */
 export class AbstractItem {
-  constructor(id, type) {
+  constructor(id, type, label = null) {
     this.id = id;
     this.type = type; // e.g., 'text-frame', 'circle'
+    this.label = label;
     this.data = null; // Private implementation-specific data
   }
 
@@ -17,6 +18,7 @@ export class AbstractItem {
     return {
       id: this.id,
       type: this.type,
+      label: this.label,
       data: this.data
     };
   }

@@ -128,7 +128,12 @@ export class SpreadEditorApp {
         },
         onSelectBox: (boxId) => {
           this.selectedBoxId = boxId;
-          this.shell?.updatePanels();
+          const item = this.shell?.doc?.get(boxId);
+          if (item) {
+            this.shell.selection.select(item);
+          } else {
+            this.shell?.updatePanels();
+          }
         },
         onBodyClick: async (event, boxId, wasAlreadySelected) => {
           // Image boxes don't support text editing — skip enter-text-mode
@@ -955,6 +960,8 @@ export class SpreadEditorApp {
     };
     shell.doc.registerItem(storyItem);
     this.storyItem = storyItem;
+
+    this._initSelectionSync(shell);
 
     shell.addEventListener('paste-received', (e) => this.handlePaste(e.detail));
 
@@ -1843,9 +1850,75 @@ export class SpreadEditorApp {
       });
     }
 
+    // Sync Document Model so Layers panel shows text/image boxes
+    this._syncDocumentModel();
+
     // Rebuild ribbon so controls (font size, line height, bold/italic)
     // reflect the current paragraph's style after cursor movement.
     this.shell?.requestUpdate();
+  }
+
+  _initSelectionSync(shell) {
+    shell.selection.addEventListener('selectionchange', (e) => {
+      const primary = e.detail.primary;
+      if (primary && primary.id && primary.id !== this.selectedBoxId) {
+        // If it's a known box id in this app, select it
+        const isBox = this.boxes.some(b => b.id === primary.id) || 
+                      this.imageBoxes.some(b => b.id === primary.id);
+        if (isBox) {
+          this.selectedBoxId = primary.id;
+          this.update({ full: false });
+        }
+      }
+    });
+  }
+
+  _syncDocumentModel() {
+    if (!this.shell?.doc) return;
+
+    // We reconcile the doc items to avoid flickering or clearing selection
+    const currentIds = new Set();
+    
+    // Always include the story item (legacy/global)
+    if (this.storyItem) {
+      currentIds.add(this.storyItem.id);
+      if (!this.shell.doc.get(this.storyItem.id)) {
+        this.shell.doc.registerItem(this.storyItem);
+      }
+    }
+
+    // Register all text boxes
+    this.boxes.forEach(box => {
+      currentIds.add(box.id);
+      let item = this.shell.doc.get(box.id);
+      if (!item) {
+        item = new AbstractItem(box.id, 'text-frame', `Text Frame ${box.id.replace('box-', '')}`);
+        item.data = box;
+        this.shell.doc.registerItem(item);
+      } else {
+        item.data = box; // Update data
+      }
+    });
+
+    // Register all image boxes
+    this.imageBoxes.forEach(box => {
+      currentIds.add(box.id);
+      let item = this.shell.doc.get(box.id);
+      if (!item) {
+        item = new AbstractItem(box.id, 'image-frame', `Image Frame ${box.id.replace('image-', '')}`);
+        item.data = box;
+        this.shell.doc.registerItem(item);
+      } else {
+        item.data = box; // Update data
+      }
+    });
+
+    // Remove orphaned items (except story item if still needed)
+    this.shell.doc.getAll().forEach(item => {
+      if (!currentIds.has(item.id)) {
+        this.shell.doc.removeItem(item.id);
+      }
+    });
   }
 
   getRibbonSections(selected) {

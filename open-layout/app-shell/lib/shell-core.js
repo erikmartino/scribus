@@ -409,7 +409,7 @@ export class AppShell extends EventTarget {
 
       // Label
       const label = document.createElement('span');
-      label.textContent = item.element?.textContent?.trim() || item.type || item.id;
+      label.textContent = item.label || item.element?.textContent?.trim() || item.type || item.id;
       li.appendChild(label);
 
       // Click to select
