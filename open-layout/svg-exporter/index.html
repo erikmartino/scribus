@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SVG Exporter</title>
+  <link rel="stylesheet" href="../app-shell/css/shell.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a1e;
+      color: var(--text-main, #e1e1e6);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--shell-bg, #1e1e20);
+      border-bottom: 1px solid var(--border, #2e2e32);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    header h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main, #e1e1e6);
+    }
+
+    #doc-label {
+      font-size: 0.85rem;
+      color: var(--text-dim, #a1a1aa);
+    }
+
+    #status {
+      margin-left: auto;
+      font-size: 0.8rem;
+      color: var(--text-dim, #a1a1aa);
+    }
+
+    #pages-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2rem;
+      padding: 2.5rem 1.5rem;
+    }
+
+    .page-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .page-label {
+      font-size: 0.75rem;
+      color: var(--text-dim, #a1a1aa);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .page-svg-container {
+      background: #fff;
+      box-shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .page-svg-container svg {
+      display: block;
+    }
+
+    #error-message {
+      display: none;
+      max-width: 500px;
+      margin: 3rem auto;
+      padding: 1.5rem;
+      background: rgba(220, 60, 60, 0.12);
+      border: 1px solid rgba(220, 60, 60, 0.4);
+      border-radius: 6px;
+      color: #f87171;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    #loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem;
+      color: var(--text-dim, #a1a1aa);
+      font-size: 0.9rem;
+      gap: 0.75rem;
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border, #2e2e32);
+      border-top-color: var(--accent, #bb86fc);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SVG Exporter</h1>
+    <span id="doc-label"></span>
+    <span id="status"></span>
+  </header>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Loading layout engine…</span>
+  </div>
+
+  <div id="error-message"></div>
+
+  <div id="pages-container" style="display:none;"></div>
+
+  <script type="module">
+    import { createLayoutEngine, renderDocument } from './lib/svg-generator.js';
+
+    const params = new URLSearchParams(location.search);
+    const docPath = params.get('doc') || 'demo/typography-sampler';
+
+    const loadingEl    = document.getElementById('loading');
+    const errorEl      = document.getElementById('error-message');
+    const pagesEl      = document.getElementById('pages-container');
+    const statusEl     = document.getElementById('status');
+    const docLabelEl   = document.getElementById('doc-label');
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    function showError(msg) {
+      loadingEl.style.display = 'none';
+      errorEl.style.display   = 'block';
+      errorEl.textContent     = msg;
+    }
+
+    {
+      docLabelEl.textContent = docPath;
+      document.title = `SVG Exporter — ${docPath}`;
+
+      (async () => {
+        try {
+          setStatus('Initialising layout engine…');
+          const engine = await createLayoutEngine();
+
+          setStatus('Rendering…');
+          const pages = await renderDocument(engine, docPath);
+
+          loadingEl.style.display = 'none';
+          pagesEl.style.display   = 'flex';
+
+          // Scale SVGs to fit neatly in the viewport at ~700px wide
+          const displayWidth = Math.min(700, window.innerWidth - 64);
+
+          for (const page of pages) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'page-wrapper';
+
+            const label = document.createElement('div');
+            label.className = 'page-label';
+            label.textContent = `Page ${page.label}`;
+            wrapper.appendChild(label);
+
+            const svgContainer = document.createElement('div');
+            svgContainer.className = 'page-svg-container';
+            svgContainer.id = `page-${page.pageIndex}`;
+
+            // Scale the SVG to displayWidth
+            const scale = displayWidth / page.width;
+            page.svg.setAttribute('width',  String(Math.round(page.width  * scale)));
+            page.svg.setAttribute('height', String(Math.round(page.height * scale)));
+
+            svgContainer.appendChild(page.svg);
+            wrapper.appendChild(svgContainer);
+            pagesEl.appendChild(wrapper);
+          }
+
+          setStatus(`${pages.length} page${pages.length !== 1 ? 's' : ''} rendered`);
+        } catch (err) {
+          console.error(err);
+          showError(`Render failed: ${err.message}`);
+        }
+      })();
+    }
+  </script>
+</body>
+</html>

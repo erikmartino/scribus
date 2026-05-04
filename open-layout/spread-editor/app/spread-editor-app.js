@@ -1,5 +1,4 @@
 import {
-  LayoutEngine,
   extractParagraphs,
   TextCursor,
   EditorState,
@@ -26,6 +25,11 @@ import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
+import {
+  createLayoutEngine,
+  renderSpread,
+  decorateSpreadForEditor,
+} from '../../svg-exporter/lib/svg-generator.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -86,15 +90,7 @@ export class SpreadEditorApp {
 
     this.setStatus('Loading HarfBuzz, fonts, and hyphenation...');
     try {
-      this.engine = await LayoutEngine.create({
-        hbWasmUrl: '/vendor/harfbuzzjs/hb.wasm',
-        hbJsUrl: '/vendor/harfbuzzjs/hbjs.js',
-        hyphenUrl: '/vendor/hyphen/en.js',
-        fontUrl: '/vendor/fonts/EBGaramond.ttf',
-        fontItalicUrl: '/vendor/fonts/EBGaramond-Italic.ttf',
-        fontFamily: 'EB Garamond',
-        reserveBottom: false,
-      });
+      this.engine = await createLayoutEngine();
       // Detect document store path from URL (?doc=user/docname)
       const params = new URLSearchParams(location.search);
       this._docPath = params.get('doc') || null;
@@ -1610,52 +1606,7 @@ export class SpreadEditorApp {
    * These zoom with the content — they represent the physical page surfaces.
    */
   _decorateSpreadContent(svg, spread) {
-    const firstContent = svg.firstChild;
-
-    // Pasteboard background
-    const bg = document.createElementNS(SVG_NS, 'rect');
-    bg.setAttribute('x', String(spread.pasteboardRect.x));
-    bg.setAttribute('y', String(spread.pasteboardRect.y));
-    bg.setAttribute('width', String(spread.pasteboardRect.width));
-    bg.setAttribute('height', String(spread.pasteboardRect.height));
-    bg.setAttribute('fill', '#ccc8bc');
-    svg.insertBefore(bg, firstContent);
-
-    // Spread shadow
-    const shadow = document.createElementNS(SVG_NS, 'rect');
-    shadow.setAttribute('x', String(spread.spreadRect.x));
-    shadow.setAttribute('y', String(spread.spreadRect.y));
-    shadow.setAttribute('width', String(spread.spreadRect.width));
-    shadow.setAttribute('height', String(spread.spreadRect.height));
-    shadow.setAttribute('fill', '#e9e3d6');
-    shadow.setAttribute('stroke', '#b9b09f');
-    shadow.setAttribute('stroke-width', '1.2');
-    svg.insertBefore(shadow, firstContent);
-
-    // Pages (white)
-    for (const page of spread.pageRects) {
-      const r = document.createElementNS(SVG_NS, 'rect');
-      r.setAttribute('x', String(page.x));
-      r.setAttribute('y', String(page.y));
-      r.setAttribute('width', String(page.width));
-      r.setAttribute('height', String(page.height));
-      r.setAttribute('fill', '#ffffff');
-      r.setAttribute('stroke', '#c7c1b5');
-      r.setAttribute('stroke-width', '1.2');
-      svg.insertBefore(r, firstContent);
-    }
-
-    // Spine
-    const spineX = spread.spreadRect.x + spread.spreadRect.width / 2;
-    const spine = document.createElementNS(SVG_NS, 'line');
-    spine.setAttribute('x1', String(spineX));
-    spine.setAttribute('y1', String(spread.spreadRect.y));
-    spine.setAttribute('x2', String(spineX));
-    spine.setAttribute('y2', String(spread.spreadRect.y + spread.spreadRect.height));
-    spine.setAttribute('stroke', '#aba18d');
-    spine.setAttribute('stroke-width', '1');
-    spine.setAttribute('stroke-dasharray', '4 4');
-    svg.insertBefore(spine, firstContent);
+    decorateSpreadForEditor(svg, spread);
   }
 
   async update(options = { full: true }) {
@@ -1721,10 +1672,10 @@ export class SpreadEditorApp {
     let svg = this._svg;
 
     if (isFull || !svg) {
-      // Render each story into its own set of boxes, then merge SVGs.
-      // The first story renders via renderToContainer (creates the base SVG).
-      // Additional stories render via renderStory and their text content
-      // is transplanted into the base SVG.
+      // Build the list of stories in the format renderSpread expects:
+      // each story provides its own EditorState rather than loading from store.
+      // We drive renderSpread with an in-memory spread definition derived
+      // from the current boxes and story entries.
       let baseSvg = null;
 
       for (const storyEntry of this._stories) {
@@ -1742,7 +1693,7 @@ export class SpreadEditorApp {
           this._fontSize, storyEntry.editor.paragraphStyles);
 
         if (!baseSvg) {
-          // First story: use renderToContainer to set up the base SVG
+          // First story: render and attach to container
           const result = await this.engine.renderToContainer(
             this.container,
             storyEntry.editor.story,
@@ -1767,10 +1718,9 @@ export class SpreadEditorApp {
           storyEntry.overflow = result.overflow || false;
 
           // Transplant all child elements from the secondary SVG into
-          // the base SVG. Skip box background <rect>s (the base SVG
-          // and the overlay system draw those).
+          // the base SVG. Skip box background <rect>s (the overlay draws those).
           for (const child of Array.from(result.svg.childNodes)) {
-            if (child.tagName === 'rect') continue; // skip box backgrounds
+            if (child.tagName === 'rect') continue;
             baseSvg.appendChild(child);
           }
         }

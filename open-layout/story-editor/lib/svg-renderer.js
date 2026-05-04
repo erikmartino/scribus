@@ -105,9 +105,7 @@ export class SvgRenderer {
       bg.setAttribute('y', box.y);
       bg.setAttribute('width', box.width);
       bg.setAttribute('height', box.height);
-      bg.setAttribute('fill', '#fffef8');
-      bg.setAttribute('stroke', '#ccc');
-      bg.setAttribute('stroke-width', '1');
+      bg.setAttribute('fill', 'none');
       svg.appendChild(bg);
     }
 

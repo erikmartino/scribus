@@ -14,6 +14,9 @@ Reference specifications live in `../../specs/`.
 
 Completed plans are removed per convention. Previously completed:
 
+- `root-index-page-plan.md` — Root index page with document browser button (completed).
+- `app-launcher-dropdown-plan.md` — App launcher dropdown replacing the document browser link (completed).
+- `app-shell-properties-panel-plan.md` — Multi-panel sidebar with Properties panel (completed).
 - `overlay-layer-plan.md` — Non-zoomed overlay SVG for box frames, handles, ports, margin guides (completed).
 - `image-drag-drop-plan.md` — Drag-and-drop image files onto the spread editor canvas (completed).
 - `asset-upload-plan.md` — Upload dropped/pasted images as document store assets with dedup (completed).
