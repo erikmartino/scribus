@@ -67,6 +67,7 @@ const MIME = {
 
 const VENDOR_MAP = {
   '/vendor/harfbuzzjs/hb.wasm': 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hb.wasm',
+  '/vendor/harfbuzzjs/hb-subset.wasm': 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hb-subset.wasm',
   '/vendor/harfbuzzjs/hbjs.js': 'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.3.6/hbjs.js',
   '/vendor/hyphen/en.js': 'https://cdn.jsdelivr.net/npm/hyphen@1.10.4/en/+esm',
   '/vendor/fonts/EBGaramond.ttf': 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf',

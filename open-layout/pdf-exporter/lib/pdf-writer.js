@@ -151,6 +151,59 @@ export class PdfWriter {
   }
 
   /**
+   * Write a TrueType font with embedded subset bytes.
+   * Note: This uses WinAnsiEncoding, which limits strings to Latin-1.
+   * @param {number} fontId 
+   * @param {number} descriptorId 
+   * @param {number} streamId 
+   * @param {string} alias 
+   * @param {string} baseFontName 
+   * @param {Uint8Array} ttfBytes 
+   */
+  writeTrueTypeFont(fontId, descriptorId, streamId, alias, baseFontName, ttfBytes) {
+    // 1. Font Stream (Length1 is required for TrueType, matching Length)
+    this._beginObj(streamId);
+    this._emitStr(
+      `<< /Length ${ttfBytes.length}\n` +
+      `   /Length1 ${ttfBytes.length}\n` +
+      `>>\n` +
+      `stream\n`
+    );
+    this._emit(ttfBytes);
+    this._emitStr('\nendstream\n');
+    this._endObj();
+
+    // 2. Font Descriptor (minimal metrics; viewer reads exact from TTF)
+    this._beginObj(descriptorId);
+    this._emitStr(
+      `<< /Type /FontDescriptor\n` +
+      `   /FontName /${baseFontName}\n` +
+      `   /Flags 32\n` +
+      `   /FontBBox [-1000 -1000 3000 3000]\n` +
+      `   /ItalicAngle 0\n` +
+      `   /Ascent 800\n` +
+      `   /Descent -200\n` +
+      `   /CapHeight 700\n` +
+      `   /StemV 80\n` +
+      `   /FontFile2 ${streamId} 0 R\n` +
+      `>>\n`
+    );
+    this._endObj();
+
+    // 3. Font Dictionary (relies on TTF hmtx for widths)
+    this._beginObj(fontId);
+    this._emitStr(
+      `<< /Type /Font\n` +
+      `   /Subtype /TrueType\n` +
+      `   /BaseFont /${baseFontName}\n` +
+      `   /Encoding /WinAnsiEncoding\n` +
+      `   /FontDescriptor ${descriptorId} 0 R\n` +
+      `>>\n`
+    );
+    this._endObj();
+  }
+
+  /**
    * Write a JPEG image as an XObject stream (DCTDecode — zero re-encoding).
    * @param {number}     id
    * @param {Uint8Array} jpegBytes

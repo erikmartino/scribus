@@ -3,10 +3,9 @@
 // Imports the DOM-free layout pipeline from svg-generator and drives PdfWriter
 // to produce a streaming PDF.
 //
-// Font strategy (v1): PDF standard Type1 fonts (Times-Roman family).
-// These are available in every PDF viewer with no embedding required.
-// The font appearance differs from EB Garamond; font subsetting via hb-subset.wasm
-// can be added in v2 (see docs/plans/pdf-exporter-plan.md).
+// Font strategy: PDF standard Type1 fonts (Times-Roman) are used as fallbacks.
+// When possible, EB Garamond (or other requested fonts) are subsetted via
+// hb-subset.wasm and embedded as TrueType font streams, keeping file size small.
 
 import { layoutDocument } from '../../svg-exporter/lib/svg-generator.js';
 import { createLayoutEngine } from '../../svg-exporter/lib/svg-generator.js';
@@ -16,6 +15,7 @@ import {
   textOp,
   imageOp,
 } from './pdf-writer.js';
+import { createSubsetter } from './subsetter.js';
 
 export { createLayoutEngine };
 
@@ -76,23 +76,42 @@ class IdAllocator {
 
 /**
  * @param {import('../../svg-exporter/lib/svg-generator.js').PageLayoutData[]} pages
- * @returns {Set<string>}  set of alias strings like 'FT', 'FTB', 'FTI', 'FTBi'
+ * @param {string} defaultFamily
+ * @returns {Map<string, { family: string, variant: string, unicodes: Set<number> }>}
  */
-function collectFontAliases(pages) {
-  const aliases = new Set();
+function collectFontData(pages, defaultFamily) {
+  const fontData = new Map();
   for (const page of pages) {
     for (const { lines } of page.textBoxes) {
       for (const line of lines) {
         for (const word of line.words) {
           for (const frag of word.fragments) {
+            if (!frag.text || !frag.text.trim()) continue;
+
             const { alias } = standardFontForStyle(frag.style);
-            aliases.add(alias);
+            
+            if (!fontData.has(alias)) {
+              const bold = !!frag.style.bold;
+              const italic = !!frag.style.italic;
+              let variant = 'regular';
+              if (bold && italic) variant = 'bolditalic';
+              else if (bold) variant = 'bold';
+              else if (italic) variant = 'italic';
+              
+              const family = frag.style.fontFamily || defaultFamily;
+              fontData.set(alias, { family, variant, unicodes: new Set() });
+            }
+            
+            const data = fontData.get(alias);
+            for (const char of frag.text) {
+              data.unicodes.add(char.codePointAt(0));
+            }
           }
         }
       }
     }
   }
-  return aliases;
+  return fontData;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,14 +169,40 @@ async function _generatePdf(engine, docPath, opts, writer) {
   const ids = new IdAllocator(1);
 
   // Font objects
-  const usedAliases = collectFontAliases(pages);
-  /** @type {Map<string, { id: number, pdfName: string, alias: string }>} */
+  const fontData = collectFontData(pages, fontFamily);
+  let subsetter;
+  try {
+    subsetter = await createSubsetter();
+  } catch (e) {
+    console.warn('[pdf-generator] Failed to initialise subsetter:', e);
+  }
+
+  /** @type {Map<string, { id: number, pdfName: string, alias: string, subsetBytes?: Uint8Array, descriptorId?: number, streamId?: number, family: string, variant: string }>} */
   const fontMap = new Map();
-  for (const alias of usedAliases) {
+  for (const [alias, data] of fontData.entries()) {
     const id = ids.next();
-    // Recover pdfName from alias
     const { pdfName } = _aliasToPdfFont(alias);
-    fontMap.set(alias, { id, pdfName, alias });
+
+    let subsetBytes;
+    let descriptorId;
+    let streamId;
+    
+    if (subsetter) {
+      const ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, data.variant);
+      if (ttfBuffer) {
+        try {
+          subsetBytes = subsetter.subset(ttfBuffer, data.unicodes);
+          descriptorId = ids.next();
+          streamId = ids.next();
+        } catch (e) {
+          console.warn(`[pdf-generator] Subsetting failed for ${data.family} ${data.variant}:`, e);
+        }
+      } else {
+        console.warn(`[pdf-generator] Font buffer not found for ${data.family} ${data.variant}`);
+      }
+    }
+
+    fontMap.set(alias, { id, pdfName, alias, subsetBytes, descriptorId, streamId, family: data.family, variant: data.variant });
   }
 
   // Per-page IDs (allocated lazily during the page loop below)
@@ -172,8 +217,13 @@ async function _generatePdf(engine, docPath, opts, writer) {
   pdf.writeHeader();
 
   // 4. Write font objects (before any page content)
-  for (const { id, pdfName, alias } of fontMap.values()) {
-    pdf.writeStandardFont(id, alias, pdfName);
+  for (const { id, pdfName, alias, subsetBytes, descriptorId, streamId, family, variant } of fontMap.values()) {
+    if (subsetBytes) {
+      const baseFontName = `${family.replace(/\s+/g, '')}-${variant}`;
+      pdf.writeTrueTypeFont(id, descriptorId, streamId, alias, baseFontName, subsetBytes);
+    } else {
+      pdf.writeStandardFont(id, alias, pdfName);
+    }
   }
 
   const fontRefs = [...fontMap.values()].map(f => ({ alias: f.alias, id: f.id }));

@@ -16,6 +16,7 @@ export class FontRegistry {
     this._hb = hb;
     this._fontManager = fontManager;
     this._fonts = {}; // family -> variant -> FontEntry
+    this._buffers = {}; // family -> Uint8Array
     this._fontFaces = new Set(); // set of registered family:weight:style keys
     this._defaultFamily = '';
   }
@@ -37,6 +38,9 @@ export class FontRegistry {
     const buffer = await resp.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
 
+    for (const { variant } of variants) {
+      this._buffers[`${family}:${variant}`] = uint8;
+    }
     this.registerFontBinaries(family, uint8, variants);
     return uint8;
   }
@@ -91,6 +95,17 @@ export class FontRegistry {
     const f = family || this._defaultFamily;
     if (!this._fonts[f]) return undefined;
     return this._fonts[f][variant];
+  }
+
+  /**
+   * Get the raw TTF buffer for a font family and variant.
+   * @param {string} family
+   * @param {string} variant
+   * @returns {Uint8Array|undefined}
+   */
+  getFontBuffer(family, variant) {
+    const f = family || this._defaultFamily;
+    return this._buffers[`${f}:${variant}`];
   }
 
   /**
