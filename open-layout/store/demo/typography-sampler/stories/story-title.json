@@ -1,0 +1,17 @@
+{
+  "id": "story-title",
+  "paragraphs": [
+    {
+      "styleRef": "title",
+      "runs": [
+        { "text": "The Art of", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "title",
+      "runs": [
+        { "text": "Typography", "style": { "italic": true } }
+      ]
+    }
+  ]
+}

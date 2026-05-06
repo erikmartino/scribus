@@ -4,7 +4,7 @@
     {
       "styleRef": "lead",
       "runs": [
-        { "text": "Typography Sampler", "style": {} }
+        { "text": "Typography is the craft of endowing human language with a durable visual form.", "style": {} }
       ]
     },
     {
@@ -14,15 +14,23 @@
         { "text": "invisible", "style": { "italic": true } },
         { "text": "; great typography is ", "style": {} },
         { "text": "felt", "style": { "bold": true } },
-        { "text": ". Ligatures like fi, fl, ffi, and ffl stitch letters into fluid shapes.", "style": {} }
+        { "text": ". The invisible nature of good typography ensures that the reader's attention is entirely focused on the message, not the medium.", "style": {} }
       ]
     },
     {
       "styleRef": "body",
       "runs": [
-        { "text": "From justified columns to careful kerning, every ", "style": {} },
+        { "text": "Ligatures like ", "style": {} },
+        { "text": "fi, fl, ffi, and ffl", "style": { "italic": true } },
+        { "text": " stitch letters into fluid shapes, preventing awkward collisions between characters. From justified columns to careful kerning, every ", "style": {} },
         { "text": "detail affects", "style": { "bold": true, "italic": true } },
         { "text": " the final impression on the page.", "style": {} }
+      ]
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        { "text": "A well-designed page should invite the eye to enter the text, read without strain, and navigate easily from one section to the next.", "style": {} }
       ]
     }
   ]
