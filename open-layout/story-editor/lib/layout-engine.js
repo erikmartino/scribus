@@ -6,7 +6,7 @@ import { GoogleFontManager } from '../../font-manager/google-font-manager.js';
 import { Hyphenator } from './hyphenator.js';
 import { breakLines } from './line-breaker.js';
 import { justifyLine } from './justifier.js';
-import { SvgRenderer } from './svg-renderer.js';
+import { SvgRenderer } from '../../doc-renderer/lib/svg-renderer.js';
 
 export { buildPositions } from './positions.js';
 
@@ -14,8 +14,8 @@ export { buildPositions } from './positions.js';
  * @typedef {import('./text-extract.js').Story} Story
  * @typedef {import('./text-extract.js').Run} Run
  * @typedef {import('./shaper.js').Glyph} Glyph
- * @typedef {import('./svg-renderer.js').Box} Box
- * @typedef {import('./svg-renderer.js').LineMapEntry} LineMapEntry
+ * @typedef {import('../../doc-renderer/lib/svg-renderer.js').Box} Box
+ * @typedef {import('../../doc-renderer/lib/svg-renderer.js').LineMapEntry} LineMapEntry
  * @typedef {import('./positions.js').LineEntry} LineEntry
  */
 

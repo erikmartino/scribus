@@ -6,7 +6,7 @@ import {
 
 /**
  * @typedef {import('./text-extract.js').Story} Story
- * @typedef {import('./svg-renderer.js').LineMapEntry} LineMapEntry
+ * @typedef {import('../../doc-renderer/lib/svg-renderer.js').LineMapEntry} LineMapEntry
  * @typedef {import('./story-position.js').CursorPos} CursorPos
  */
 

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layout Debug View</title>
+  <link rel="stylesheet" href="../app-shell/css/shell.css">
+  <style>
+    body {
+      background: #1a1a1e;
+      color: #e1e1e6;
+      font-family: 'Inter', system-ui, sans-serif;
+      padding: 2rem;
+    }
+    header {
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    pre {
+      background: #1e1e20;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #a1a1aa;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Intermediate Layout Format (Debug)</h1>
+    <div id="status">Loading...</div>
+  </header>
+  <pre id="output"></pre>
+
+  <script type="module">
+    import { createLayoutEngine, layoutDocument } from './lib/layout-document.js';
+
+    const params = new URLSearchParams(location.search);
+    const docPath = params.get('doc') || 'demo/typography-sampler';
+
+    const statusEl = document.getElementById('status');
+    const outputEl = document.getElementById('output');
+
+    (async () => {
+      try {
+        statusEl.textContent = `Initialising layout engine for ${docPath}...`;
+        const engine = await createLayoutEngine();
+
+        statusEl.textContent = 'Calculating layout...';
+        const layoutResult = await layoutDocument(engine, docPath);
+
+        statusEl.textContent = `Generated intermediate layout for ${layoutResult.pages.length} pages.`;
+        
+        // Pretty-print the JSON output
+        outputEl.textContent = JSON.stringify(layoutResult, null, 2);
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = `Error: ${err.message}`;
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -129,7 +129,8 @@
   <div id="pages-container" style="display:none;"></div>
 
   <script type="module">
-    import { createLayoutEngine, renderDocument } from './lib/svg-generator.js';
+    import { createLayoutEngine, layoutDocument } from './lib/layout-document.js';
+    import { SvgRenderer } from './lib/svg-renderer.js';
 
     const params = new URLSearchParams(location.search);
     const docPath = params.get('doc') || 'demo/typography-sampler';
@@ -158,9 +159,10 @@
         try {
           setStatus('Initialising layout engine…');
           const engine = await createLayoutEngine();
+          const renderer = new SvgRenderer({ fontFamily: engine._svgRenderer._fontFamily || 'EB Garamond' });
 
-          setStatus('Rendering…');
-          const pages = await renderDocument(engine, docPath);
+          setStatus('Calculating layout…');
+          const layoutResult = await layoutDocument(engine, docPath);
 
           loadingEl.style.display = 'none';
           pagesEl.style.display   = 'flex';
@@ -168,7 +170,7 @@
           // Scale SVGs to fit neatly in the viewport at ~700px wide
           const displayWidth = Math.min(700, window.innerWidth - 64);
 
-          for (const page of pages) {
+          for (const page of layoutResult.pages) {
             const wrapper = document.createElement('div');
             wrapper.className = 'page-wrapper';
 
@@ -181,17 +183,19 @@
             svgContainer.className = 'page-svg-container';
             svgContainer.id = `page-${page.pageIndex}`;
 
+            const svg = renderer.renderPage(page);
+
             // Scale the SVG to displayWidth
             const scale = displayWidth / page.width;
-            page.svg.setAttribute('width',  String(Math.round(page.width  * scale)));
-            page.svg.setAttribute('height', String(Math.round(page.height * scale)));
+            svg.setAttribute('width',  String(Math.round(page.width  * scale)));
+            svg.setAttribute('height', String(Math.round(page.height * scale)));
 
-            svgContainer.appendChild(page.svg);
+            svgContainer.appendChild(svg);
             wrapper.appendChild(svgContainer);
             pagesEl.appendChild(wrapper);
           }
 
-          setStatus(`${pages.length} page${pages.length !== 1 ? 's' : ''} rendered`);
+          setStatus(`${layoutResult.pages.length} page${layoutResult.pages.length !== 1 ? 's' : ''} rendered`);
         } catch (err) {
           console.error(err);
           showError(`Render failed: ${err.message}`);

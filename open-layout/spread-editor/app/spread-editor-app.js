@@ -25,11 +25,8 @@ import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
-import {
-  createLayoutEngine,
-  renderSpread,
-  decorateSpreadForEditor,
-} from '../../svg-exporter/lib/svg-generator.js';
+import { createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
+import { decorateSpreadForEditor } from '../../doc-renderer/lib/svg-renderer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 

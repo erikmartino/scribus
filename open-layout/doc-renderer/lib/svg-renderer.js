@@ -1,10 +1,10 @@
 // svg-renderer.js — laid-out paragraphs -> SVG element with columns/boxes
 
-import { buildPositions } from './positions.js';
+import { buildPositions } from '../../story-editor/lib/positions.js';
 
 /**
- * @typedef {import('./positions.js').CursorPosition} CursorPosition
- * @typedef {import('./positions.js').LineEntry} LineEntry
+ * @typedef {import('../../story-editor/lib/positions.js').CursorPosition} CursorPosition
+ * @typedef {import('../../story-editor/lib/positions.js').LineEntry} LineEntry
  */
 
 /**
@@ -185,4 +185,128 @@ export class SvgRenderer {
 
     return { svg, lineMap };
   }
+
+  /**
+   * Render a complete page from intermediate layout data.
+   *
+   * @param {import('./layout-document.js').PageLayoutData} pageData
+   * @returns {SVGSVGElement}
+   */
+  renderPage(pageData) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('width', String(pageData.width));
+    svg.setAttribute('height', String(pageData.height));
+    svg.setAttribute('viewBox', `0 0 ${pageData.width} ${pageData.height}`);
+    svg.setAttribute('xmlns', SVG_NS);
+
+    // 1. Draw page background
+    const bg = document.createElementNS(SVG_NS, 'rect');
+    bg.setAttribute('x', '0');
+    bg.setAttribute('y', '0');
+    bg.setAttribute('width', String(pageData.width));
+    bg.setAttribute('height', String(pageData.height));
+    bg.setAttribute('fill', '#ffffff');
+    svg.appendChild(bg);
+
+    // 2. Draw image boxes
+    if (pageData.imageBoxes && pageData.imageBoxes.length > 0) {
+      const g = document.createElementNS(SVG_NS, 'g');
+      g.setAttribute('data-layer', 'image-boxes');
+      svg.appendChild(g);
+
+      for (const box of pageData.imageBoxes) {
+        const imgEl = document.createElementNS(SVG_NS, 'image');
+        imgEl.setAttribute('href', box.imageUrl);
+        imgEl.setAttribute('x', String(box.x));
+        imgEl.setAttribute('y', String(box.y));
+        imgEl.setAttribute('width', String(box.width));
+        imgEl.setAttribute('height', String(box.height));
+        imgEl.setAttribute('pointer-events', 'none');
+        g.appendChild(imgEl);
+      }
+    }
+
+    // 3. Draw text boxes
+    for (const { box, lines } of pageData.textBoxes) {
+      for (const line of lines) {
+        let textEl = this._createTextEl(line.y, line.fontSize);
+        
+        for (const word of line.words) {
+          for (let fi = 0; fi < word.fragments.length; fi++) {
+            const frag = word.fragments[fi];
+            
+            if (frag.style && frag.style.inlineImage) {
+              if (textEl.childNodes.length > 0) {
+                svg.appendChild(textEl);
+                textEl = this._createTextEl(line.y, line.fontSize);
+              }
+              const imgSize = line.fontSize * 3;
+              const imgX = box.x + this._padding + word.x;
+              const imgY = line.y - line.fontSize;
+              const imgEl = document.createElementNS(SVG_NS, 'image');
+              imgEl.setAttribute('href', frag.style.inlineImage);
+              imgEl.setAttribute('x', imgX.toFixed(2));
+              imgEl.setAttribute('y', imgY.toFixed(2));
+              imgEl.setAttribute('width', String(imgSize));
+              imgEl.setAttribute('height', String(imgSize));
+              imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+              imgEl.setAttribute('style', 'pointer-events:none');
+              svg.appendChild(imgEl);
+              continue;
+            }
+
+            const tspan = document.createElementNS(SVG_NS, 'tspan');
+            if (fi === 0) {
+              const absX = box.x + this._padding + word.x;
+              tspan.setAttribute('x', absX.toFixed(2));
+            }
+            const attrs = svgAttrsForStyle(frag.style, line.fontFamily);
+            for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
+            tspan.textContent = frag.text;
+            textEl.appendChild(tspan);
+          }
+        }
+        svg.appendChild(textEl);
+      }
+    }
+
+    return svg;
+  }
+}
+
+/**
+ * Decorate a page SVG with a white background and a thin border.
+ * Elements are prepended so they appear behind text content.
+ *
+ * @param {SVGSVGElement} svg
+ * @param {object} spread
+ */
+export function decorateSpreadForEditor(svg, spread) {
+  const firstContent = svg.firstChild;
+
+  const _prepend = (el) => svg.insertBefore(el, firstContent);
+  const _rect = (attrs) => {
+    const r = document.createElementNS(SVG_NS, 'rect');
+    for (const [k, v] of Object.entries(attrs)) r.setAttribute(k, String(v));
+    return r;
+  };
+
+  // Pasteboard
+  _prepend(_rect({ x: spread.pasteboardRect.x, y: spread.pasteboardRect.y, width: spread.pasteboardRect.width, height: spread.pasteboardRect.height, fill: '#ccc8bc' }));
+
+  // Spread shadow
+  _prepend(_rect({ x: spread.spreadRect.x, y: spread.spreadRect.y, width: spread.spreadRect.width, height: spread.spreadRect.height, fill: '#e9e3d6', stroke: '#b9b09f', 'stroke-width': '1.2' }));
+
+  // Pages (white)
+  for (const page of spread.pageRects) {
+    _prepend(_rect({ x: page.x, y: page.y, width: page.width, height: page.height, fill: '#ffffff', stroke: '#c7c1b5', 'stroke-width': '1.2' }));
+  }
+
+  // Spine
+  const spineX = spread.spreadRect.x + spread.spreadRect.width / 2;
+  const spine = document.createElementNS(SVG_NS, 'line');
+  spine.setAttribute('x1', String(spineX)); spine.setAttribute('y1', String(spread.spreadRect.y));
+  spine.setAttribute('x2', String(spineX)); spine.setAttribute('y2', String(spread.spreadRect.y + spread.spreadRect.height));
+  spine.setAttribute('stroke', '#aba18d'); spine.setAttribute('stroke-width', '1'); spine.setAttribute('stroke-dasharray', '4 4');
+  svg.insertBefore(spine, firstContent);
 }

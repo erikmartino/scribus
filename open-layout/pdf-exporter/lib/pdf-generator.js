@@ -7,8 +7,7 @@
 // When possible, EB Garamond (or other requested fonts) are subsetted via
 // hb-subset.wasm and embedded as TrueType font streams, keeping file size small.
 
-import { layoutDocument } from '../../svg-exporter/lib/svg-generator.js';
-import { createLayoutEngine } from '../../svg-exporter/lib/svg-generator.js';
+import { layoutDocument, createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
 import {
   PdfWriter,
   standardFontForStyle,
@@ -75,7 +74,7 @@ class IdAllocator {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {import('../../svg-exporter/lib/svg-generator.js').PageLayoutData[]} pages
+ * @param {import('../../doc-renderer/lib/layout-document.js').PageLayoutData[]} pages
  * @param {string} defaultFamily
  * @returns {Map<string, { family: string, variant: string, unicodes: Set<number> }>}
  */
