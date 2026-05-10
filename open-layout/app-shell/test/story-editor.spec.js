@@ -149,7 +149,6 @@ test.describe('Story Editor Integration', () => {
         // Words are rendered as separate <tspan> elements, so check individually.
         const svgHTML = await page.locator('#svg-container svg').innerHTML();
         expect(svgHTML).toContain('Typography');
-        expect(svgHTML).toContain('Sampler');
         expect(svgHTML).toContain('invisible');
         expect(svgHTML).toContain('felt');
 

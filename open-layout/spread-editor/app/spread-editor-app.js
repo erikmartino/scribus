@@ -25,6 +25,7 @@ import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
+import { registerTextCommands } from '../../app-shell/lib/text-commands.js';
 import { createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
 import { decorateSpreadForEditor } from '../../doc-renderer/lib/svg-renderer.js';
 
@@ -553,65 +554,31 @@ export class SpreadEditorApp {
   }
 
   _registerCommands(shell) {
-    shell.commands.register({
-      id: 'text.bold',
-      label: 'Bold',
-      execute: () => {
-        if (this.mode !== 'text') return;
-        const style = this.editor.getTypingStyle();
-        this.submitAction('Toggle Bold', () => {
-          this.editor.applyCharacterStyle({ bold: !style.bold });
-        });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.italic',
-      label: 'Italic',
-      execute: () => {
-        if (this.mode !== 'text') return;
-        const style = this.editor.getTypingStyle();
-        this.submitAction('Toggle Italic', () => {
-          this.editor.applyCharacterStyle({ italic: !style.italic });
-        });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.font-family',
-      label: 'Font Family',
-      execute: (args) => {
-        if (this.mode !== 'text' || !args?.fontFamily) return;
-        this.submitAction('Change Font', () => {
-          if (!this.editor.hasSelection()) {
-            this.editor.applyCharacterStyleToCurrentParagraph({ fontFamily: args.fontFamily });
-          } else {
-            this.editor.applyCharacterStyle({ fontFamily: args.fontFamily });
+    // Register Standard Text Commands
+    registerTextCommands(shell, {
+      getEditor: () => this.editor,
+      submitAction: (label, fn) => {
+        this.submitAction(label, fn);
+        this.container.focus();
+      },
+      applyFontSize: (size) => {
+        this._fontSize = size;
+        if (this.editor) {
+          const pi = this.editor.cursor.paraIndex;
+          if (this.editor.paragraphStyles && this.editor.paragraphStyles[pi]) {
+            this.editor.paragraphStyles[pi].fontSize = size;
           }
-        });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.font-size',
-      label: 'Font Size',
-      execute: (args) => {
-        if (this.mode !== 'text' || !args?.fontSize) return;
-        this.submitAction('Change Font Size', () => {
-           const currentParaIndex = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
-           this.editor.paragraphStyles[currentParaIndex].fontSize = args.fontSize;
-        });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.line-height',
-      label: 'Line Height',
-      execute: (args) => {
-        if (this.mode !== 'text' || !args?.lineHeight) return;
-        this.submitAction('Change Line Height', () => {
-           this._lineHeight = args.lineHeight;
-        });
+          if (!this.editor.hasSelection()) {
+            this.editor.applyCharacterStyleToCurrentParagraph({ fontSize: size });
+          } else {
+            this.editor.applyCharacterStyle({ fontSize: size });
+          }
+        }
+        this.update();
+      },
+      applyLineHeight: (lh) => {
+        this._lineHeight = lh;
+        this.update();
       }
     });
   }
@@ -1885,6 +1852,7 @@ export class SpreadEditorApp {
       const typingStyle = this.editor.getTypingStyle();
       const paraIndex = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
       const paraStyle = this.editor.paragraphStyles[paraIndex] || {};
+      console.log(`[DEBUG] getRibbonSections: paraIndex=${paraIndex}, paraStyle.fontSize=${paraStyle.fontSize}, this._fontSize=${this._fontSize}`);
       sections.push(
         TextTools.createTypographySection(this.shell, {
           fontFamily: typingStyle.fontFamily || 'EB Garamond',

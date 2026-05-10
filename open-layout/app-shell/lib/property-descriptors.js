@@ -113,6 +113,7 @@ export function renderPropertyGroups(groups, ui) {
 
     const section = document.createElement('div');
     section.className = 'property-group';
+    section.dataset.groupLabel = group.label;
 
     const heading = document.createElement('h4');
     heading.className = 'property-group-heading';

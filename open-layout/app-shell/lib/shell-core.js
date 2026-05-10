@@ -295,13 +295,21 @@ export class AppShell extends EventTarget {
     // 2. Iterate through new items and match
     items.forEach((newItem, index) => {
       // Identity can be ID or TagName + Label text (for sections/buttons)
-      const newItemLabel = newItem.getAttribute?.('label') || newItem.querySelector('.section-label')?.textContent;
-      const identity = newItem.id || (newItem.tagName + '-' + newItemLabel);
+      const newItemLabel = newItem.getAttribute?.('label') || 
+                           newItem.dataset?.groupLabel ||
+                           newItem.dataset?.propertyKey ||
+                           newItem.querySelector('.section-label')?.textContent ||
+                           newItem.querySelector('.property-group-heading')?.textContent;
+      const identity = newItem.id || (newItem.tagName + '-' + (newItemLabel || ''));
       
       const match = oldChildren.find(c => {
         if (usedOld.has(c)) return false;
-        const oldLabel = c.getAttribute?.('label') || c.querySelector('.section-label')?.textContent;
-        const oldIdentity = c.id || (c.tagName + '-' + oldLabel);
+        const oldLabel = c.getAttribute?.('label') || 
+                         c.dataset?.groupLabel ||
+                         c.dataset?.propertyKey ||
+                         c.querySelector('.section-label')?.textContent ||
+                         c.querySelector('.property-group-heading')?.textContent;
+        const oldIdentity = c.id || (c.tagName + '-' + (oldLabel || ''));
         return identity === oldIdentity;
       });
       
@@ -336,15 +344,24 @@ export class AppShell extends EventTarget {
    */
   _updateElement(target, source) {
     // Only update certain attributes to avoid resetting focus or state unintentionally
-    const attrsToSync = ['value', 'active', 'label', 'icon', 'placeholder', 'min', 'max', 'layout'];
+    const attrsToSync = ['value', 'active', 'label', 'icon', 'placeholder', 'min', 'max', 'layout', 'data-group-label', 'data-property-key', 'data-item-id', 'class'];
     attrsToSync.forEach(attr => {
       if (source.hasAttribute(attr)) {
         const val = source.getAttribute(attr);
         if (target.getAttribute(attr) !== val) {
           target.setAttribute(attr, val);
         }
+      } else if (target.hasAttribute(attr)) {
+        target.removeAttribute(attr);
       }
     });
+
+    // 2. Sync text content if it's a leaf node
+    if (source.children.length === 0 && target.children.length === 0) {
+      if (target.textContent !== source.textContent) {
+        target.textContent = source.textContent;
+      }
+    }
     
     // Special handling for Web Components if they expose properties mapping to attributes
     // ScribusInput and ScribusButton handle attribute changes via observedAttributes

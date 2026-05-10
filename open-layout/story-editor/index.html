@@ -312,6 +312,7 @@
       shell.registerPlugin(storyPlugin);
 
       let cursor = null;
+      let interaction = null;
 
       async function update() {
         const boxWidthInput = document.getElementById('box-width');
@@ -320,31 +321,14 @@
         const boxWidth = boxWidthInput ? +boxWidthInput.value : 1040;
         const lineHeightPct = lineHeightInput ? +lineHeightInput.value : 140;
 
-        // Properties Panel Sync
-        requestAnimationFrame(() => {
-          const fontSizeInput = document.getElementById('font-size');
-          const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
-          const currentStyle = editor.paragraphStyles[currentParaIndex] || defaultParagraphStyle('normal', defaultFontSize);
-          
-          if (fontSizeInput && fontSizeInput.value !== String(Math.round(currentStyle.fontSize))) {
-            fontSizeInput.value = String(Math.round(currentStyle.fontSize));
-          }
-        });
-
         const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
         const typingStyle = editor.getTypingStyle();
-        
+
+        // Update Legacy UI Status (if present)
         const currentParaEl = document.getElementById('current-para');
         if (currentParaEl) currentParaEl.textContent = String(currentParaIndex + 1);
-        
         const selectionStatusEl = document.getElementById('selection-status');
         if (selectionStatusEl) selectionStatusEl.textContent = editor.hasSelection() ? 'Active' : 'None';
-
-        // Update Ribbon active states (some might be handled by shell, but font buttons need this)
-        const toggleBoldBtn = document.getElementById('toggle-bold');
-        const toggleItalicBtn = document.getElementById('toggle-italic');
-        if (toggleBoldBtn) toggleBoldBtn.toggleAttribute('active', !!typingStyle.bold);
-        if (toggleItalicBtn) toggleItalicBtn.toggleAttribute('active', !!typingStyle.italic);
 
         // Layout Boxes
         const box1Width = boxWidth * 0.44;
@@ -381,13 +365,18 @@
           cursor.setVisible(!editor.hasSelection());
 
           // Initialize interaction controller once cursor exists
-          new TextInteractionController({
+          interaction = new TextInteractionController({
             container,
             editor,
             cursor,
             update: () => update(),
             submitAction: (label, fn, opType) => storyPlugin.submitAction(label, fn, opType)
           });
+        }
+
+        // Notify shell to refresh properties panel and ribbon
+        if (shell && shell.requestUpdate) {
+          shell.requestUpdate();
         }
       }
 

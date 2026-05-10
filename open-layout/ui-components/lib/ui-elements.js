@@ -82,7 +82,9 @@ export class ScribusButton extends HTMLElement {
  * ScribusInput - Standard labeled input field.
  */
 export class ScribusInput extends HTMLElement {
-  static get observedAttributes() { return ['label', 'value', 'placeholder', 'type', 'min', 'max', 'layout', 'no-focus']; }
+  static get observedAttributes() {
+    return ['label', 'value', 'type', 'placeholder', 'min', 'max', 'step', 'layout', 'no-focus'];
+  }
 
   constructor() {
     super();
@@ -91,10 +93,6 @@ export class ScribusInput extends HTMLElement {
 
   connectedCallback() {
     this.render();
-  }
-
-  static get observedAttributes() {
-    return ['label', 'value', 'type', 'placeholder', 'min', 'max', 'step', 'layout'];
   }
 
   attributeChangedCallback(name, oldVal, newVal) {

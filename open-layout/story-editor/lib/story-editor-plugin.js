@@ -5,6 +5,7 @@ import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { parseHtmlToStory } from './html-paste-parser.js';
 import { serializeStory, putJson, updateDocTimestamp } from '../../document-store/lib/document-store.js';
 import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
+import { registerTextCommands } from '../../app-shell/lib/text-commands.js';
 
 /**
  * StoryEditorPlugin - Adapts the Story Editor logic to the Scribus App Shell.
@@ -83,66 +84,12 @@ export class StoryEditorPlugin {
       });
     });
 
-    // Register Commands (Standardized to text.*)
-    shell.commands.register({
-      id: 'text.bold',
-      label: 'Bold',
-      icon: '<b>B</b>',
-      execute: () => {
-        const style = this.editor.getTypingStyle();
-        this.submitAction('Toggle Bold', () => {
-          this.editor.applyCharacterStyle({ bold: !style.bold });
-          this.container.focus();
-        });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.italic',
-      label: 'Italic',
-      icon: '<i>I</i>',
-      execute: () => {
-        const style = this.editor.getTypingStyle();
-        this.submitAction('Toggle Italic', () => {
-          this.editor.applyCharacterStyle({ italic: !style.italic });
-          this.container.focus();
-        });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.font-family',
-      label: 'Font Family',
-      execute: (args) => {
-        if (!args || !args.fontFamily) return;
-        this.updateTypingStyle({ fontFamily: args.fontFamily });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.font-size',
-      label: 'Font Size',
-      execute: (args) => {
-        if (!args || !args.fontSize) return;
-        this.submitAction('Change Font Size', () => {
-          const pi = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
-          this.paragraphStyles[pi].fontSize = Number(args.fontSize);
-          this.container.focus();
-        });
-      }
-    });
-
-    shell.commands.register({
-      id: 'text.line-height',
-      label: 'Line Height',
-      execute: (args) => {
-        if (!args || !args.lineHeight) return;
-        this.submitAction('Change Line Height', () => {
-          // In this simple demo, we store global line height for the whole story
-          // but we could make it per-paragraph. For now we just trigger update.
-          window.dispatchEvent(new CustomEvent('line-height-changed', { detail: args.lineHeight }));
-          this.container.focus();
-        });
+    // Register Standard Text Commands
+    registerTextCommands(shell, {
+      getEditor: () => this.editor,
+      submitAction: (label, fn) => {
+        this.submitAction(label, fn);
+        this.container.focus();
       }
     });
 

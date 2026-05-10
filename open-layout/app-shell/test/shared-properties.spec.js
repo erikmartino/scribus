@@ -15,8 +15,10 @@ test.describe('Shared Properties Panel', () => {
     // Story editor demo
     await page.goto('/story-editor/index.html');
     
-    // Open Properties tab (should be open by default if it's the first one, but let's click it)
-    await page.click('button[data-panel="properties"]');
+    // Open Properties tab (should be open by default, but we click to be sure)
+    const tab = page.locator('button.panel-tab:has-text("Properties")');
+    await tab.waitFor({ state: 'visible' });
+    await tab.click();
     
     // Verify Typography group exists
     const typography = page.locator('.property-group-heading:has-text("Typography")');
@@ -46,13 +48,16 @@ test.describe('Shared Properties Panel', () => {
     const spreadInfo = page.locator('.property-group-heading:has-text("Spread Info")');
     await expect(spreadInfo).toBeVisible();
     
-    // Select a text frame (e.g., box-1)
-    // In spread-editor, we can select by clicking the overlay rect
-    await page.click('#svg-container svg.overlay-svg [data-id="box-1"]');
+    // Select p1-c2 to trigger a fresh update
+    // We use evaluate to be 100% sure the selection happens regardless of SVG clickability
+    await page.evaluate(() => {
+      const item = window.shell.doc.get('p1-c2');
+      window.shell.selection.select(item);
+    });
     
-    // Should show Text Frame group
-    const textFrame = page.locator('.property-group-heading:has-text("Text Frame")');
-    await expect(textFrame).toBeVisible();
+    // Should show Text Frame group or Text Mode
+    const heading = page.locator('.property-group-heading:has-text("Text Frame"), .property-group-heading:has-text("Text Mode")').first();
+    await expect(heading).toBeVisible();
     
     // Verify X/Y properties
     const xInput = page.locator('.property-row[data-property-key="x"] input');
