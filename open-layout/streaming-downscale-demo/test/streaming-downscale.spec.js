@@ -67,12 +67,15 @@ function makePng(w, h, pixelFn) {
 }
 
 // Fixture file paths
-const RED_4x4 = path.join(FIXTURE_DIR, 'fixture-4x4-red.png');
-const CHECKER_8x8 = path.join(FIXTURE_DIR, 'fixture-8x8-checker.png');
-
 test.describe('Streaming Downscale Demo', () => {
+  const workerIndex = process.env.TEST_WORKER_INDEX || '0';
+  const WORKER_DIR = path.join(FIXTURE_DIR, `worker-${workerIndex}`);
+  const RED_4x4 = path.join(WORKER_DIR, 'fixture-4x4-red.png');
+  const CHECKER_8x8 = path.join(WORKER_DIR, 'fixture-8x8-checker.png');
+
   // Generate PNG fixtures before the suite runs (avoids gitignore issues)
   test.beforeAll(async () => {
+    fs.mkdirSync(WORKER_DIR, { recursive: true });
     fs.writeFileSync(RED_4x4, makePng(4, 4, () => [255, 0, 0, 255]));
     fs.writeFileSync(CHECKER_8x8, makePng(8, 8, (x, y) =>
       (x + y) % 2 === 0 ? [255, 0, 0, 255] : [0, 0, 255, 255]
@@ -80,9 +83,8 @@ test.describe('Streaming Downscale Demo', () => {
   });
 
   test.afterAll(async () => {
-    // Clean up generated fixtures
-    try { fs.unlinkSync(RED_4x4); } catch { /* ignore */ }
-    try { fs.unlinkSync(CHECKER_8x8); } catch { /* ignore */ }
+    // Clean up worker-specific fixture directory
+    try { fs.rmSync(WORKER_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
   test.beforeEach(async ({ page }) => {
@@ -259,13 +261,16 @@ test.describe('Streaming Downscale Demo', () => {
     // can serve.
 
     // Generate a fresh fixture that the server can serve
-    const servablePath = path.join(FIXTURE_DIR, '..', 'test-serve.png');
+    const workerIndex = process.env.TEST_WORKER_INDEX || '0';
+    const servableDir = path.join(FIXTURE_DIR, '..', `worker-serve-${workerIndex}`);
+    const servablePath = path.join(servableDir, 'test-serve.png');
+    fs.mkdirSync(servableDir, { recursive: true });
     fs.writeFileSync(servablePath, makePng(8, 8, (x, y) =>
       (x + y) % 2 === 0 ? [255, 0, 0, 255] : [0, 0, 255, 255]
     ));
 
     try {
-      await urlInput.fill('/streaming-downscale-demo/test-serve.png');
+      await urlInput.fill(`/streaming-downscale-demo/worker-serve-${workerIndex}/test-serve.png`);
       await page.locator('#start-btn').click();
 
       await expect(page.locator('#status')).toHaveText(/Done/, { timeout: 15000 });
@@ -275,7 +280,7 @@ test.describe('Streaming Downscale Demo', () => {
       await expect(page.locator('#stat-src')).toHaveText('8 × 8');
       await expect(page.locator('#stat-out')).toHaveText('4 × 4');
     } finally {
-      try { fs.unlinkSync(servablePath); } catch { /* ignore */ }
+      try { fs.rmSync(servableDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   });
 
