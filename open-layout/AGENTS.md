@@ -39,7 +39,9 @@ It is written to be followed by Codex, Claude, and Gemini style agents.
      New modules must follow the same convention (`{module}/test/test-*.js`)
      to be picked up automatically.
    - **E2E tests:** Run `npm run test:e2e` (or `npx playwright test`) for
-     Playwright browser tests.
+     Playwright browser tests. Tests must be **parallel-safe** (e.g., by
+     using unique worker-specific directories or filenames for fixtures to
+     avoid filesystem race conditions during concurrent runs).
    - If changes are docs-only, tests are optional.
 
 4. Be safe with git.
