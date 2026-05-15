@@ -281,7 +281,7 @@ export class AppShell extends EventTarget {
       this._renderLayersPanel(fragment, selected);
     }
 
-    this._reconcileDOM(contentWrapper, fragment);
+    this._reconcileDOM(contentWrapper, Array.from(fragment.children));
   }
 
   _reconcileDOM(container, newItems) {
@@ -397,7 +397,10 @@ export class AppShell extends EventTarget {
     }
 
     if (!hasDescriptors && container.children.length === 0) {
-      container.innerHTML = '<span class="panel-empty">Select an object to inspect.</span>';
+      const span = document.createElement('span');
+      span.className = 'panel-empty';
+      span.textContent = 'Select an object to inspect.';
+      container.appendChild(span);
     }
   }
 
@@ -707,6 +710,7 @@ const shell = new AppShell();
 
 // Register on window for components to access (Command Palette, etc)
 window.scribusShell = shell;
+window.shell = shell; // For backward compatibility with tests
 
 // Register System Plugin
 shell.registerPlugin(new SystemPlugin());

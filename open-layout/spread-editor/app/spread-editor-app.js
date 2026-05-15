@@ -1880,7 +1880,8 @@ export class SpreadEditorApp {
 
   getPanelDescriptors(selected) {
     const descriptors = [];
-    const activeBox = selected && selected.length > 0 ? selected[0] : null;
+    const item = Array.isArray(selected) ? selected[0] : (selected || null);
+    const activeBox = item?.data || item;
 
     if (this.mode === 'text' && this.editor) {
       // Text Editing Mode
@@ -1900,7 +1901,9 @@ export class SpreadEditorApp {
         lineHeight: this._lineHeight 
       });
       descriptors.push(...textGroups);
-    } else if (activeBox) {
+    }
+    
+    if (activeBox) {
       // Object Selection Mode
       const isImage = this.imageBoxes.some(b => b.id === activeBox.id);
 

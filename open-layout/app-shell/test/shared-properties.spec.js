@@ -42,7 +42,7 @@ test.describe('Shared Properties Panel', () => {
     await page.goto('/spread-editor/index.html');
     
     // Open Properties tab
-    await page.click('button[data-panel="properties"]');
+    await page.click('button[data-panel-id="properties"]');
     
     // By default, no box is selected (or Spread Info is shown)
     const spreadInfo = page.locator('.property-group-heading:has-text("Spread Info")');
@@ -68,7 +68,9 @@ test.describe('Shared Properties Panel', () => {
     await xInput.press('Enter');
     
     // Double click to enter text mode
-    await page.dblclick('#svg-container svg.overlay-svg [data-id="box-1"]');
+    // Use double-click on the overlay rect which handles interaction
+    // Ensure we wait for the element to be ready and stable
+    await page.dblclick('#svg-container svg.overlay-svg [data-id="p1-c2"]');
     
     // Properties should now show Typography/Paragraph
     const typography = page.locator('.property-group-heading:has-text("Typography")');

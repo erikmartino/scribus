@@ -73,6 +73,7 @@ export function drawBoxOverlay(overlaySvg, { boxes, selectedBoxId, stories, link
     const frame = document.createElementNS(SVG_NS, 'rect');
     frame.classList.add('box-rect');
     frame.dataset.boxId = box.id;
+    frame.dataset.id = box.id;
     frame.dataset.handle = 'body';
     frame.setAttribute('x', String(tl.x));
     frame.setAttribute('y', String(tl.y));

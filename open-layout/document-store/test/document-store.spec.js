@@ -84,10 +84,10 @@ test.describe('Document Inspector', () => {
     await expect(body).toContainText('story-main');
 
     // Should show paragraph count
-    await expect(body).toContainText('3 paragraph(s)');
+    await expect(body).toContainText('4 paragraph(s)');
 
     // Should show text preview
-    await expect(body).toContainText('Typography Sampler');
+    await expect(body).toContainText('Typography is the craft');
   });
 
   test('Paragraph Styles section shows style properties', async ({ page }) => {
