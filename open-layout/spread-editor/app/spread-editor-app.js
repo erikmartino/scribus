@@ -574,12 +574,30 @@ export class SpreadEditorApp {
             this.editor.applyCharacterStyle({ fontSize: size });
           }
         }
-        this.update();
+        // Coalesce rapid calls (e.g. 60fps slider drag) into one layout pass
+        // per animation frame to avoid concurrent renderToContainer races that
+        // mutate container.innerHTML and can trigger pointercancel in Chrome.
+        this._scheduleStyleUpdate();
       },
       applyLineHeight: (lh) => {
         this._lineHeight = lh;
-        this.update();
+        this._scheduleStyleUpdate();
       }
+    });
+  }
+
+  /**
+   * Coalesce rapid style-change updates (e.g. from a 60fps slider drag) into
+   * a single layout pass per animation frame. Without this, concurrent
+   * renderToContainer calls each clear container.innerHTML, which can trigger
+   * a pointercancel event on the active range input in Chrome, aborting the
+   * native drag.
+   */
+  _scheduleStyleUpdate() {
+    if (this._styleUpdateRaf) return;
+    this._styleUpdateRaf = requestAnimationFrame(() => {
+      this._styleUpdateRaf = null;
+      this.update();
     });
   }
 
@@ -1870,7 +1888,6 @@ export class SpreadEditorApp {
       const typingStyle = this.editor.getTypingStyle();
       const paraIndex = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
       const paraStyle = this.editor.paragraphStyles[paraIndex] || {};
-      console.log(`[DEBUG] getRibbonSections: paraIndex=${paraIndex}, paraStyle.fontSize=${paraStyle.fontSize}, this._fontSize=${this._fontSize}`);
       sections.push(
         TextTools.createTypographySection(this.shell, {
           fontFamily: typingStyle.fontFamily || 'EB Garamond',

@@ -56,6 +56,62 @@ test.describe('Ribbon Bar Interactions', () => {
     expect(Number(finalValue)).toBeGreaterThan(Number(initialValue));
   });
 
+  test('Font Size slider drag tracks value across many intermediate steps', async ({ page }) => {
+    // Regression: concurrent update() cycles during rapid applyFontSize calls
+    // were resetting the slider value to the minimum (1) mid-drag via attribute
+    // reconciliation (_updateElement removing or replacing the value attribute).
+    // This test directly fires input events on the shadow-DOM range input and
+    // arms/disarms the _dragging guard to simulate what mousedown/mouseup do,
+    // because Playwright's synthetic mouse drag does not reliably fire native
+    // input events on range inputs in headless Chromium.
+    const firstBox = page.locator('svg.overlay-svg rect[data-box-id]').first();
+    await firstBox.dblclick();
+
+    const sizeSlider = page.locator('scribus-input#font-size input[type="range"]');
+    await expect(sizeSlider).toBeVisible();
+
+    const initialValue = Number(await sizeSlider.inputValue());
+
+    // Simulate a drag: arm _dragging, fire 20 input events with increasing values,
+    // then disarm. Yields between steps so rAF update() cycles can run and attempt
+    // to reset the slider — the _dragging guard must prevent them from doing so.
+    const finalFontSize = await page.evaluate(async (init) => {
+      const host = document.querySelector('scribus-input#font-size');
+      const input = host?.shadowRoot?.getElementById('input');
+      if (!host || !input) return null;
+
+      host._dragging = true; // arm guard (mirrors mousedown handler)
+
+      const min = Number(input.min) || 1;
+      const max = Number(input.max) || 200;
+      const target = min + Math.round((max - min) * 0.8); // 80% of range
+      const steps = 20;
+
+      for (let i = 1; i <= steps; i++) {
+        const v = Math.round(init + (target - init) * (i / steps));
+        input.value = String(v);
+        // Dispatch native input event; ScribusInput's listener will forward it
+        // as a custom change event → applyFontSize → _scheduleStyleUpdate.
+        input.dispatchEvent(new Event('input', { bubbles: false }));
+        // Yield so rAF-driven update() cycles run and can attempt a reset.
+        await new Promise(r => setTimeout(r, 20));
+      }
+
+      host._dragging = false; // release (mirrors mouseup handler)
+      return Number(input.value);
+    }, initialValue);
+
+    await page.waitForTimeout(200); // let final layout settle
+
+    const sliderValue = Number(await sizeSlider.inputValue());
+    console.log(`Drag test: ${initialValue} → ${sliderValue}`);
+
+    // Dragging to 80% of the range (max 200) must land well above the initial value
+    expect(sliderValue).toBeGreaterThan(initialValue + 20);
+    // The value must NOT have been reset to the minimum (1) during the drag
+    expect(sliderValue).not.toBe(1);
+  });
+
   test('Font Size label has fixed width prevent jumping', async ({ page }) => {
     const firstBox = page.locator('svg.overlay-svg rect[data-box-id]').first();
     await firstBox.dblclick();

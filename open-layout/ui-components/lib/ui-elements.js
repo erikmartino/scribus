@@ -113,6 +113,9 @@ export class ScribusInput extends HTMLElement {
       // it — the drag is tracked by the browser using the current DOM value, so
       // setting input.value externally during a drag resets the thumb position.
       if (input.type === 'range' && this._dragging) return;
+      // Guard against null (attribute removed): setting input.value = null
+      // gets clamped to min on range inputs, resetting the thumb to 1.
+      if (val === null || val === undefined) return;
       if (input.value !== val) {
         input.value = val;
         this._updateDisplay();
@@ -261,22 +264,31 @@ export class ScribusInput extends HTMLElement {
     const updateDisplay = () => this._updateDisplay();
     updateDisplay();
 
+    if (type === 'range') {
+      // Set _dragging on mousedown so that attribute reconciliation from
+      // concurrent update() calls cannot reset the slider value mid-drag.
+      // Using mousedown (not pointerdown) because Playwright's synthetic
+      // page.mouse.down() reliably fires mousedown on shadow-DOM inputs.
+      // Clear via window mouseup/pointerup so release outside the element works.
+      input.addEventListener('mousedown', () => {
+        this._dragging = true;
+        const clearDragging = () => { this._dragging = false; };
+        window.addEventListener('mouseup',    clearDragging, { once: true });
+        window.addEventListener('pointerup',  clearDragging, { once: true });
+        window.addEventListener('pointercancel', clearDragging, { once: true });
+      });
+    }
+
     input.addEventListener('input', (e) => {
       updateDisplay();
       if (type === 'range') {
-        this.dispatchEvent(new CustomEvent('change', { 
+        this.dispatchEvent(new CustomEvent('change', {
           detail: e.target.value,
           bubbles: true,
           composed: true
         }));
       }
     });
-
-    if (type === 'range') {
-      input.addEventListener('pointerdown', () => { this._dragging = true; });
-      input.addEventListener('pointerup', () => { this._dragging = false; });
-      input.addEventListener('pointercancel', () => { this._dragging = false; });
-    }
 
     input.addEventListener('change', (e) => {
       if (type !== 'range') {
