@@ -574,9 +574,17 @@ export class SpreadEditorApp {
             this.editor.applyCharacterStyle({ fontSize: size });
           }
         }
-        // Coalesce rapid calls (e.g. 60fps slider drag) into one layout pass
-        // per animation frame to avoid concurrent renderToContainer races that
-        // mutate container.innerHTML and can trigger pointercancel in Chrome.
+        // While the slider thumb is being dragged, skip the full layout rebuild.
+        // renderToContainer clears container.innerHTML which causes visible
+        // flashing and layout reflows that shift the slider's viewport position,
+        // corrupting Chrome's native drag position calculation.
+        // Instead, defer a single update for after the drag ends.
+        const slider = this.shell?.ribbonContainer?.querySelector('scribus-input#font-size');
+        if (slider?._dragging) {
+          clearTimeout(this._fontSizeDragTimer);
+          this._fontSizeDragTimer = setTimeout(() => this._scheduleStyleUpdate(), 200);
+          return;
+        }
         this._scheduleStyleUpdate();
       },
       applyLineHeight: (lh) => {

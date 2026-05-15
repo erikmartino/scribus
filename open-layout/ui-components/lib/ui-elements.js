@@ -255,7 +255,6 @@ export class ScribusInput extends HTMLElement {
         placeholder="${placeholder}"
         ${min ? `min="${min}"` : ''}
         ${max ? `max="${max}"` : ''}
-        onmousedown="if (this.type === 'range' && this.getRootNode().host.hasAttribute('no-focus')) event.preventDefault()"
       >
     `;
 
