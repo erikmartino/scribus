@@ -990,13 +990,9 @@ export class SpreadEditorApp {
       this.boxes = [...this.boxes, box];
       this._stories = [...this._stories, newStoryEntry];
       this.selectedBoxId = boxId;
-      // Activate the new story and enter text mode with cursor ready
       this._activeStory = newStoryEntry;
-      if (this._textInteraction) {
-        this._textInteraction.setEditor(newStoryEntry.editor);
-      }
-      newStoryEntry.editor.moveCursor({ paraIndex: 0, charOffset: 0 });
-      this.setMode('text');
+      // Select the new box in object mode; the user double-clicks to edit.
+      this.setMode('object');
     });
   }
 
@@ -1445,9 +1441,10 @@ export class SpreadEditorApp {
           const isTextContent = target?.closest &&
             (target.closest('#text-selection') || target.closest('#text-cursor') ||
              target.closest('text'));
-          if (isTextContent) return;
 
-          // Check if click point is geometrically inside a text box
+          // For text content clicks and geometric hits alike, check whether
+          // the click lands inside a different story's box and switch story
+          // before letting TextInteractionController place the cursor.
           const pt = this._interaction._toSvgPoint(e);
           if (pt) {
             const hitBox = this.boxes.find(b =>
@@ -1455,10 +1452,6 @@ export class SpreadEditorApp {
               pt.y >= b.y && pt.y <= b.y + b.height
             );
             if (hitBox) {
-              // If the clicked box has no rendered lines (empty linked
-              // frame), place the cursor at the end of its story instead
-              // of letting TextInteractionController do a geometric
-              // nearest-line lookup into a different frame.
               const storyEntry = this._findStoryForBox(hitBox.id);
               const storyLineMap = storyEntry?.lineMap || [];
               const boxHasLines = storyLineMap.some(line =>
@@ -1466,8 +1459,10 @@ export class SpreadEditorApp {
                 Math.abs(line.boxY - hitBox.y) < 1
               );
               if (!boxHasLines && storyEntry) {
+                // Empty box: place cursor at end of story.
                 e.stopImmediatePropagation();
                 this._activateStoryForBox(hitBox.id);
+                this.selectedBoxId = hitBox.id;
                 const ed = storyEntry.editor;
                 const lastPara = ed.story.length - 1;
                 const lastParaText = ed.story[lastPara]
@@ -1479,9 +1474,24 @@ export class SpreadEditorApp {
                 await this.update();
                 return;
               }
+              if (storyEntry && storyEntry !== this._activeStory) {
+                // Box with lines belonging to a different story: activate it
+                // first so TextInteractionController uses the correct line map.
+                e.stopImmediatePropagation();
+                this._activateStoryForBox(hitBox.id);
+                this.selectedBoxId = hitBox.id;
+                if (this._textInteraction) {
+                  await this._textInteraction._handlePointerDown(e);
+                }
+                return;
+              }
+              // Same story — let TextInteractionController handle it.
+              if (isTextContent) return;
               return;
             }
           }
+
+          if (isTextContent) return;
         }
         if (this.mode === 'text' || this.selectedBoxId) {
           this.selectedBoxId = null;
@@ -1497,10 +1507,6 @@ export class SpreadEditorApp {
         // Prevent dragging the box body when in text mode
         // (TextInteractionController handles internal text dragging instead)
         if (this.mode === 'text' && handle === 'body') {
-          // If the clicked box has no rendered lines, intercept the
-          // click and place the cursor at the end of the story rather
-          // than letting TextInteractionController map it to the
-          // geometrically nearest line in another frame.
           const clickedBox = this.boxes.find(b => b.id === boxId);
           if (clickedBox) {
             const storyEntry = this._findStoryForBox(boxId);
@@ -1510,6 +1516,7 @@ export class SpreadEditorApp {
               Math.abs(line.boxY - clickedBox.y) < 1
             );
             if (!boxHasLines && storyEntry) {
+              // Empty box: intercept and place cursor at end of story.
               e.stopImmediatePropagation();
               this._activateStoryForBox(boxId);
               this.selectedBoxId = boxId;
@@ -1522,6 +1529,17 @@ export class SpreadEditorApp {
                 charOffset: lastParaText.length,
               });
               await this.update();
+              return;
+            }
+            if (storyEntry && storyEntry !== this._activeStory) {
+              // Box with lines belonging to a different story: activate it
+              // first so TextInteractionController uses the correct line map.
+              e.stopImmediatePropagation();
+              this._activateStoryForBox(boxId);
+              this.selectedBoxId = boxId;
+              if (this._textInteraction) {
+                await this._textInteraction._handlePointerDown(e);
+              }
               return;
             }
           }

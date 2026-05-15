@@ -109,6 +109,10 @@ export class ScribusInput extends HTMLElement {
     const label = this.shadowRoot.querySelector('label');
     
     if (name === 'value' && input) {
+      // Don't overwrite the value of a range input while the user is dragging
+      // it — the drag is tracked by the browser using the current DOM value, so
+      // setting input.value externally during a drag resets the thumb position.
+      if (input.type === 'range' && this._dragging) return;
       if (input.value !== val) {
         input.value = val;
         this._updateDisplay();
@@ -267,6 +271,12 @@ export class ScribusInput extends HTMLElement {
         }));
       }
     });
+
+    if (type === 'range') {
+      input.addEventListener('pointerdown', () => { this._dragging = true; });
+      input.addEventListener('pointerup', () => { this._dragging = false; });
+      input.addEventListener('pointercancel', () => { this._dragging = false; });
+    }
 
     input.addEventListener('change', (e) => {
       if (type !== 'range') {

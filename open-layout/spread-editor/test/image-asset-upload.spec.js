@@ -38,12 +38,12 @@ test.describe('Image Asset Upload', () => {
   let testDocSlug;
   let testDocDir;
 
-  test.beforeEach(async ({ page, request }) => {
+  test.beforeEach(async ({ page, request }, testInfo) => {
     page.on('console', msg => console.log(`BROWSER [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', err => console.error(`BROWSER [error]: ${err.message}`));
 
     // Create a unique test document from the demo template
-    testDocSlug = `test-asset-${Date.now()}`;
+    testDocSlug = `test-asset-w${testInfo.workerIndex}-${Date.now()}`;
     testDocDir = path.join(STORE_DIR, USER, testDocSlug);
 
     const res = await request.post(`/store/${USER}/${testDocSlug}`, {

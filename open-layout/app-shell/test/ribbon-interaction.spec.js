@@ -9,14 +9,17 @@ test.describe('Ribbon Bar Interactions', () => {
     page.on('pageerror', err => {
       console.error(`BROWSER [error]: ${err.message}`);
     });
+
+    await page.goto('/spread-editor/index.html');
+    await page.waitForSelector('scribus-app-shell:defined');
+    const statusEl = page.locator('#status');
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
   });
 
   test('Changing Font Size slider in Spread Editor is stable and connected', async ({ page }) => {
-    await page.goto('/spread-editor/index.html');
-    
     // Double click the text frame to enter text mode
-    // We'll use a coordinate that hits the Typography Sampler box
-    await page.mouse.dblclick(200, 300);
+    const firstBox = page.locator('svg.overlay-svg rect[data-box-id]').first();
+    await firstBox.dblclick();
     
     // Wait for the ribbon slider to appear
     const sizeSlider = page.locator('scribus-input#font-size input[type="range"]');
@@ -54,8 +57,8 @@ test.describe('Ribbon Bar Interactions', () => {
   });
 
   test('Font Size label has fixed width prevent jumping', async ({ page }) => {
-    await page.goto('/spread-editor/index.html');
-    await page.mouse.dblclick(200, 300);
+    const firstBox = page.locator('svg.overlay-svg rect[data-box-id]').first();
+    await firstBox.dblclick();
     
     const valDisplay = page.locator('scribus-input#font-size .val');
     await expect(valDisplay).toBeVisible();
@@ -75,8 +78,6 @@ test.describe('Ribbon Bar Interactions', () => {
   });
 
   test('Adjusting Font Size via number input spinner in sidebar is stable for ribbon', async ({ page }) => {
-    await page.goto('/spread-editor/index.html');
-    
     // Double click to enter text mode
     const firstBox = page.locator('svg.overlay-svg rect[data-box-id]').first();
     await firstBox.dblclick();

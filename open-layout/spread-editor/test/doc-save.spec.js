@@ -10,7 +10,7 @@ test.describe('Document Save', () => {
   let testDocSlug;
   let testDocDir;
 
-  test.beforeEach(async ({ page, request }) => {
+  test.beforeEach(async ({ page, request }, testInfo) => {
     page.on('console', msg => {
       console.log(`BROWSER [${msg.type()}]: ${msg.text()}`);
     });
@@ -19,7 +19,7 @@ test.describe('Document Save', () => {
     });
 
     // Create a unique test document via the POST copy endpoint
-    testDocSlug = `test-save-${Date.now()}`;
+    testDocSlug = `test-save-w${testInfo.workerIndex}-${Date.now()}`;
     testDocDir = path.join(STORE_DIR, USER, testDocSlug);
 
     const res = await request.post(`/store/${USER}/${testDocSlug}`, {

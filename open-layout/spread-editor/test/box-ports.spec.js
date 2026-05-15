@@ -174,33 +174,11 @@ test.describe('Text Frame Ports and Overflow', () => {
     });
     expect(newBoxId).not.toBeNull();
 
-    // Double-click to enter text mode on the new frame
-    const svgBox = await page.locator('#svg-container svg.content-svg').boundingBox();
-    const svgViewBox = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg.content-svg');
-      const vb = svg.viewBox.baseVal;
-      return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
-    });
-    const newBox = await page.evaluate((boxId) => {
-      const svg = document.querySelector('#svg-container svg.overlay-svg');
-      const r = svg.querySelector(`[data-box-id="${boxId}"][data-handle="body"]`);
-      return {
-        x: parseFloat(r.getAttribute('x')),
-        y: parseFloat(r.getAttribute('y')),
-        width: parseFloat(r.getAttribute('width')),
-        height: parseFloat(r.getAttribute('height'))
-      };
-    }, newBoxId);
-
-    const scaleX = svgBox.width / svgViewBox.width;
-    const scaleY = svgBox.height / svgViewBox.height;
-    const clickX = svgBox.x + (newBox.x - svgViewBox.x + newBox.width / 2) * scaleX;
-    const clickY = svgBox.y + (newBox.y - svgViewBox.y + newBox.height / 2) * scaleY;
-
-    // First click: select, second click: enter text mode
-    await page.mouse.click(clickX, clickY);
+    // Click the overlay element directly to enter text mode
+    const boxEl = page.locator(`[data-box-id="${newBoxId}"][data-handle="body"]`);
+    await boxEl.click();
     await page.waitForTimeout(200);
-    await page.mouse.click(clickX, clickY);
+    await boxEl.click();
     await page.waitForTimeout(500);
 
     // Type enough text to overflow the small 200x150 frame

@@ -124,45 +124,24 @@ test.describe('Spread Editor Create Menu', () => {
     await textFrameItem.click();
     await page.waitForTimeout(500);
 
-    // Find the new frame's box overlay (starts with "text-")
-    const newBoxRect = await page.evaluate(() => {
+    // Find the new frame's box overlay element (starts with "text-")
+    const newBoxId = await page.evaluate(() => {
       const svg = document.querySelector('#svg-container svg.overlay-svg');
       const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
       for (const r of rects) {
-        if (r.dataset.boxId.startsWith('text-')) {
-          return {
-            boxId: r.dataset.boxId,
-            x: parseFloat(r.getAttribute('x')),
-            y: parseFloat(r.getAttribute('y')),
-            width: parseFloat(r.getAttribute('width')),
-            height: parseFloat(r.getAttribute('height'))
-          };
-        }
+        if (r.dataset.boxId.startsWith('text-')) return r.dataset.boxId;
       }
       return null;
     });
-    expect(newBoxRect).not.toBeNull();
+    expect(newBoxId).not.toBeNull();
 
-    // Convert SVG coordinates to screen coordinates and click twice
-    // (first click selects, second click enters text mode)
-    const svgBox = await page.locator('#svg-container svg.content-svg').boundingBox();
-    const svgViewBox = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg.content-svg');
-      const vb = svg.viewBox.baseVal;
-      return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
-    });
-
-    const scaleX = svgBox.width / svgViewBox.width;
-    const scaleY = svgBox.height / svgViewBox.height;
-    const clickX = svgBox.x + (newBoxRect.x - svgViewBox.x + newBoxRect.width / 2) * scaleX;
-    const clickY = svgBox.y + (newBoxRect.y - svgViewBox.y + newBoxRect.height / 2) * scaleY;
-
-    // First click: select the box
-    await page.mouse.click(clickX, clickY);
+    // Click the overlay element directly — first click selects (box already
+    // selected after creation so wasAlreadySelected=true → enters text mode),
+    // second click confirms cursor placement in text mode.
+    const boxEl = page.locator(`[data-box-id="${newBoxId}"][data-handle="body"]`);
+    await boxEl.click();
     await page.waitForTimeout(200);
-
-    // Second click: enter text mode
-    await page.mouse.click(clickX, clickY);
+    await boxEl.click();
     await page.waitForTimeout(500);
 
     // Should be in text mode now
@@ -248,41 +227,21 @@ test.describe('Spread Editor Create Menu', () => {
     await textFrameItem.click();
     await page.waitForTimeout(500);
 
-    // Find the new frame and double-click to enter text mode
-    const newBoxRect = await page.evaluate(() => {
+    // Find the new frame's overlay element and click it to enter text mode
+    const newBoxId = await page.evaluate(() => {
       const svg = document.querySelector('#svg-container svg.overlay-svg');
       const rects = svg.querySelectorAll('[data-box-id][data-handle="body"]');
       for (const r of rects) {
-        if (r.dataset.boxId.startsWith('text-')) {
-          return {
-            boxId: r.dataset.boxId,
-            x: parseFloat(r.getAttribute('x')),
-            y: parseFloat(r.getAttribute('y')),
-            width: parseFloat(r.getAttribute('width')),
-            height: parseFloat(r.getAttribute('height'))
-          };
-        }
+        if (r.dataset.boxId.startsWith('text-')) return r.dataset.boxId;
       }
       return null;
     });
-    expect(newBoxRect).not.toBeNull();
+    expect(newBoxId).not.toBeNull();
 
-    const svgBox = await page.locator('#svg-container svg.content-svg').boundingBox();
-    const svgViewBox = await page.evaluate(() => {
-      const svg = document.querySelector('#svg-container svg.content-svg');
-      const vb = svg.viewBox.baseVal;
-      return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
-    });
-
-    const scaleX = svgBox.width / svgViewBox.width;
-    const scaleY = svgBox.height / svgViewBox.height;
-    const clickX = svgBox.x + (newBoxRect.x - svgViewBox.x + newBoxRect.width / 2) * scaleX;
-    const clickY = svgBox.y + (newBoxRect.y - svgViewBox.y + newBoxRect.height / 2) * scaleY;
-
-    // First click: select, second click: enter text mode
-    await page.mouse.click(clickX, clickY);
+    const boxEl = page.locator(`[data-box-id="${newBoxId}"][data-handle="body"]`);
+    await boxEl.click();
     await page.waitForTimeout(200);
-    await page.mouse.click(clickX, clickY);
+    await boxEl.click();
     await page.waitForTimeout(500);
 
     // Type text (ensure container has focus for keyboard events)

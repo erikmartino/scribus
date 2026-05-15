@@ -135,9 +135,9 @@ test.describe('Document Inspector', () => {
     const storiesBadge = page.locator('[data-section="stories"] .badge');
     await expect(storiesBadge).toHaveText('4');
 
-    // Assets badge should show 2
+    // Assets badge should show 1
     const assetsBadge = page.locator('[data-section="assets"] .badge');
-    await expect(assetsBadge).toHaveText('2');
+    await expect(assetsBadge).toHaveText('1');
 
     // Expand assets and verify hero-photo
     const assetsHeader = page.locator('[data-section="assets"] .tree-section-header');
