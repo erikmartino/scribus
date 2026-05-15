@@ -248,13 +248,14 @@ export class ScribusInput extends HTMLElement {
         ${label ? `<label>${label}</label>` : ''}
         <span class="val" id="val-display"></span>
       </div>
-      <input 
+      <input
         id="input"
-        type="${type}" 
-        value="${value}" 
+        type="${type}"
+        value="${value}"
         placeholder="${placeholder}"
         ${min ? `min="${min}"` : ''}
         ${max ? `max="${max}"` : ''}
+        onmousedown="if (this.type === 'range' && this.getRootNode().host.hasAttribute('no-focus')) event.preventDefault()"
       >
     `;
 
