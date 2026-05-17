@@ -653,12 +653,13 @@ export class SpreadEditorApp {
       shortcut: 'Ctrl+0',
     });
 
-    // Ctrl+scroll wheel zoom
+    // Ctrl+scroll wheel zoom (pinch on trackpad sends ctrlKey=true)
     this.container.addEventListener('wheel', (e) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
       const factor = e.deltaY < 0 ? this._zoomStep : 1 / this._zoomStep;
-      this.zoomBy(factor);
+      const rect = this.container.getBoundingClientRect();
+      this.zoomBy(factor, { x: e.clientX - rect.left, y: e.clientY - rect.top });
     }, { passive: false });
 
     // Keyboard zoom shortcuts (intercept globally to prevent browser zoom)
@@ -684,10 +685,25 @@ export class SpreadEditorApp {
   /**
    * Multiply the current zoom level by the given factor.
    * @param {number} factor - e.g. 1.1 to zoom in, 1/1.1 to zoom out
+   * @param {{ x: number, y: number }} [origin] - pointer position in container-relative
+   *   pixels; when provided the content under that point stays fixed after zoom.
    */
-  zoomBy(factor) {
-    this._zoom = Math.max(this._zoomMin, Math.min(this._zoomMax, this._zoom * factor));
-    this._applyZoom();
+  zoomBy(factor, origin) {
+    const oldZoom = this._zoom;
+    this._zoom = Math.max(this._zoomMin, Math.min(this._zoomMax, oldZoom * factor));
+    const actualFactor = this._zoom / oldZoom;
+
+    if (origin && actualFactor !== 1) {
+      // Content pixel under origin before zoom: scrollOffset + originInViewport
+      const contentX = this.container.scrollLeft + origin.x;
+      const contentY = this.container.scrollTop + origin.y;
+      this._applyZoom();
+      // Shift scroll so the same content pixel is back under origin
+      this.container.scrollLeft = contentX * actualFactor - origin.x;
+      this.container.scrollTop = contentY * actualFactor - origin.y;
+    } else {
+      this._applyZoom();
+    }
   }
 
   /**
