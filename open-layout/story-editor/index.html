@@ -21,7 +21,7 @@
       user-select: none;
       caret-color: transparent;
       overflow: visible;
-      min-height: 1000px;
+
       margin: 40px auto;
       max-width: fit-content;
       color: #1a1a1a;
@@ -330,15 +330,9 @@
         const selectionStatusEl = document.getElementById('selection-status');
         if (selectionStatusEl) selectionStatusEl.textContent = editor.hasSelection() ? 'Active' : 'None';
 
-        // Layout Boxes
-        const box1Width = boxWidth * 0.44;
-        const box2Width = boxWidth * 0.33;
-        const box3Width = boxWidth * 0.23;
-        const gap = 16;
+        // Single full-width box — height grows to fit the story
         const boxes = [
-          { x: 0, y: 0, width: box1Width, height: 620 },
-          { x: box1Width + gap, y: 30, width: box2Width, height: 580 },
-          { x: box1Width + box2Width + gap * 2, y: 66, width: box3Width, height: 540 },
+          { x: 0, y: 0, width: boxWidth, height: 999_999 },
         ];
 
         const paragraphLayoutStyles = buildParagraphLayoutStyles(defaultFontSize, editor.paragraphStyles);
@@ -351,6 +345,15 @@
           lineHeightPct,
           paragraphLayoutStyles,
         );
+
+        // Resize SVG to actual content height (trim excess space from the large box)
+        if (lineMap.length > 0) {
+          const last = lineMap[lineMap.length - 1];
+          const padding = 16;
+          const contentHeight = Math.ceil(last.y + last.fontSize + padding);
+          svg.setAttribute('height', String(contentHeight));
+          svg.setAttribute('viewBox', `0 0 ${boxWidth} ${contentHeight}`);
+        }
         
         if (cursor) {
           cursor.setStory(editor.story);
