@@ -296,15 +296,28 @@ async function _generatePdf(engine, docPath, opts, writer) {
     // Text operators
     for (const { box, lines } of page.textBoxes) {
       for (const line of lines) {
+        const pdfY = pageHeight - line.y;
         for (const word of line.words) {
-          for (const frag of word.fragments) {
-            if (!frag.text || !frag.text.trim()) continue;
-            const { alias } = standardFontForStyle(frag.style);
-            // Absolute x in page space: box.x + padding + word.x
-            const absX = box.x + padding + word.x;
-            // PDF y: flip baseline
-            const pdfY = pageHeight - line.y;
-            ops += textOp(frag.text, alias, line.fontSize, absX, pdfY);
+          if (word.glyphData && word.glyphData.length > 0) {
+            // Per-glyph positioning: uses HarfBuzz advances including GPOS kerning,
+            // so the PDF matches the SVG renderer exactly.
+            let xOffset = 0;
+            for (const g of word.glyphData) {
+              if (g.text && g.text.trim()) {
+                const { alias } = standardFontForStyle(g.style);
+                const absX = box.x + padding + word.x + xOffset + g.dx;
+                ops += textOp(g.text, alias, line.fontSize, absX, pdfY);
+              }
+              xOffset += g.ax;
+            }
+          } else {
+            // Fallback: fragment-level positioning (no intra-word kerning)
+            for (const frag of word.fragments) {
+              if (!frag.text || !frag.text.trim()) continue;
+              const { alias } = standardFontForStyle(frag.style);
+              const absX = box.x + padding + word.x;
+              ops += textOp(frag.text, alias, line.fontSize, absX, pdfY);
+            }
           }
         }
       }

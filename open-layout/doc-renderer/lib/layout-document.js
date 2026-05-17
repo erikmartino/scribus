@@ -11,6 +11,7 @@ import {
   loadParagraphStyles,
   extFromMime,
 } from '../../document-store/lib/document-store.js';
+import { mergeLigatureClusters, splitGlyphsIntoWords } from '../../story-editor/lib/positions.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -259,14 +260,39 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
         if (i > 0 && lines[i - 1].isLastInPara) y += paraSpacing;
 
         // Convert words (justified WordEntry[]) -> WordData[]
-        const wordDataArr = (entry.words || []).map(word => ({
-          x: word.x,
-          fragments: (word.fragments || []).map(frag => ({
-            text: frag.text,
-            style: frag.style || {},
+        // Per-glyph advances let the PDF renderer reproduce exact GPOS kerning.
+        const mergedGlyphs = mergeLigatureClusters(entry.glyphs || []);
+        const wordGroups = splitGlyphsIntoWords(mergedGlyphs, entry.text, entry.endChar);
+
+        const wordDataArr = (entry.words || []).map((word, wi) => {
+          const group = wordGroups[wi] || { glyphs: [], endCl: entry.endChar };
+          const isLastWord = wi === (entry.words || []).length - 1;
+
+          // Build per-glyph rendering data: {text, ax, dx, style}
+          const glyphData = group.glyphs.map((g, gi) => {
+            const nextCl = gi + 1 < group.glyphs.length
+              ? group.glyphs[gi + 1].cl
+              : group.endCl;
+            const rawText = entry.text.slice(g.cl, nextCl).replace(/\u00AD/g, '');
+            return { text: rawText, ax: g.ax, dx: g.dx || 0, style: g.style || {} };
+          });
+
+          // Add synthetic hyphen glyph for hyphenated line breaks
+          if (isLastWord && entry.hyphenated && glyphData.length > 0) {
+            glyphData.push({ text: '-', ax: entry.hyphenAdvance || 0, dx: 0,
+              style: glyphData[glyphData.length - 1].style });
+          }
+
+          return {
             x: word.x,
-          })),
-        }));
+            fragments: (word.fragments || []).map(frag => ({
+              text: frag.text,
+              style: frag.style || {},
+              x: word.x,
+            })),
+            glyphData,
+          };
+        });
 
         lineDataArr.push({
           words: wordDataArr,

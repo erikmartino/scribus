@@ -633,6 +633,21 @@ export class SpreadEditorApp {
       }
     });
 
+    // Open PDF exporter for this document
+    shell.commands.register({
+      id: 'doc.print',
+      label: 'Export PDF',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+        <rect x="6" y="14" width="12" height="8"></rect>
+      </svg>`,
+      execute: () => {
+        window.open(`/pdf-exporter/index.html?doc=${encodeURIComponent(this._docPath)}`, '_blank');
+      },
+      isEnabled: () => !!this._docPath,
+    });
+
     // Open selected text box in the story editor
     shell.commands.register({
       id: 'story.edit',
@@ -1916,11 +1931,14 @@ export class SpreadEditorApp {
   getRibbonSections(selected) {
     const sections = [];
 
-    // Document section — always visible (Save button)
+    // Document section — always visible (Save + Export PDF buttons)
     if (this._docPath) {
       sections.push(AppShell.createRibbonSection('Document', (container) => {
         container.appendChild(this.shell.ui.createButton({
           commandId: 'doc.save',
+        }));
+        container.appendChild(this.shell.ui.createButton({
+          commandId: 'doc.print',
         }));
       }));
     }
