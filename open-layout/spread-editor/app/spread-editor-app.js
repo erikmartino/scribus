@@ -633,6 +633,24 @@ export class SpreadEditorApp {
       }
     });
 
+    // Open selected text box in the story editor
+    shell.commands.register({
+      id: 'story.edit',
+      label: 'Edit Story',
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+      </svg>`,
+      execute: () => {
+        const story = this._findStoryForBox(this.selectedBoxId);
+        if (story && this._docPath) {
+          window.open(`/store/${this._docPath}/stories/${story.id}/edit`, '_blank');
+        }
+      },
+      isEnabled: () => !!this._docPath && !!this.selectedBoxId &&
+        !!this._findStoryForBox(this.selectedBoxId),
+    });
+
     // Zoom commands
     shell.commands.register({
       id: 'view.zoom-in',
@@ -1903,6 +1921,16 @@ export class SpreadEditorApp {
       sections.push(AppShell.createRibbonSection('Document', (container) => {
         container.appendChild(this.shell.ui.createButton({
           commandId: 'doc.save',
+        }));
+      }));
+    }
+
+    // Story section — "Edit Story" button when a text box is selected
+    if (this.mode === 'object' && this.selectedBoxId && this._docPath &&
+        this._findStoryForBox(this.selectedBoxId)) {
+      sections.push(AppShell.createRibbonSection('Story', (container) => {
+        container.appendChild(this.shell.ui.createButton({
+          commandId: 'story.edit',
         }));
       }));
     }
