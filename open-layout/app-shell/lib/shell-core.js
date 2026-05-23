@@ -279,6 +279,8 @@ export class AppShell extends EventTarget {
       this._renderPropertiesPanel(fragment, selected);
     } else if (this._activePanel === 'layers') {
       this._renderLayersPanel(fragment, selected);
+    } else {
+      this._renderCustomPanel(this._activePanel, fragment, selected);
     }
 
     this._reconcileDOM(contentWrapper, Array.from(fragment.children));
@@ -344,7 +346,7 @@ export class AppShell extends EventTarget {
    */
   _updateElement(target, source) {
     // Only update certain attributes to avoid resetting focus or state unintentionally
-    const attrsToSync = ['value', 'active', 'label', 'icon', 'placeholder', 'min', 'max', 'layout', 'data-group-label', 'data-property-key', 'data-item-id', 'class'];
+    const attrsToSync = ['value', 'active', 'label', 'icon', 'placeholder', 'min', 'max', 'layout', 'data-group-label', 'data-property-key', 'data-item-id', 'class', 'src', 'alt', 'title'];
     attrsToSync.forEach(attr => {
       if (source.hasAttribute(attr)) {
         const val = source.getAttribute(attr);
@@ -400,6 +402,29 @@ export class AppShell extends EventTarget {
       const span = document.createElement('span');
       span.className = 'panel-empty';
       span.textContent = 'Select an object to inspect.';
+      container.appendChild(span);
+    }
+  }
+
+  _renderCustomPanel(panelId, container, selected) {
+    let hasContent = false;
+    this.plugins.forEach(plugin => {
+      if (typeof plugin.getPanelContent === 'function') {
+        const panel = plugin.getPanelContent(panelId, selected);
+        if (panel) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'shell-panel-content-wrapper';
+          wrapper.appendChild(panel);
+          container.appendChild(wrapper);
+          hasContent = true;
+        }
+      }
+    });
+
+    if (!hasContent && container.children.length === 0) {
+      const span = document.createElement('span');
+      span.className = 'panel-empty';
+      span.textContent = `No content for ${panelId} panel.`;
       container.appendChild(span);
     }
   }

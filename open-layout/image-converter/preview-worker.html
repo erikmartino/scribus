@@ -157,22 +157,28 @@
      * @param {number} srcHeight
      * @returns {Promise<{ blob: Blob, width: number, height: number }>}
      */
-    async function nativeToJpeg(url, srcWidth, srcHeight) {
+    async function nativeToJpeg(url, srcWidth, srcHeight, fmt) {
       const { targetW, targetH } = computeTargetSize(srcWidth, srcHeight);
 
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${url}`);
-      const blob = await response.blob();
+      let blob = await response.blob();
 
-      const bitmap = await createImageBitmap(blob, {
-        resizeWidth: targetW,
-        resizeHeight: targetH,
-        resizeQuality: 'high',
-      });
+      // If the detected format is png/jpeg/webp but the blob's type is different (e.g. image/tiff),
+      // re-wrap the blob with the correct type so native browser decoders (createImageBitmap) work.
+      if (fmt === 'png' && blob.type !== 'image/png') {
+        blob = new Blob([await blob.arrayBuffer()], { type: 'image/png' });
+      } else if (fmt === 'jpeg' && blob.type !== 'image/jpeg') {
+        blob = new Blob([await blob.arrayBuffer()], { type: 'image/jpeg' });
+      } else if (fmt === 'webp' && blob.type !== 'image/webp') {
+        blob = new Blob([await blob.arrayBuffer()], { type: 'image/webp' });
+      }
+
+      const bitmap = await createImageBitmap(blob);
 
       const canvas = new OffscreenCanvas(targetW, targetH);
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(bitmap, 0, 0);
+      ctx.drawImage(bitmap, 0, 0, targetW, targetH);
       bitmap.close();
 
       const jpegBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
@@ -255,7 +261,7 @@
             result = await tiffToJpeg(asset.originalUrl, srcWidth, srcHeight);
           } else {
             // PNG, JP2, JPEG, WebP — use native browser decode
-            result = await nativeToJpeg(asset.originalUrl, srcWidth, srcHeight);
+            result = await nativeToJpeg(asset.originalUrl, srcWidth, srcHeight, fmt);
           }
 
           // PUT the JPEG preview file

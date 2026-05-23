@@ -35,10 +35,16 @@ describe('detectFormat', () => {
     assert.equal(detectFormat(header), null);
   });
 
-  it('returns null for JPEG (not supported)', () => {
+  it('detects JPEG from magic bytes', () => {
     // JPEG SOI marker: FF D8 FF
     const header = new Uint8Array([255, 216, 255, 224, 0, 0, 0, 0, 0, 0, 0, 0]);
-    assert.equal(detectFormat(header), null);
+    assert.equal(detectFormat(header), 'jpeg');
+  });
+
+  it('detects WebP from magic bytes', () => {
+    // WebP starts with RIFF (82 73 70 70) ... WEBP (87 69 66 80)
+    const header = new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]);
+    assert.equal(detectFormat(header), 'webp');
   });
 
   it('returns null for buffer shorter than 4 bytes', () => {

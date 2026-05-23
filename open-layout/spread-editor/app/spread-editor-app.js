@@ -78,6 +78,7 @@ export class SpreadEditorApp {
     // When set, the Save button writes back to /store/{docPath}/...
     this._docPath = null;
     this._saving = false;
+    this._assets = {};
   }
 
   /** Active editor — returns the EditorState of the currently active story. */
@@ -86,7 +87,10 @@ export class SpreadEditorApp {
   }
 
   async init(shell) {
-    if (shell) this.shell = shell;
+    if (shell) {
+      this.shell = shell;
+      shell.registerPanel({ id: 'assets', label: 'Assets' });
+    }
 
     this.container = this.root.querySelector('#svg-container');
     this.statusEl = this.root.querySelector('#status');
@@ -274,6 +278,7 @@ export class SpreadEditorApp {
 
     // Pre-load asset metadata so we can resolve assetRefs to URLs
     const assetMeta = await loadAssets(this._docPath);
+    this._assets = assetMeta;
 
     for (const frame of spreadJson.frames || []) {
       if (frame.type === 'image') {
@@ -455,6 +460,9 @@ export class SpreadEditorApp {
           if (msg.type === 'error') {
             console.error('[spread-editor] Preview worker error:', msg.message);
           }
+          // Reload assets and update panels so newly generated previews are visible
+          this._assets = await loadAssets(this._docPath);
+          this.shell?.updatePanels();
           // Refresh any boxes that are still showing the placeholder —
           // their previews may have been on disk already (generated previously)
           // and the worker correctly skipped them (generated: 0).
@@ -1323,6 +1331,25 @@ export class SpreadEditorApp {
    * @returns {Promise<{ width: number, height: number, dataUrl: string }>}
    */
   _loadImageBlob(blob) {
+    if (blob.type === 'image/tiff' || blob.name?.endsWith('.tiff') || blob.name?.endsWith('.tif')) {
+      return new Promise(async (resolve, reject) => {
+        try {
+          const buffer = await blob.arrayBuffer();
+          const utifModule = await import('https://esm.sh/utif2@4.1.0');
+          const UTIF = utifModule.default || utifModule;
+          const ifds = UTIF.decode(buffer);
+          if (ifds.length === 0 || !ifds[0].t256 || !ifds[0].t257) {
+            throw new Error('Invalid TIFF dimensions');
+          }
+          const width = ifds[0].t256[0];
+          const height = ifds[0].t257[0];
+          resolve({ width, height, dataUrl: '' });
+        } catch (err) {
+          resolve({ width: 120, height: 90, dataUrl: '' });
+        }
+      });
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(reader.error);
@@ -1357,6 +1384,8 @@ export class SpreadEditorApp {
         );
         // Build the URL to the uploaded file for rendering
         const imageUrl = `/store/${this._docPath}/assets/${assetRef}/${assetRef}.${ext}`;
+        this._assets = await loadAssets(this._docPath);
+        this.shell?.updatePanels();
         return { imageUrl, assetRef, assetExt: ext, width, height };
       } catch (err) {
         console.warn('Asset upload failed, falling back to data URL:', err);
@@ -1426,20 +1455,56 @@ export class SpreadEditorApp {
     });
   }
 
-  /** Set up HTML5 drag-and-drop for image files on the container. */
+  async _placeAssetBoxAt(assetRef, ext, cx, cy) {
+    if (!this.currentSpread) return;
+
+    const meta = this._assets?.[assetRef] || {};
+    const width = meta.width || 300;
+    const height = meta.height || 200;
+    const preview = meta.preview || `${assetRef}.${ext}`;
+    const imageUrl = `/store/${this._docPath}/assets/${assetRef}/${preview}`;
+
+    const maxW = 300;
+    const scale = Math.min(1, maxW / width);
+    const w = width * scale;
+    const h = height * scale;
+
+    const x = cx - w / 2;
+    const y = cy - h / 2;
+
+    const boxId = `image-${++this._imageBoxCounter}`;
+    const imageBox = {
+      id: boxId,
+      x, y, width: w, height: h,
+      minWidth: 20, minHeight: 20,
+      imageUrl,
+      assetRef,
+      assetExt: ext,
+    };
+
+    this.submitAction('Drop Asset', () => {
+      this.imageBoxes = [...this.imageBoxes, imageBox];
+      this.selectedBoxId = boxId;
+    });
+  }
+
+  /** Set up HTML5 drag-and-drop for image files and document assets on the container. */
   _initDragDrop() {
     const container = this.container;
     let dragCounter = 0;  // Track nested dragenter/dragleave
 
+    const isAcceptableDrag = (e) => {
+      return e.dataTransfer?.types?.includes('Files') || e.dataTransfer?.types?.includes('application/x-scribus-asset');
+    };
+
     container.addEventListener('dragover', (e) => {
-      // Only accept drags that contain files
-      if (!e.dataTransfer?.types?.includes('Files')) return;
+      if (!isAcceptableDrag(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
     });
 
     container.addEventListener('dragenter', (e) => {
-      if (!e.dataTransfer?.types?.includes('Files')) return;
+      if (!isAcceptableDrag(e)) return;
       e.preventDefault();
       dragCounter++;
       if (dragCounter === 1) {
@@ -1448,7 +1513,7 @@ export class SpreadEditorApp {
     });
 
     container.addEventListener('dragleave', (e) => {
-      if (!e.dataTransfer?.types?.includes('Files')) return;
+      if (!isAcceptableDrag(e)) return;
       dragCounter--;
       if (dragCounter <= 0) {
         dragCounter = 0;
@@ -1461,9 +1526,6 @@ export class SpreadEditorApp {
       dragCounter = 0;
       this._hideDropHighlight();
 
-      const files = e.dataTransfer?.files;
-      if (!files || files.length === 0) return;
-
       // Convert drop point to content-space coordinates
       const svg = this._svg;
       if (!svg) return;
@@ -1471,6 +1533,44 @@ export class SpreadEditorApp {
       if (!ctm) return;
       const contentPt = new DOMPoint(e.clientX, e.clientY)
         .matrixTransform(ctm.inverse());
+
+      // 1. Check for custom document asset drag & drop
+      if (e.dataTransfer?.types?.includes('application/x-scribus-asset')) {
+        const dataStr = e.dataTransfer.getData('application/x-scribus-asset');
+        if (dataStr) {
+          try {
+            const assetData = JSON.parse(dataStr);
+            const assetRef = assetData.assetRef;
+            const ext = assetData.ext || 'jpg';
+
+            // Check if dropped on an existing image frame
+            const hitImageBox = this.imageBoxes.find(b =>
+              contentPt.x >= b.x && contentPt.x <= b.x + b.width &&
+              contentPt.y >= b.y && contentPt.y <= b.y + b.height
+            );
+
+            if (hitImageBox) {
+              const meta = this._assets?.[assetRef] || {};
+              const preview = meta.preview || `${assetRef}.${ext}`;
+              const imageUrl = `/store/${this._docPath}/assets/${assetRef}/${preview}`;
+              this.submitAction('Replace Image in Frame', () => {
+                hitImageBox.imageUrl = imageUrl;
+                hitImageBox.assetRef = assetRef;
+                hitImageBox.assetExt = ext;
+              });
+            } else {
+              await this._placeAssetBoxAt(assetRef, ext, contentPt.x, contentPt.y);
+            }
+          } catch (err) {
+            console.error('Error parsing asset drop data:', err);
+          }
+        }
+        return;
+      }
+
+      // 2. Fallback to external files drag & drop
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
 
       // Process each image file
       for (const file of files) {
@@ -2189,5 +2289,258 @@ export class SpreadEditorApp {
     }
 
     return descriptors;
+  }
+
+  getPanelContent(panelId, selected) {
+    if (panelId !== 'assets') return null;
+
+    const container = document.createElement('div');
+    container.className = 'assets-panel';
+
+    // 1. Header
+    const header = document.createElement('div');
+    header.className = 'assets-header';
+
+    const title = document.createElement('h3');
+    title.className = 'assets-title';
+    title.textContent = 'Document Assets';
+    header.appendChild(title);
+
+    const assetKeys = Object.keys(this._assets || {});
+    const countBadge = document.createElement('span');
+    countBadge.className = 'assets-count';
+    countBadge.textContent = assetKeys.length;
+    header.appendChild(countBadge);
+
+    container.appendChild(header);
+
+    // 2. Upload Section
+    const uploadInput = document.createElement('input');
+    uploadInput.type = 'file';
+    uploadInput.accept = 'image/*';
+    uploadInput.style.display = 'none';
+    container.appendChild(uploadInput);
+
+    const uploadZone = document.createElement('div');
+    uploadZone.className = 'assets-upload-zone';
+    
+    const uploadBtn = document.createElement('scribus-button');
+    uploadBtn.setAttribute('label', 'Upload Asset');
+    uploadBtn.setAttribute('primary', '');
+    uploadBtn.setAttribute('icon', `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+    `);
+    
+    uploadZone.appendChild(uploadBtn);
+    container.appendChild(uploadZone);
+
+    const handleUpload = async (file) => {
+      if (!file) return;
+      this.setStatus(`Uploading ${file.name}...`);
+      try {
+        const mime = file.type || 'image/png';
+        const { width, height } = await this._loadImageBlob(file);
+        const name = assetNameFromFilename(file.name);
+        await uploadImageAsset(this._docPath, name, file, { mime, width, height });
+        this._assets = await loadAssets(this._docPath);
+        this.setStatus('Asset uploaded successfully.', 'ok');
+        this.shell?.updatePanels();
+        this._startPreviewWorker();
+      } catch (err) {
+        console.error('Failed to upload asset:', err);
+        this.setStatus('Upload failed.', 'error');
+      }
+    };
+
+    uploadZone.addEventListener('click', () => uploadInput.click());
+    uploadInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) handleUpload(file);
+    });
+
+    // Support drag and drop files onto the upload zone itself!
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.style.borderColor = 'var(--accent)';
+      uploadZone.style.background = 'rgba(187, 134, 252, 0.04)';
+    });
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.style.borderColor = '';
+      uploadZone.style.background = '';
+    });
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.style.borderColor = '';
+      uploadZone.style.background = '';
+      const file = e.dataTransfer?.files?.[0];
+      if (file && file.type.startsWith('image/')) {
+        handleUpload(file);
+      }
+    });
+
+    // 3. Assets list
+    if (assetKeys.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.className = 'asset-empty-state';
+      
+      const emptyIcon = document.createElement('span');
+      emptyIcon.className = 'asset-empty-icon';
+      emptyIcon.innerHTML = `
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+      `;
+      emptyState.appendChild(emptyIcon);
+
+      const emptyText = document.createElement('span');
+      emptyText.textContent = 'No assets found. Click upload or drag images here to add assets.';
+      emptyState.appendChild(emptyText);
+
+      container.appendChild(emptyState);
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'assets-grid';
+
+      for (const [key, asset] of Object.entries(this._assets)) {
+        const ext = extFromMime(asset.mime);
+        const preview = asset.preview || `${key}.${ext}`;
+        const previewUrl = `/store/${this._docPath}/assets/${key}/${preview}`;
+
+        const card = document.createElement('div');
+        card.className = 'asset-card';
+        card.id = 'asset-card-' + key;
+        card.setAttribute('draggable', 'true');
+
+        // Drag events
+        card.addEventListener('dragstart', (e) => {
+          card.classList.add('dragging');
+          e.dataTransfer.setData('application/x-scribus-asset', JSON.stringify({ assetRef: key, ext }));
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+        });
+
+        // Thumbnail
+        const thumbWrapper = document.createElement('div');
+        thumbWrapper.className = 'asset-thumbnail-wrapper';
+
+        const img = document.createElement('img');
+        img.className = 'asset-thumbnail';
+        img.src = previewUrl;
+        img.alt = key;
+        thumbWrapper.appendChild(img);
+        card.appendChild(thumbWrapper);
+
+        // Info
+        const info = document.createElement('div');
+        info.className = 'asset-info';
+
+        const name = document.createElement('div');
+        name.className = 'asset-name';
+        name.textContent = key;
+        name.title = key;
+        info.appendChild(name);
+
+        const meta = document.createElement('div');
+        meta.className = 'asset-meta';
+
+        const dims = document.createElement('span');
+        dims.textContent = `${asset.width} × ${asset.height}`;
+        meta.appendChild(dims);
+
+        const size = document.createElement('span');
+        const sizeKb = Math.round(asset.sizeBytes / 1024);
+        size.textContent = sizeKb >= 1024 
+          ? `${(sizeKb / 1024).toFixed(1)} MB` 
+          : `${sizeKb} KB`;
+        meta.appendChild(size);
+
+        info.appendChild(meta);
+        card.appendChild(info);
+
+        // Actions
+        const actions = document.createElement('div');
+        actions.className = 'asset-actions';
+
+        // Delete button
+        const delBtn = document.createElement('button');
+        delBtn.className = 'asset-action-btn delete';
+        delBtn.title = 'Delete Asset';
+        delBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        `;
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (confirm(`Are you sure you want to delete asset "${key}"?`)) {
+            this.setStatus(`Deleting ${key}...`);
+            try {
+              const res = await fetch(`/store/${this._docPath}/assets/${key}`, { method: 'DELETE' });
+              if (res.ok) {
+                this._assets = await loadAssets(this._docPath);
+                this.setStatus('Asset deleted successfully.', 'ok');
+                this.shell?.updatePanels();
+              } else {
+                throw new Error(`Delete failed: ${res.status}`);
+              }
+            } catch (err) {
+              console.error('Failed to delete asset:', err);
+              this.setStatus('Delete failed.', 'error');
+            }
+          }
+        });
+        actions.appendChild(delBtn);
+
+        // Insert button (double click or click on this inserts at active page center)
+        const insBtn = document.createElement('button');
+        insBtn.className = 'asset-action-btn';
+        insBtn.title = 'Insert Image Frame';
+        insBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        `;
+        insBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (this.currentSpread) {
+            const page = this.currentSpread.pageRects[0];
+            const cx = page.x + page.width / 2;
+            const cy = page.y + page.height / 2;
+            await this._placeAssetBoxAt(key, ext, cx, cy);
+          }
+        });
+        actions.appendChild(insBtn);
+
+        card.appendChild(actions);
+
+        // Handle double click on card to insert
+        card.addEventListener('dblclick', async () => {
+          if (this.currentSpread) {
+            const page = this.currentSpread.pageRects[0];
+            const cx = page.x + page.width / 2;
+            const cy = page.y + page.height / 2;
+            await this._placeAssetBoxAt(key, ext, cx, cy);
+          }
+        });
+
+        grid.appendChild(card);
+      }
+
+      container.appendChild(grid);
+    }
+
+    return container;
   }
 }

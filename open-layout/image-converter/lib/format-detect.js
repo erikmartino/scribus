@@ -22,6 +22,18 @@ export function detectFormat(header) {
     return 'png';
   }
 
+  // JPEG: FF D8 FF
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) {
+    return 'jpeg';
+  }
+
+  // WebP: RIFFxxxxWEBP
+  if (b.length >= 12 &&
+      b[0] === 82 && b[1] === 73 && b[2] === 70 && b[3] === 70 &&
+      b[8] === 87 && b[9] === 69 && b[10] === 66 && b[11] === 80) {
+    return 'webp';
+  }
+
   // TIFF: II (little-endian) or MM (big-endian)
   if ((b[0] === 73 && b[1] === 73) || (b[0] === 77 && b[1] === 77)) {
     return 'tiff';

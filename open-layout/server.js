@@ -240,7 +240,14 @@ function listFilesRecursive(dir, base, callback) {
   const results = [];
   const walk = (current, done) => {
     fs.readdir(current, { withFileTypes: true }, (err, entries) => {
-      if (err) { done(err); return; }
+      if (err) {
+        if (err.code === 'ENOENT') {
+          done(null);
+        } else {
+          done(err);
+        }
+        return;
+      }
       let pending = entries.length;
       if (pending === 0) { done(null); return; }
       for (const entry of entries) {
@@ -266,7 +273,14 @@ function listFilesRecursive(dir, base, callback) {
 // Returns them as a single sorted array via callback(err, items).
 function aggregateJsonFiles(dirPath, callback) {
   fs.readdir(dirPath, { withFileTypes: true }, (err, entries) => {
-    if (err) { callback(err, null); return; }
+    if (err) {
+      if (err.code === 'ENOENT') {
+        callback(null, []);
+      } else {
+        callback(err, null);
+      }
+      return;
+    }
 
     // Build list of JSON file paths to read, keyed for sort order.
     const filesToRead = []; // { sortKey, filePath }

@@ -45,12 +45,6 @@ The following areas are considered complete and should not be treated as active 
 - [ ] Script-sensitive justification and line-break behavior requirements.
 - [ ] Test corpus for mixed-direction paragraphs and script-specific punctuation.
 
-### 5) Browser interaction and UX parity
-
-- [ ] Cursor style parity by mode/context (`default`, move, text I-beam, resize handles).
-- [ ] Focus retention rules across ribbon interactions and keyboard shortcuts.
-- [ ] Deterministic mode transitions under rapid click/double-click sequences.
-
 ## Proposed phased plan (still deferred)
 
 1. Phase A: Correctness-first hardening (grapheme delete, tab policy, shift+click/drag semantics).
