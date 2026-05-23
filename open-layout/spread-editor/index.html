@@ -57,6 +57,56 @@
     #sample-text {
       display: none;
     }
+
+    /* Preview generation indicator */
+    #preview-spinner {
+      display: none;
+      position: fixed;
+      bottom: 40px;
+      right: 16px;
+      z-index: 200;
+      background: rgba(15, 15, 25, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(76, 201, 240, 0.3);
+      border-radius: 10px;
+      padding: 8px 12px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      color: #94a3b8;
+      pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    #preview-spinner.visible {
+      display: flex;
+    }
+    #preview-spinner .spin-ring {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(76, 201, 240, 0.2);
+      border-top-color: #4cc9f0;
+      border-radius: 50%;
+      animation: spin-ring 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin-ring {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Hidden preview worker iframe — 16×16 so the browser actually loads it */
+    #preview-worker-frame {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 16px;
+      height: 16px;
+      border: none;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
   </style>
 </head>
 
@@ -101,6 +151,12 @@
       </div>
     </div>
   </scribus-app-shell>
+
+  <!-- Preview generation status indicator -->
+  <div id="preview-spinner" role="status" aria-label="Generating image previews">
+    <span class="spin-ring"></span>
+    <span id="preview-spinner-label">Generating previews…</span>
+  </div>
 
   <script type="module">
     import '../app-shell/lib/components/app-shell-element.js';

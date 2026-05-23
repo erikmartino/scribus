@@ -642,6 +642,12 @@
                 !orig.includes('preview.webp')
               );
 
+              // Skip formats that browsers cannot decode natively (TIFF, JP2).
+              // Those are handled by preview-worker.html which uses wasm-vips.
+              const isTiffOrJp2 = originalPath &&
+                /\.(tif|tiff|jp2|jpx|j2k|j2c)$/i.test(originalPath);
+              if (isTiffOrJp2) continue;
+
               parsed.push({
                 user,
                 doc,

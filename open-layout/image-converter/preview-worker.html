@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Preview Worker</title>
+  <!--
+    coi-serviceworker enables SharedArrayBuffer (required for wasm-vips Worker path).
+    Must be served from the same origin as the page.
+  -->
+  <script src="./coi-serviceworker.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 16px;
+      height: 16px;
+      overflow: hidden;
+      background: transparent;
+    }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      margin: 1px;
+      border: 2px solid rgba(0,0,0,0.12);
+      border-top-color: #4cc9f0;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="spinner" title="Generating image previews…"></div>
+
+  <script type="module">
+    import { detectFormat }                        from './lib/format-detect.js';
+    import { decodeTiff, exportImage, cleanupOPFS } from './lib/tiff-decoder.js';
+
+    /**
+     * Post a structured message to the parent frame (if embedded in an iframe).
+     * Falls back to console.log if there is no parent.
+     */
+    function notify(msg) {
+      if (window.parent !== window) {
+        window.parent.postMessage(msg, '*');
+      }
+    }
+
+    /**
+     * Compute proportional output dimensions capped at 500×500.
+     * Images already ≤500 on both sides keep their original size.
+     *
+     * @param {number} w - source width
+     * @param {number} h - source height
+     * @returns {{ targetW: number, targetH: number }}
+     */
+    function computeTargetSize(w, h) {
+      if (w <= 500 && h <= 500) return { targetW: w, targetH: h };
+      if (w >= h) {
+        return { targetW: 500, targetH: Math.round((h * 500) / w) };
+      }
+      return { targetW: Math.round((w * 500) / h), targetH: 500 };
+    }
+
+    /**
+     * Generate a JPEG preview blob from a TIFF source using tiff-decoder.js.
+     * Uses the OPFS+Worker (streaming) path when available, otherwise
+     * falls back to the in-memory buffer path (exportImage not available).
+     *
+     * @param {string} url - URL of the TIFF file
+     * @param {number} srcWidth - original width from meta.json
+     * @param {number} srcHeight - original height from meta.json
+     * @returns {Promise<{ blob: Blob, width: number, height: number }>}
+     */
+    async function tiffToJpeg(url, srcWidth, srcHeight) {
+      const { targetW, targetH } = computeTargetSize(srcWidth, srcHeight);
+      const scale = Math.max(srcWidth / targetW, srcHeight / targetH);
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${url}`);
+      const stream = response.body;
+
+      let opfsFileName = null;
+      let headerInfo = null;
+
+      const { opfsFileName: stagingFile } = await decodeTiff(
+        stream,
+        {
+          scale,
+          onHeader(header) { headerInfo = header; },
+          onRow() { /* no per-row rendering needed; exportImage handles it */ },
+          onEnd() {},
+        }
+      );
+      opfsFileName = stagingFile;
+
+      // Fast path: use exportImage when OPFS Worker path was used
+      if (opfsFileName) {
+        try {
+          const result = await exportImage(opfsFileName, {
+            scale,
+            quality: 85,
+            format: 'jpeg',
+          });
+          // exportImage already returns the downscaled dimensions
+          return result;
+        } finally {
+          await cleanupOPFS(opfsFileName);
+        }
+      }
+
+
+      // Fallback path: the buffer decode already called onRow — but since we
+      // didn't capture rows, we need a second decode via an OffscreenCanvas approach.
+      // Re-fetch and use createImageBitmap (browsers can decode TIFF via wasm-vips
+      // in the buffer path but can't use createImageBitmap for TIFF natively).
+      // We therefore do a full re-decode capturing rows onto an OffscreenCanvas.
+      const response2 = await fetch(url);
+      const buffer = await response2.arrayBuffer();
+
+      const canvas = new OffscreenCanvas(targetW, targetH);
+      const ctx = canvas.getContext('2d');
+
+      // Temp full-res canvas to collect rows
+      const tempCanvas = new OffscreenCanvas(srcWidth, srcHeight);
+      const tempCtx = tempCanvas.getContext('2d');
+      const tempImageData = tempCtx.createImageData(srcWidth, srcHeight);
+
+      await decodeTiff(
+        buffer,
+        {
+          scale: 1, // decode at full res
+          onHeader() {},
+          onRow(rowIndex, rgba) {
+            const offset = rowIndex * srcWidth * 4;
+            tempImageData.data.set(rgba.subarray(0, srcWidth * 4), offset);
+          },
+          onEnd() {
+            tempCtx.putImageData(tempImageData, 0, 0);
+            ctx.drawImage(tempCanvas, 0, 0, targetW, targetH);
+          },
+        }
+      );
+
+      const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+      return { blob, width: targetW, height: targetH };
+    }
+
+    /**
+     * Generate a JPEG preview blob for PNG/JPEG/WebP/etc. using
+     * createImageBitmap + OffscreenCanvas (zero wasm, fast).
+     *
+     * @param {string} url
+     * @param {number} srcWidth
+     * @param {number} srcHeight
+     * @returns {Promise<{ blob: Blob, width: number, height: number }>}
+     */
+    async function nativeToJpeg(url, srcWidth, srcHeight) {
+      const { targetW, targetH } = computeTargetSize(srcWidth, srcHeight);
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${url}`);
+      const blob = await response.blob();
+
+      const bitmap = await createImageBitmap(blob, {
+        resizeWidth: targetW,
+        resizeHeight: targetH,
+        resizeQuality: 'high',
+      });
+
+      const canvas = new OffscreenCanvas(targetW, targetH);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+
+      const jpegBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+      return { blob: jpegBlob, width: targetW, height: targetH };
+    }
+
+    /**
+     * Main worker logic: scan store, build queue, process assets.
+     */
+    async function run() {
+      // 1. List all files in the store
+      let files;
+      try {
+        const res = await fetch('/store/');
+        if (!res.ok) throw new Error(`GET /store/ failed: ${res.status}`);
+        files = await res.json();
+      } catch (err) {
+        notify({ type: 'error', message: `Cannot list store: ${err.message}` });
+        return;
+      }
+
+      const fileSet = new Set(files);
+
+      // 2. Find all asset folders via their meta.json
+      const queue = [];
+      for (const f of files) {
+        const match = f.match(/^([^/]+)\/([^/]+)\/assets\/([^/]+)\/meta\.json$/);
+        if (!match) continue;
+        const [, user, doc, name] = match;
+
+        // Skip if preview already exists
+        const previewPath = `${user}/${doc}/assets/${name}/${name}-preview.jpg`;
+        if (fileSet.has(previewPath)) continue;
+
+        // Find original image file (not -preview, not .json)
+        const originalPath = files.find(orig =>
+          orig.startsWith(`${user}/${doc}/assets/${name}/${name}.`) &&
+          !orig.endsWith('.json') &&
+          !orig.includes('-preview.')
+        );
+        if (!originalPath) continue;
+
+        queue.push({
+          user, doc, name,
+          originalUrl: `/store/${originalPath}`,
+          metaUrl: `/store/${f}`,
+          previewUrl: `/store/${previewPath}`,
+          previewName: `${name}-preview.jpg`,
+        });
+      }
+
+      if (queue.length === 0) {
+        notify({ type: 'done', generated: 0 });
+        return;
+      }
+
+      notify({ type: 'start', total: queue.length });
+
+      let generated = 0;
+
+      for (const asset of queue) {
+        try {
+          // Load existing meta to get dimensions and mime type
+          const metaRes = await fetch(asset.metaUrl);
+          if (!metaRes.ok) throw new Error(`Cannot load meta.json: ${metaRes.status}`);
+          const meta = await metaRes.json();
+
+          const srcWidth = meta.width || 0;
+          const srcHeight = meta.height || 0;
+          if (!srcWidth || !srcHeight) throw new Error('Missing dimensions in meta.json');
+
+          // Detect format from first bytes
+          const headerRes = await fetch(asset.originalUrl, { headers: { Range: 'bytes=0-11' } });
+          const headerBuf = await headerRes.arrayBuffer();
+          const fmt = detectFormat(new Uint8Array(headerBuf));
+
+          // Generate JPEG preview
+          let result;
+          if (fmt === 'tiff') {
+            result = await tiffToJpeg(asset.originalUrl, srcWidth, srcHeight);
+          } else {
+            // PNG, JP2, JPEG, WebP — use native browser decode
+            result = await nativeToJpeg(asset.originalUrl, srcWidth, srcHeight);
+          }
+
+          // PUT the JPEG preview file
+          const putImageRes = await fetch(asset.previewUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: result.blob,
+          });
+          if (!putImageRes.ok) throw new Error(`PUT preview failed: ${putImageRes.status}`);
+
+          // Update meta.json with preview fields
+          const updatedMeta = {
+            ...meta,
+            preview: asset.previewName,
+            previewWidth: result.width,
+            previewHeight: result.height,
+          };
+          const putMetaRes = await fetch(asset.metaUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedMeta, null, 2),
+          });
+          if (!putMetaRes.ok) throw new Error(`PUT meta.json failed: ${putMetaRes.status}`);
+
+          generated++;
+          notify({
+            type: 'progress',
+            assetRef: asset.name,
+            docPath: `${asset.user}/${asset.doc}`,
+            previewUrl: asset.previewUrl,
+            width: result.width,
+            height: result.height,
+            total: queue.length,
+            done: generated,
+          });
+        } catch (err) {
+          // Log the error but continue processing remaining assets
+          console.error(`[preview-worker] Failed to process ${asset.name}:`, err);
+          notify({ type: 'assetError', assetRef: asset.name, message: err.message });
+        }
+      }
+
+      notify({ type: 'done', generated });
+    }
+
+    run().catch(err => {
+      console.error('[preview-worker] Fatal error:', err);
+      notify({ type: 'error', message: err.message });
+    });
+  </script>
+</body>
+</html>

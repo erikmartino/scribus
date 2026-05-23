@@ -68,6 +68,8 @@ export class SpreadEditorApp {
 
     // Zoom: 1.0 = 100%, >1 = zoomed in, <1 = zoomed out
     this._zoom = 1.0;
+    // Preview worker iframe (16×16 px, runs in background)
+    this._previewWorkerFrame = null;
     this._zoomMin = 0.25;
     this._zoomMax = 40.0;
     this._zoomStep = 1.1; // multiplicative step per wheel tick
@@ -386,6 +388,84 @@ export class SpreadEditorApp {
     // Mark boxes as loaded so update() won't overwrite with defaults
     this._loadedFromStore = true;
     this.selectedBoxId = this.boxes[0]?.id || this.imageBoxes[0]?.id || null;
+
+    // Kick off browser-based preview generation for any image boxes that
+    // are still showing the empty placeholder (no preview in meta.json yet).
+    const placeholder = this._emptyImagePlaceholder();
+    const needsPreview = this.imageBoxes.some(b => b.imageUrl === placeholder);
+    if (needsPreview) {
+      this._startPreviewWorker();
+    }
+  }
+
+  /**
+   * Embed a tiny (16×16 px) preview-worker iframe that scans the store and
+   * generates JPEG previews for any assets that are missing them.
+   *
+   * The iframe posts messages back as it progresses:
+   *   { type: 'progress', assetRef, docPath, previewUrl }  — one preview done
+   *   { type: 'done', generated }                           — all done
+   *   { type: 'error', message }                            — fatal error
+   *   { type: 'assetError', assetRef, message }             — single asset failed
+   */
+  _startPreviewWorker() {
+    // Don't start a second worker if one is already running
+    if (this._previewWorkerFrame) return;
+
+    const spinner = document.getElementById('preview-spinner');
+    const spinnerLabel = document.getElementById('preview-spinner-label');
+    if (spinner) spinner.classList.add('visible');
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'preview-worker-frame';
+    iframe.src = '/image-converter/preview-worker.html';
+    iframe.title = 'Preview generator';
+    document.body.appendChild(iframe);
+    this._previewWorkerFrame = iframe;
+
+    const onMessage = async (event) => {
+      const msg = event.data;
+      if (!msg || !msg.type) return;
+
+      switch (msg.type) {
+        case 'progress': {
+          // Live-swap the imageUrl for the matching image box without a full reload
+          const box = this.imageBoxes.find(
+            b => b.assetRef === msg.assetRef
+          );
+          if (box && msg.docPath === this._docPath) {
+            box.imageUrl = msg.previewUrl + '?t=' + Date.now();
+            await this.update();
+          }
+          if (spinnerLabel) {
+            spinnerLabel.textContent =
+              `Generating previews\u2026 (${msg.done}/${msg.total})`;
+          }
+          break;
+        }
+
+        case 'done':
+        case 'error': {
+          window.removeEventListener('message', onMessage);
+          if (this._previewWorkerFrame) {
+            document.body.removeChild(this._previewWorkerFrame);
+            this._previewWorkerFrame = null;
+          }
+          if (spinner) spinner.classList.remove('visible');
+          if (msg.type === 'error') {
+            console.error('[spread-editor] Preview worker error:', msg.message);
+          }
+          break;
+        }
+
+        // Single asset failures are non-fatal — log and continue
+        case 'assetError':
+          console.warn(`[spread-editor] Preview failed for ${msg.assetRef}:`, msg.message);
+          break;
+      }
+    };
+
+    window.addEventListener('message', onMessage);
   }
 
   /**
