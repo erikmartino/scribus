@@ -344,7 +344,7 @@ async function decodeTiffBuffer(buffer, callbacks) {
  * Fallback to utif2 for TIFFs that wasm-vips rejects.
  */
 async function decodeTiffFallback(buffer, callbacks) {
-  const utifModule = await import('https://esm.sh/utif2@4.1.0');
+  const utifModule = await import('/vendor/utif2/index.js');
   const UTIF = utifModule.default || utifModule;
 
   const ifds = UTIF.decode(buffer);

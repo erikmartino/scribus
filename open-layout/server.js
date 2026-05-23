@@ -74,6 +74,7 @@ const VENDOR_MAP = {
   '/vendor/fonts/EBGaramond-Italic.ttf': 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf',
   '/vendor/wasm-vips/vips-es6.js': 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js',
   '/vendor/css-tree/index.js': 'https://cdn.jsdelivr.net/npm/css-tree@2.3.1/+esm',
+  '/vendor/utif2/index.js': 'https://cdn.jsdelivr.net/npm/utif2@4.1.0/+esm',
 };
 
 function setIsolationHeaders(res) {
