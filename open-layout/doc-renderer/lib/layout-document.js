@@ -29,6 +29,17 @@ const DEFAULT_LAYOUT = {
   lineHeight: 138,
 };
 
+/** Generate a simple SVG data URL as a placeholder for empty image frames. */
+function _emptyImagePlaceholder() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
+    <rect width="200" height="150" fill="#e0ddd5" stroke="#b0ab9f" stroke-width="1"/>
+    <line x1="0" y1="0" x2="200" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
+    <line x1="200" y1="0" x2="0" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
+    <text x="100" y="80" text-anchor="middle" fill="#8a857a" font-size="14" font-family="sans-serif">Image</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -208,10 +219,13 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
       let imageUrl;
       if (frame.assetRef) {
         const meta = assetMeta[frame.assetRef];
-        const ext = meta ? extFromMime(meta.mime) : 'jpg';
-        imageUrl = `/store/${docPath}/assets/${frame.assetRef}/${frame.assetRef}.${ext}`;
+        if (meta && meta.preview) {
+          imageUrl = `/store/${docPath}/assets/${frame.assetRef}/${meta.preview}`;
+        } else {
+          imageUrl = _emptyImagePlaceholder();
+        }
       } else {
-        imageUrl = frame.imageUrl || '';
+        imageUrl = frame.imageUrl || _emptyImagePlaceholder();
       }
       imageBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height, imageUrl });
     } else {

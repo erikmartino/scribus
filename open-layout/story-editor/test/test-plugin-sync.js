@@ -1,3 +1,4 @@
+import '../../app-shell/test/dom-mock.js';
 import test from 'node:test';
 import assert from 'node:assert';
 import { StoryEditorPlugin } from '../lib/story-editor-plugin.js';
@@ -20,9 +21,16 @@ class MockShell {
   constructor() {
     this.updated = false;
     this.commands = { register: () => {} };
+    this.doc = { registerItem: () => {} };
+    this.selection = { select: () => {}, remove: () => {} };
+    this.history = { submit: (action) => action.execute() };
+    this._listeners = {};
   }
   requestUpdate() {
     this.updated = true;
+  }
+  addEventListener(event, callback) {
+    this._listeners[event] = callback;
   }
 }
 

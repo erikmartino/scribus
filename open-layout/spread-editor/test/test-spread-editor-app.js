@@ -16,6 +16,7 @@ const mockShell = {
   },
   selection: { select: () => {}, remove: () => {} },
   commands: { execute: () => {} },
+  updatePanels: () => {},
   ui: {
     createInput: (opts) => {
       const el = globalThis.document.createElement('input');

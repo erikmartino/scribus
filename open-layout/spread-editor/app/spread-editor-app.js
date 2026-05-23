@@ -283,8 +283,13 @@ export class SpreadEditorApp {
           // Resolve assetRef to a URL using metadata or fallback
           assetRef = frame.assetRef;
           const meta = assetMeta[assetRef];
-          assetExt = meta ? extFromMime(meta.mime) : 'jpg';
-          imageUrl = `/store/${this._docPath}/assets/${assetRef}/${assetRef}.${assetExt}`;
+          if (meta && meta.preview) {
+            imageUrl = `/store/${this._docPath}/assets/${assetRef}/${meta.preview}`;
+            assetExt = 'jpg';
+          } else {
+            imageUrl = this._emptyImagePlaceholder();
+            assetExt = 'jpg';
+          }
         } else {
           imageUrl = frame.imageUrl || this._emptyImagePlaceholder();
         }
