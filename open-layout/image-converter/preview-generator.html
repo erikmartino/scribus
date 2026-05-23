@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asset Preview Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --card-bg: rgba(20, 20, 35, 0.45);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #4cc9f0;
+      --accent-glow: rgba(76, 201, 240, 0.15);
+      --text: #e2e8f0;
+      --text-dim: #94a3b8;
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.15);
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --font: 'Outfit', system-ui, -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(76, 201, 240, 0.05) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.03) 0px, transparent 50%);
+      color: var(--text);
+      font-family: var(--font);
+      padding: 2.5rem;
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 1.5rem;
+    }
+
+    .title-area h1 {
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .title-area h1::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    .title-area p {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+
+    .back-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid rgba(76, 201, 240, 0.2);
+      border-radius: 8px;
+      background: rgba(76, 201, 240, 0.03);
+    }
+
+    .back-link:hover {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+      transform: translateX(-3px);
+    }
+
+    /* Dashboard Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+    }
+
+    .main-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    /* Metrics */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .metric-card {
+      text-align: center;
+      padding: 1.25rem;
+    }
+
+    .metric-card .num {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+    }
+
+    .metric-card .num.accent { color: var(--accent); }
+    .metric-card .num.warning { color: var(--warning); }
+    .metric-card .num.success { color: var(--success); }
+
+    .metric-card .label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-top: 0.5rem;
+    }
+
+    /* Progress Control Panel */
+    .control-card {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--success));
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
+    }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .status-text {
+      font-weight: 500;
+      color: #fff;
+    }
+
+    .percentage {
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 1rem;
+    }
+
+    button {
+      flex: 1;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 4px 14px 0 rgba(76, 201, 240, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: #7bdff2;
+      box-shadow: 0 4px 20px 0 rgba(76, 201, 240, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    /* Live Preview Grid */
+    .gallery-card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-height: 350px;
+    }
+
+    .gallery-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 0.5rem;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem;
+      overflow-y: auto;
+      max-height: 400px;
+      padding-right: 0.5rem;
+    }
+
+    .preview-box {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .preview-box:hover {
+      border-color: rgba(76, 201, 240, 0.3);
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .img-wrap {
+      width: 100%;
+      height: 110px;
+      background: #000;
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .img-wrap img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .resolution-tag {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      background: rgba(0, 0, 0, 0.7);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 2px 4px;
+      border-radius: 3px;
+      border: 1px solid rgba(76, 201, 240, 0.3);
+    }
+
+    .box-info {
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .box-info .name {
+      color: #fff;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .box-info .doc {
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .box-info .status {
+      color: var(--success);
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      margin-top: 0.25rem;
+    }
+
+    /* Log Panel */
+    .log-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .log-console {
+      height: 250px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .log-entry {
+      line-height: 1.4;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .log-entry .time {
+      color: #4b5563;
+      user-select: none;
+    }
+
+    .log-entry.info .msg { color: var(--text); }
+    .log-entry.success .msg { color: var(--success); }
+    .log-entry.warning .msg { color: var(--warning); }
+    .log-entry.error .msg { color: var(--error); }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 2rem;
+      gap: 1rem;
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      color: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title-area">
+        <h1>Asset Preview Generator</h1>
+        <p>Proportional browser-side downscaler dashboard for all document assets</p>
+      </div>
+      <a href="index.html" class="back-link">&larr; Streaming Downscaler</a>
+    </header>
+
+    <div class="dashboard-grid">
+      <!-- Main panel -->
+      <div class="main-panel">
+        <!-- Control panel -->
+        <div class="card control-card">
+          <div class="progress-info">
+            <span class="status-text" id="status-text">Ready to scan document store</span>
+            <span class="percentage" id="percentage">0%</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progress-bar"></div>
+          </div>
+          <div class="btn-group">
+            <button id="action-btn" class="btn-primary">
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/>
+              </svg>
+              Scan & Generate
+            </button>
+            <button id="reset-btn" class="btn-secondary" disabled>Reset</button>
+          </div>
+        </div>
+
+        <!-- Live gallery of newly processed previews -->
+        <div class="card gallery-card">
+          <div class="gallery-title">Processed Assets</div>
+          <div class="grid-container" id="gallery-grid">
+            <div class="empty-state" id="gallery-empty">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.9 2.9m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z"/>
+              </svg>
+              <span>Processed previews will appear here during generation</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="main-panel">
+        <!-- Stats card -->
+        <div class="card metrics-row" style="grid-template-columns: 1fr; gap: 1rem;">
+          <div class="metric-card">
+            <div class="num accent" id="metric-scanned">0</div>
+            <div class="label">Total Assets</div>
+          </div>
+          <div class="metric-card">
+            <div class="num warning" id="metric-pending">0</div>
+            <div class="label">Previews Missing</div>
+          </div>
+          <div class="metric-card">
+            <div class="num success" id="metric-completed">0</div>
+            <div class="label">Downscaled Previews</div>
+          </div>
+        </div>
+
+        <!-- Log console -->
+        <div class="card log-card">
+          <div class="log-header">
+            <span>Process Log</span>
+            <button id="clear-log-btn" style="flex: none; font-size: 0.75rem; padding: 0.25rem 0.5rem; background: transparent; color: var(--text-dim);">Clear</button>
+          </div>
+          <div class="log-console" id="log-console">
+            <div class="log-entry info">
+              <span class="time">[12:00:00]</span>
+              <span class="msg">System ready. Click "Scan & Generate" to start.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    const actionBtn = document.getElementById('action-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const clearLogBtn = document.getElementById('clear-log-btn');
+    const statusText = document.getElementById('status-text');
+    const percentageText = document.getElementById('percentage');
+    const progressBar = document.getElementById('progress-bar');
+    const logConsole = document.getElementById('log-console');
+    const galleryGrid = document.getElementById('gallery-grid');
+    const galleryEmpty = document.getElementById('gallery-empty');
+
+    const mScanned = document.getElementById('metric-scanned');
+    const mPending = document.getElementById('metric-pending');
+    const mCompleted = document.getElementById('metric-completed');
+
+    let totalAssets = [];
+    let queue = [];
+    let processing = false;
+    let stopRequested = false;
+
+    // UI state tracking
+    let scannedCount = 0;
+    let pendingCount = 0;
+    let completedCount = 0;
+
+    function addLog(message, type = 'info') {
+      const now = new Date();
+      const timeStr = `[${now.toTimeString().split(' ')[0]}]`;
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.innerHTML = `<span class="time">${timeStr}</span><span class="msg">${message}</span>`;
+      logConsole.appendChild(entry);
+      logConsole.scrollTop = logConsole.scrollHeight;
+    }
+
+    clearLogBtn.addEventListener('click', () => {
+      logConsole.innerHTML = '';
+      addLog('Log cleared.');
+    });
+
+    resetBtn.addEventListener('click', () => {
+      totalAssets = [];
+      queue = [];
+      processing = false;
+      stopRequested = false;
+      scannedCount = 0;
+      pendingCount = 0;
+      completedCount = 0;
+
+      mScanned.textContent = '0';
+      mPending.textContent = '0';
+      mCompleted.textContent = '0';
+
+      progressBar.style.width = '0%';
+      percentageText.textContent = '0%';
+      statusText.textContent = 'Ready to scan document store';
+
+      actionBtn.innerHTML = `
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/>
+        </svg>
+        Scan & Generate
+      `;
+      actionBtn.disabled = false;
+      resetBtn.disabled = true;
+
+      galleryGrid.innerHTML = '';
+      galleryGrid.appendChild(galleryEmpty);
+      addLog('State reset.');
+    });
+
+    actionBtn.addEventListener('click', async () => {
+      if (processing) {
+        // Request stop
+        stopRequested = true;
+        actionBtn.disabled = true;
+        statusText.textContent = 'Stopping process...';
+        addLog('Cancellation requested by user.', 'warning');
+        return;
+      }
+
+      processing = true;
+      stopRequested = false;
+      resetBtn.disabled = true;
+      actionBtn.innerHTML = `
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5"/>
+        </svg>
+        Pause
+      `;
+
+      try {
+        if (totalAssets.length === 0) {
+          statusText.textContent = 'Scanning document store...';
+          addLog('Fetching store manifest...');
+          const res = await fetch('/store/');
+          if (!res.ok) throw new Error(`Failed to list store: ${res.status}`);
+          const files = await res.json();
+
+          addLog(`Scanning ${files.length} store files...`);
+          
+          // Identify all asset folders by finding their meta.json manifest
+          const parsed = [];
+          for (const f of files) {
+            const match = f.match(/^([^/]+)\/([^/]+)\/assets\/([^/]+)\/meta\.json$/);
+            if (match) {
+              const [_, user, doc, name] = match;
+              
+              // Check if preview already exists in files list
+              const previewPath = `${user}/${doc}/assets/${name}/${name}-preview.jpg`;
+              const hasPreview = files.includes(previewPath);
+
+              // Find the original image file
+              const originalPath = files.find(orig => 
+                orig.startsWith(`${user}/${doc}/assets/${name}/${name}.`) && 
+                !orig.endsWith('.json') &&
+                !orig.includes('-preview.') &&
+                !orig.includes('preview.webp')
+              );
+
+              parsed.push({
+                user,
+                doc,
+                name,
+                hasPreview,
+                originalPath: originalPath ? `/store/${originalPath}` : null,
+                metaPath: `/store/${f}`
+              });
+            }
+          }
+
+          totalAssets = parsed;
+          queue = totalAssets.filter(a => !a.hasPreview);
+
+          scannedCount = totalAssets.length;
+          completedCount = totalAssets.length - queue.length;
+          pendingCount = queue.length;
+
+          mScanned.textContent = scannedCount;
+          mCompleted.textContent = completedCount;
+          mPending.textContent = pendingCount;
+
+          addLog(`Scanning completed: found ${scannedCount} assets.`, 'success');
+          addLog(`Downscaled previews: ${completedCount} exist, ${pendingCount} missing.`);
+        }
+
+        if (queue.length === 0) {
+          statusText.textContent = 'All assets up-to-date!';
+          progressBar.style.width = '100%';
+          percentageText.textContent = '100%';
+          addLog('No missing previews found. All assets downscaled.', 'success');
+          processing = false;
+          actionBtn.disabled = true;
+          resetBtn.disabled = false;
+          return;
+        }
+
+        // Process queue
+        addLog(`Starting downscaling queue of ${queue.length} images...`);
+        const totalToProcess = queue.length;
+        let processedCount = 0;
+
+        while (queue.length > 0) {
+          if (stopRequested) {
+            addLog('Process paused by user.', 'warning');
+            break;
+          }
+
+          const current = queue[0];
+          statusText.textContent = `Downscaling ${current.name} (${current.doc})...`;
+          addLog(`Processing ${current.name} [doc: ${current.doc}]`);
+
+          if (!current.originalPath) {
+            addLog(`Original image missing for ${current.name}! Skipping.`, 'error');
+            queue.shift();
+            pendingCount--;
+            mPending.textContent = pendingCount;
+            processedCount++;
+            continue;
+          }
+
+          try {
+            // 1. Load image in browser
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            // Wait for image load
+            const imgLoaded = new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = () => reject(new Error(`Failed to load original image: ${current.originalPath}`));
+            });
+            img.src = current.originalPath;
+            await imgLoaded;
+
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            addLog(`Loaded original dimensions: ${w}x${h}px`);
+
+            // 2. Proportional Downscaling constraints
+            let targetW = w;
+            let targetH = h;
+
+            if (w > 500 || h > 500) {
+              if (w > h) {
+                targetW = 500;
+                targetH = Math.round((h * 500) / w);
+              } else {
+                targetH = 500;
+                targetW = Math.round((w * 500) / h);
+              }
+              addLog(`Downscaling proportionally to ${targetW}x${targetH}px`);
+            } else {
+              addLog(`Image size ${w}x${h}px is within 500x500. Retaining original size.`);
+            }
+
+            // 3. Render onto canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = targetW;
+            canvas.height = targetH;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, targetW, targetH);
+
+            // 4. Export to jpeg blob
+            const jpegBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+
+            // 5. PUT JPEG blob to store
+            const previewUrl = `/store/${current.user}/${current.doc}/assets/${current.name}/${current.name}-preview.jpg`;
+            addLog(`Uploading preview to ${previewUrl}...`);
+            const uploadRes = await fetch(previewUrl, {
+              method: 'PUT',
+              body: jpegBlob,
+              headers: { 'Content-Type': 'image/jpeg' }
+            });
+            if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+
+            // 6. Update manifest (meta.json)
+            addLog(`Fetching asset manifest...`);
+            const metaRes = await fetch(current.metaPath);
+            if (!metaRes.ok) throw new Error(`Failed to fetch manifest: ${metaRes.status}`);
+            const meta = await metaRes.json();
+
+            addLog(`Updating meta.json...`);
+            meta.preview = `${current.name}-preview.jpg`;
+            meta.previewWidth = targetW;
+            meta.previewHeight = targetH;
+
+            const updateMetaRes = await fetch(current.metaPath, {
+              method: 'PUT',
+              body: JSON.stringify(meta, null, 2),
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (!updateMetaRes.ok) throw new Error(`Failed to update manifest: ${updateMetaRes.status}`);
+
+            // Update UI State
+            current.hasPreview = true;
+            queue.shift(); // remove from queue
+            
+            completedCount++;
+            pendingCount--;
+            processedCount++;
+
+            mCompleted.textContent = completedCount;
+            mPending.textContent = pendingCount;
+
+            const progressPct = Math.round((processedCount / totalToProcess) * 100);
+            progressBar.style.width = `${progressPct}%`;
+            percentageText.textContent = `${progressPct}%`;
+
+            // Append to gallery
+            if (galleryEmpty.parentNode) {
+              galleryEmpty.remove();
+            }
+
+            const pBox = document.createElement('div');
+            pBox.className = 'preview-box';
+            pBox.innerHTML = `
+              <div class="img-wrap">
+                <img src="${previewUrl}?t=${Date.now()}" alt="${current.name}">
+                <span class="resolution-tag">${targetW}×${targetH}</span>
+              </div>
+              <div class="box-info">
+                <span class="name" title="${current.name}">${current.name}</span>
+                <span class="doc" title="${current.doc}">${current.doc}</span>
+                <span class="status">JPEG SAVED</span>
+              </div>
+            `;
+            galleryGrid.appendChild(pBox);
+
+            addLog(`Successfully processed and saved preview for ${current.name}!`, 'success');
+
+          } catch (itemErr) {
+            addLog(`Error processing ${current.name}: ${itemErr.message}`, 'error');
+            // Move item to end of queue to avoid blocking
+            const failedItem = queue.shift();
+            queue.push(failedItem);
+            
+            // Wait slightly before retrying to prevent rapid loops
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+
+        if (queue.length === 0) {
+          statusText.textContent = 'All previews generated successfully!';
+          progressBar.style.width = '100%';
+          percentageText.textContent = '100%';
+          addLog('Queue processing finished successfully. All previews downscaled.', 'success');
+          actionBtn.disabled = true;
+        } else {
+          statusText.textContent = 'Paused.';
+          actionBtn.innerHTML = `
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/>
+            </svg>
+            Resume
+          `;
+          actionBtn.disabled = false;
+        }
+
+      } catch (err) {
+        statusText.textContent = 'Error occurred.';
+        addLog(`System Error: ${err.message}`, 'error');
+        actionBtn.innerHTML = `
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/>
+          </svg>
+          Scan & Generate
+        `;
+      } finally {
+        processing = false;
+        resetBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
