@@ -114,7 +114,7 @@ export class SvgRenderer {
     let globalLineIdx = 0;
 
     for (const { box, lines } of boxResults) {
-      let y = box.y + this._padding + fontSize;
+      let y = box.y + this._padding + (lines[0]?.fontSize ?? fontSize);
 
       for (let i = 0; i < lines.length; i++) {
         const entry = lines[i];

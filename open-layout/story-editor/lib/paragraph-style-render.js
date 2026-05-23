@@ -58,5 +58,6 @@ export function buildParagraphLayoutStyles(baseFontSize, paragraphStyles) {
   return paragraphStyles.map((style) => ({
     fontSize: style.fontSize,
     fontFamily: style.fontFamily,
+    lineHeight: style.lineHeight,
   }));
 }

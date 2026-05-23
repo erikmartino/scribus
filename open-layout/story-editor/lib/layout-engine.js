@@ -131,11 +131,13 @@ export class LayoutEngine {
       const runs = runsParagraphs[pi];
       const styleFontSize = paragraphStyles[pi]?.fontSize;
       const paraFontSize = Number.isFinite(styleFontSize) ? Number(styleFontSize) : fontSize;
+      const styleLineHeight = paragraphStyles[pi]?.lineHeight;
+      const paraLineHeightPct = Number.isFinite(styleLineHeight) ? (styleLineHeight * 100) : undefined;
       const fingerprint = this._fingerprintRuns(runs);
       const cached = this._shapeCache.get(pi);
       const defaultFamily = paragraphStyles[pi]?.fontFamily || this._svgRenderer._fontFamily;
 
-      if (cached && cached.fontSize === paraFontSize && cached.fontFamily === defaultFamily && cached.fingerprint === fingerprint) {
+      if (cached && cached.fontSize === paraFontSize && cached.fontFamily === defaultFamily && cached.lineHeightPct === paraLineHeightPct && cached.fingerprint === fingerprint) {
         shaped.push(cached.shapedPara);
         continue;
       }
@@ -159,8 +161,8 @@ export class LayoutEngine {
       // One past end
       const origLen = origText.length;
 
-      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen, fontSize: paraFontSize, fontFamily: defaultFamily };
-      this._shapeCache.set(pi, { fontSize: paraFontSize, fontFamily: defaultFamily, fingerprint, shapedPara });
+      const shapedPara = { text, glyphs, paraIndex: pi, hyphToOrig, origLen, fontSize: paraFontSize, fontFamily: defaultFamily, lineHeightPct: paraLineHeightPct };
+      this._shapeCache.set(pi, { fontSize: paraFontSize, fontFamily: defaultFamily, lineHeightPct: paraLineHeightPct, fingerprint, shapedPara });
       shaped.push(shapedPara);
     }
     return shaped;
@@ -184,9 +186,10 @@ export class LayoutEngine {
     let usedHeight = 0;
     let overflow = false;
 
-    for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize, fontFamily } of shapedParas) {
+    for (const { text, glyphs, paraIndex, hyphToOrig, origLen, fontSize: paraFontSize, fontFamily, lineHeightPct: paraLineHeightPct } of shapedParas) {
       const effectiveFontSize = paraFontSize;
-      const lineHeight = effectiveFontSize * (lineHeightPct / 100);
+      const effectiveLineHeightPct = paraLineHeightPct ?? lineHeightPct;
+      const lineHeight = effectiveFontSize * (effectiveLineHeightPct / 100);
       const paraSpacing = lineHeight * 0.5;
       const hyphenAdvance = this._measureHyphen(effectiveFontSize);
       if (glyphs.length === 0) {

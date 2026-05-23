@@ -31,3 +31,8 @@ Completed plans are removed per convention. Previously completed:
 - `spread-editor-ribbon-encapsulation.md` — Encapsulate ribbon control behind app shell API (completed).
 - `spread-editor-ribbon-sync-on-cursor-move.md` — Sync ribbon controls on cursor movement (completed).
 - `streaming-downscale-tests-and-refactor-plan.md` — Tests, bug fixes, OPFS streaming, pyramid-aware decode (completed).
+- `svg-headless-exporter-plan.md` — Extracting SVG Generation Module (completed, morphed into PDF Exporter).
+- `pdf-exporter-plan.md` — PDF Exporter Module with streaming support (completed).
+- `streaming-downscale-test-fix-plan.md` — Fixing Streaming Downscale E2E Tests (completed).
+- `property-sync-fix-plan.md` — Fix Property Synchronization in App-Shell (completed).
+- `fix-failing-tests-plan.md` — Fix Failing Tests and Properties Panel Regression (completed).
