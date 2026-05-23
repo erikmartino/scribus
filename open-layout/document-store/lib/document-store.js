@@ -261,6 +261,26 @@ export async function loadCharacterStyles(docPath) {
 }
 
 /**
+ * Load asset metadata for a document.
+ *
+ * @param {string} docPath
+ * @returns {Promise<Record<string, object>>}
+ */
+export async function loadAssets(docPath) {
+  const assetMeta = {};
+  try {
+    const aggRes = await fetch(`/store/${docPath}/assets.aggregate.json`);
+    if (aggRes.ok) {
+      const arr = await aggRes.json();
+      for (const m of arr) {
+        if (m.id) assetMeta[m.id] = m;
+      }
+    }
+  } catch { /* assets are optional */ }
+  return assetMeta;
+}
+
+/**
  * Load a spread definition from the store.
  *
  * @param {string} docPath
@@ -310,11 +330,27 @@ export async function loadStoryFromStore(docPath, storyId, options = {}) {
     }));
     story.push(runs);
 
-    const def = styleMap[para.styleRef] || {};
+    const styleRef = para.styleRef || 'body';
+    let def = styleMap[styleRef];
+    if (!def) {
+      try {
+        const res = await fetch(`/store/${docPath}/styles/paragraph/${styleRef}.json`);
+        if (res.ok) {
+           def = await res.json();
+           styleMap[styleRef] = def;
+        } else {
+           def = {};
+        }
+      } catch {
+        def = {};
+      }
+    }
+
     paragraphStyles.push(cloneParagraphStyle({
-      styleRef: para.styleRef || 'body',
+      styleRef,
       fontSize: def.fontSize ?? baseFontSize,
       fontFamily: def.fontFamily ?? 'EB Garamond',
+      lineHeight: def.lineHeight,
     }));
   }
 

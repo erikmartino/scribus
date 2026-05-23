@@ -16,6 +16,10 @@ import {
   uploadImageAsset,
   assetNameFromFilename,
   extFromMime,
+  loadSpread,
+  loadParagraphStyles,
+  loadStoryFromStore,
+  loadAssets,
 } from '../../document-store/lib/document-store.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
@@ -256,23 +260,10 @@ export class SpreadEditorApp {
     this.setStatus('Loading document from store...');
 
     // 1. Load the spread definition
-    const spreadUrl = `/store/${this._docPath}/spreads/spread-1.json`;
-    const spreadRes = await fetch(spreadUrl);
-    if (!spreadRes.ok) {
-      throw new Error(`Failed to load spread: ${spreadRes.status} ${spreadUrl}`);
-    }
-    const spreadJson = await spreadRes.json();
+    const spreadJson = await loadSpread(this._docPath, 'spread-1');
 
     // 2. Load paragraph style definitions (for resolving styleRef)
-    let styleMap = {};
-    try {
-      const stylesUrl = `/store/${this._docPath}/styles/paragraph.aggregate.json`;
-      const stylesRes = await fetch(stylesUrl);
-      if (stylesRes.ok) {
-        const styles = await stylesRes.json();
-        for (const s of styles) styleMap[s.id] = s;
-      }
-    } catch { /* styles are optional */ }
+    const styleMap = await loadParagraphStyles(this._docPath);
 
     // 3. Parse frames into boxes and collect storyRefs to load
     const storyRefsToLoad = new Set();
@@ -280,14 +271,7 @@ export class SpreadEditorApp {
     const storyBoxMap = new Map();
 
     // Pre-load asset metadata so we can resolve assetRefs to URLs
-    let assetMeta = {};
-    try {
-      const aggRes = await fetch(`/store/${this._docPath}/assets.aggregate.json`);
-      if (aggRes.ok) {
-        const arr = await aggRes.json();
-        for (const m of arr) if (m.id) assetMeta[m.id] = m;
-      }
-    } catch { /* assets are optional */ }
+    const assetMeta = await loadAssets(this._docPath);
 
     for (const frame of spreadJson.frames || []) {
       if (frame.type === 'image') {
@@ -340,45 +324,30 @@ export class SpreadEditorApp {
 
     // 4. Load each referenced story
     const storyPromises = [...storyRefsToLoad].map(async (storyRef) => {
-      const storyUrl = `/store/${this._docPath}/stories/${storyRef}.json`;
-      const res = await fetch(storyUrl);
-      if (!res.ok) {
-        console.warn(`Failed to load story ${storyRef}: ${res.status}`);
+      try {
+        const { story, paragraphStyles } = await loadStoryFromStore(
+          this._docPath,
+          storyRef,
+          { baseFontSize: this._fontSize, styleMap }
+        );
+
+        // Ensure at least one paragraph
+        if (story.length === 0) {
+          story.push([{ text: '', style: cloneStyle() }]);
+          paragraphStyles.push(cloneParagraphStyle({ fontSize: this._fontSize }));
+        }
+
+        return {
+          storyRef,
+          id: storyRef,
+          story,
+          paragraphStyles,
+          boxIds: storyBoxMap.get(storyRef) || [],
+        };
+      } catch (err) {
+        console.warn(`Failed to load story ${storyRef}:`, err);
         return null;
       }
-      const storyJson = await res.json();
-
-      // Convert store format -> editor format
-      const story = [];
-      const paragraphStyles = [];
-      for (const para of storyJson.paragraphs || []) {
-        const runs = (para.runs || []).map(run => ({
-          text: run.text,
-          style: cloneStyle(run.style),
-        }));
-        story.push(runs);
-
-        const def = styleMap[para.styleRef] || {};
-        paragraphStyles.push(cloneParagraphStyle({
-          styleRef: para.styleRef || 'body',
-          fontSize: def.fontSize ?? this._fontSize,
-          fontFamily: def.fontFamily ?? 'EB Garamond',
-        }));
-      }
-
-      // Ensure at least one paragraph
-      if (story.length === 0) {
-        story.push([{ text: '', style: cloneStyle() }]);
-        paragraphStyles.push(cloneParagraphStyle({ fontSize: this._fontSize }));
-      }
-
-      return {
-        storyRef,
-        id: storyJson.id || storyRef,
-        story,
-        paragraphStyles,
-        boxIds: storyBoxMap.get(storyRef) || [],
-      };
     });
 
     const loadedStories = (await Promise.all(storyPromises)).filter(Boolean);

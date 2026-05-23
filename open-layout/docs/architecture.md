@@ -193,6 +193,8 @@ Document inspector UI and client-side store API library.
 
 **Store client API (`document-store/lib/document-store.js`):**
 
+> **CRITICAL RULE**: All application plugins (e.g. `spread-editor`, `story-editor`) MUST use the exports from `document-store/lib/document-store.js` to interact with the `/store/` endpoints. **Never use `fetch()` directly in a UI module to retrieve or save document data.** This ensures consistent caching, format conversion, and centralized error handling.
+
 | Function | Purpose |
 |----------|---------|
 | `loadDocument(docPath)` | Fetches `document.json` + recursive file listing |

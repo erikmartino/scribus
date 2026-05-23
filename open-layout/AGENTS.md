@@ -98,6 +98,9 @@ formats, server API, plugin system, testing conventions, and external
 dependencies. Read this first to orient yourself before exploring source
 files.
 
+**Key Architecture Rules:**
+- **Document Store Access:** Never use `fetch()` directly in UI modules to access the `/store/` REST API. All document loading and saving MUST go through the `document-store/lib/document-store.js` API module.
+
 ### App Shell / Plugin Boundary
 
 See [docs/app-shell-boundary.md](docs/app-shell-boundary.md) for the
