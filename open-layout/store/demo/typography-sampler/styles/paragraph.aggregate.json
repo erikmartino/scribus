@@ -1,0 +1,30 @@
+[
+  {
+    "id": "body",
+    "fontFamily": "EB Garamond",
+    "fontSize": 18,
+    "lineHeight": 1.4,
+    "alignment": "justify"
+  },
+  {
+    "id": "title",
+    "fontFamily": "EB Garamond",
+    "fontSize": 48,
+    "lineHeight": 1.1,
+    "alignment": "left"
+  },
+  {
+    "id": "lead",
+    "fontFamily": "EB Garamond",
+    "fontSize": 24,
+    "lineHeight": 1.2,
+    "alignment": "left"
+  },
+  {
+    "id": "caption",
+    "fontFamily": "EB Garamond",
+    "fontSize": 14,
+    "lineHeight": 1.4,
+    "alignment": "center"
+  }
+]

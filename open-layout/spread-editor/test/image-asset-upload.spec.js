@@ -72,7 +72,7 @@ test.describe('Image Asset Upload', () => {
     });
 
     // Wait for the image box to appear
-    await expect(page.locator('[data-image-box="true"]')).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator('[data-image-box="true"]')).toHaveCount(2, { timeout: 5000 });
 
     // Verify asset files were created on disk
     const assetsDir = path.join(testDocDir, 'assets', 'my-photo');
@@ -96,7 +96,7 @@ test.describe('Image Asset Upload', () => {
     await dropImageAt(page, box.x + box.width / 2, box.y + box.height / 2, {
       name: 'pixel.png',
     });
-    await expect(page.locator('[data-image-box="true"]')).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator('[data-image-box="true"]')).toHaveCount(2, { timeout: 5000 });
 
     const imgPath = path.join(testDocDir, 'assets', 'pixel', 'pixel.png');
     expect(fs.existsSync(imgPath)).toBe(true);
@@ -117,7 +117,7 @@ test.describe('Image Asset Upload', () => {
     await dropImageAt(page, box.x + box.width / 2, box.y + box.height / 2, {
       name: 'banner.png',
     });
-    await expect(page.locator('[data-image-box="true"]')).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator('[data-image-box="true"]')).toHaveCount(2, { timeout: 5000 });
 
     // Save
     const saveBtn = page.locator('scribus-button[label="Save"]');
@@ -145,13 +145,13 @@ test.describe('Image Asset Upload', () => {
     await dropImageAt(page, box.x + box.width / 3, box.y + box.height / 2, {
       name: 'icon.png', color: 'red',
     });
-    await expect(page.locator('[data-image-box="true"]')).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator('[data-image-box="true"]')).toHaveCount(2, { timeout: 5000 });
 
     // Drop second image with the same name
     await dropImageAt(page, box.x + 2 * box.width / 3, box.y + box.height / 2, {
       name: 'icon.png', color: 'blue',
     });
-    await expect(page.locator('[data-image-box="true"]')).toHaveCount(2, { timeout: 5000 });
+    await expect(page.locator('[data-image-box="true"]')).toHaveCount(3, { timeout: 5000 });
 
     // Both asset folders should exist
     expect(fs.existsSync(path.join(testDocDir, 'assets', 'icon', 'icon.png'))).toBe(true);
@@ -178,12 +178,13 @@ test.describe('Image Asset Upload', () => {
     await dropImageAt(page, box.x + box.width / 2, box.y + box.height / 2, {
       name: 'photo.png',
     });
-    await expect(page.locator('[data-image-box="true"]')).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator('[data-image-box="true"]')).toHaveCount(2, { timeout: 5000 });
 
     // The image element's href should be a store URL, not a data: URL
     const href = await page.evaluate(() => {
       const svg = document.querySelector('#svg-container svg.content-svg');
-      const img = svg.querySelector('image[data-image-box]');
+      const imgs = Array.from(svg.querySelectorAll('image[data-image-box]'));
+      const img = imgs[imgs.length - 1]; // get the last added image
       return img?.getAttribute('href') || img?.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
     });
     expect(href).toContain('/store/');

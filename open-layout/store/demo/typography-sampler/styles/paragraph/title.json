@@ -1,7 +1,7 @@
 {
   "id": "title",
   "fontFamily": "EB Garamond",
-  "fontSize": 64,
+  "fontSize": 48,
   "lineHeight": 1.1,
   "alignment": "left"
 }

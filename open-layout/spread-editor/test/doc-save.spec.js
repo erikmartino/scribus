@@ -132,6 +132,6 @@ test.describe('Document Save', () => {
     const textFrames = spreadJson.frames.filter(f => f.type === 'text');
     const imageFrames = spreadJson.frames.filter(f => f.type === 'image');
     expect(textFrames.length).toBeGreaterThan(0);
-    expect(imageFrames.length).toBe(1);
+    expect(imageFrames.length).toBe(2);
   });
 });

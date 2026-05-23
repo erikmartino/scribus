@@ -20,7 +20,7 @@ test.describe('SVG Exporter', () => {
 
     // At least one page SVG container should be visible
     const pageContainers = page.locator('.page-svg-container');
-    await expect(pageContainers).toHaveCount(1);
+    await expect(pageContainers).toHaveCount(2);
 
     // The SVG inside should contain text elements (actual rendered text)
     const svg = pageContainers.first().locator('svg');

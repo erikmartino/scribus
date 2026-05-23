@@ -1,0 +1,16 @@
+{
+  "id": "story-caption",
+  "paragraphs": [
+    {
+      "styleRef": "caption",
+      "runs": [
+        {
+          "text": "The Gutenberg press revolutionized the distribution of ideas. Its legacy lives on in every meticulously set line of text.",
+          "style": {
+            "italic": true
+          }
+        }
+      ]
+    }
+  ]
+}

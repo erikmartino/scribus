@@ -1,0 +1,14 @@
+{
+  "id": "story-2",
+  "paragraphs": [
+    {
+      "styleRef": "body",
+      "runs": [
+        {
+          "text": "",
+          "style": {}
+        }
+      ]
+    }
+  ]
+}

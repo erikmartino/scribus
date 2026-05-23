@@ -1,8 +1,11 @@
 {
   "format": "open-layout/v1",
   "title": "Typography Sampler",
-  "created": "2026-04-12T20:00:00Z",
-  "modified": "2026-04-12T20:00:00Z",
+  "created": "2026-05-15T12:05:01.153Z",
+  "modified": "2026-05-23T09:13:43.740Z",
   "defaultUnits": "mm",
-  "pageSize": { "width": 210, "height": 297 }
+  "pageSize": {
+    "width": 210,
+    "height": 297
+  }
 }

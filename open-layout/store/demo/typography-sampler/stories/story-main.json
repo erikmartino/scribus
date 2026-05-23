@@ -4,33 +4,78 @@
     {
       "styleRef": "lead",
       "runs": [
-        { "text": "Typography is the craft of endowing human language with a durable visual form.", "style": {} }
+        {
+          "text": "Typography is the craft of endowing human language with a durable visual form.",
+          "style": {}
+        }
       ]
     },
     {
       "styleRef": "body",
       "runs": [
-        { "text": "Good typography is ", "style": {} },
-        { "text": "invisible", "style": { "italic": true } },
-        { "text": "; great typography is ", "style": {} },
-        { "text": "felt", "style": { "bold": true } },
-        { "text": ". The invisible nature of good typography ensures that the reader's attention is entirely focused on the message, not the medium.", "style": {} }
+        {
+          "text": "Good typography is ",
+          "style": {}
+        },
+        {
+          "text": "invisible",
+          "style": {
+            "italic": true
+          }
+        },
+        {
+          "text": "; great typography is ",
+          "style": {}
+        },
+        {
+          "text": "felt",
+          "style": {
+            "bold": true
+          }
+        },
+        {
+          "text": ". The invisible nature of good typography ensures that the reader's attention is entirely focused on the message, not the medium. It acts as a crystal goblet, allowing the wine of the text to be appreciated without distraction.",
+          "style": {}
+        }
       ]
     },
     {
       "styleRef": "body",
       "runs": [
-        { "text": "Ligatures like ", "style": {} },
-        { "text": "fi, fl, ffi, and ffl", "style": { "italic": true } },
-        { "text": " stitch letters into fluid shapes, preventing awkward collisions between characters. From justified columns to careful kerning, every ", "style": {} },
-        { "text": "detail affects", "style": { "bold": true, "italic": true } },
-        { "text": " the final impression on the page.", "style": {} }
+        {
+          "text": "Ligatures like ",
+          "style": {}
+        },
+        {
+          "text": "fi, fl, ffi, and ffl",
+          "style": {
+            "italic": true
+          }
+        },
+        {
+          "text": " stitch letters into fluid shapes, preventing awkward collisions between characters. From justified columns to careful kerning, every ",
+          "style": {}
+        },
+        {
+          "text": "micro-typographic detail",
+          "style": {
+            "bold": true,
+            "italic": true
+          }
+        },
+        {
+          "text": " affects the final impression on the page.",
+          "style": {}
+        }
       ]
     },
     {
       "styleRef": "body",
       "runs": [
-        { "text": "A well-designed page should invite the eye to enter the text, read without strain, and navigate easily from one section to the next.", "style": {} }
+        {
+          "text": "A well-designed page should invite the eye to enter the text, read without strain, and navigate easily from one section to the next. The rhythm of the words on the page must match the rhythm of the spoken thought, giving breath to the silent voice of the author.",
+          "style": {}
+        }
       ]
     }
   ]

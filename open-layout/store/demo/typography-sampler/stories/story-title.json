@@ -4,13 +4,16 @@
     {
       "styleRef": "title",
       "runs": [
-        { "text": "The Art of", "style": {} }
-      ]
-    },
-    {
-      "styleRef": "title",
-      "runs": [
-        { "text": "Typography", "style": { "italic": true } }
+        {
+          "text": "The Art of ",
+          "style": {}
+        },
+        {
+          "text": "Typography",
+          "style": {
+            "italic": true
+          }
+        }
       ]
     }
   ]
