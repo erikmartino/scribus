@@ -17,16 +17,16 @@
       "x": 60,
       "y": 80,
       "width": 475,
-      "height": 205.5,
+      "height": 70,
       "storyRef": "story-title"
     },
     {
       "id": "frame-main",
       "type": "text",
       "x": 57.5,
-      "y": 285.5,
+      "y": 170,
       "width": 475,
-      "height": 450,
+      "height": 600,
       "storyRef": "story-main"
     },
     {
