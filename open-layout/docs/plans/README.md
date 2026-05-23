@@ -14,6 +14,7 @@ Reference specifications live in `../../specs/`.
 
 Completed plans are removed per convention. Previously completed:
 
+- `2026-05-23-rename-streaming-downscale-demo-plan.md` — Rename streaming-downscale-demo module to image-converter (completed).
 - `root-index-page-plan.md` — Root index page with document browser button (completed).
 - `app-launcher-dropdown-plan.md` — App launcher dropdown replacing the document browser link (completed).
 - `app-shell-properties-panel-plan.md` — Multi-panel sidebar with Properties panel (completed).

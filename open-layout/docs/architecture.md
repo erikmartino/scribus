@@ -331,7 +331,7 @@ All proxied through the dev server and cached under `vendor/`:
 | HarfBuzz.js (WASM + JS) | 0.3.6 | story-editor (text shaping) |
 | hyphen (English) | 1.10.4 | story-editor (hyphenation) |
 | EB Garamond (font) | latest | story-editor (default font) |
-| wasm-vips | 0.0.17 | streaming-downscale-demo, tiff-to-pdf-demo |
+| wasm-vips | 0.0.17 | image-converter, tiff-to-pdf-demo |
 | css-tree | 2.3.1 | font-manager (CSS parsing) |
 
 ## Testing
@@ -342,7 +342,7 @@ Run with `npm test` (Node.js built-in test runner). Auto-discovers
 files matching `*/test/test-*.js`.
 
 Modules with unit tests: app-shell, story-editor, spread-editor,
-document-store, font-manager, streaming-downscale-demo.
+document-store, font-manager, image-converter.
 
 ### E2E Tests (Playwright)
 
@@ -351,7 +351,7 @@ Chromium only. Global setup creates a disposable `store/e2e-*.tmp/`
 directory so tests never modify tracked data.
 
 Modules with E2E specs: app-shell, spread-editor, document-browser,
-document-store, streaming-downscale-demo, root (test/).
+document-store, image-converter, root (test/).
 
 ### Key Test Conventions
 

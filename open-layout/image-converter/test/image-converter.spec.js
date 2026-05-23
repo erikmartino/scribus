@@ -95,7 +95,7 @@ test.describe('Streaming Downscale Demo', () => {
       console.error(`BROWSER [error]: ${err.message}`);
     });
 
-    await page.goto('/streaming-downscale-demo/index.html');
+    await page.goto('/image-converter/index.html');
     await page.waitForSelector('#start-btn');
   });
 
@@ -270,7 +270,7 @@ test.describe('Streaming Downscale Demo', () => {
     ));
 
     try {
-      await urlInput.fill(`/streaming-downscale-demo/worker-serve-${workerIndex}/test-serve.png`);
+      await urlInput.fill(`/image-converter/worker-serve-${workerIndex}/test-serve.png`);
       await page.locator('#start-btn').click();
 
       await expect(page.locator('#status')).toHaveText(/Done/, { timeout: 15000 });
