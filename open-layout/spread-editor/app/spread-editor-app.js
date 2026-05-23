@@ -455,6 +455,10 @@ export class SpreadEditorApp {
           if (msg.type === 'error') {
             console.error('[spread-editor] Preview worker error:', msg.message);
           }
+          // Refresh any boxes that are still showing the placeholder —
+          // their previews may have been on disk already (generated previously)
+          // and the worker correctly skipped them (generated: 0).
+          await this._refreshPlaceholderBoxes();
           break;
         }
 
@@ -466,6 +470,34 @@ export class SpreadEditorApp {
     };
 
     window.addEventListener('message', onMessage);
+  }
+
+  /**
+   * Re-fetch meta.json for any image box still showing the empty placeholder
+   * and swap in the preview URL if one is now available.
+   * Called after the preview worker finishes (including the no-op case where
+   * all previews were already on disk).
+   */
+  async _refreshPlaceholderBoxes() {
+    const placeholder = this._emptyImagePlaceholder();
+    const stale = this.imageBoxes.filter(b => b.imageUrl === placeholder && b.assetRef);
+    if (stale.length === 0) return;
+
+    let changed = false;
+    await Promise.all(stale.map(async (box) => {
+      try {
+        const metaUrl = `/store/${this._docPath}/assets/${box.assetRef}/meta.json`;
+        const res = await fetch(metaUrl);
+        if (!res.ok) return;
+        const meta = await res.json();
+        if (meta.preview) {
+          box.imageUrl = `/store/${this._docPath}/assets/${box.assetRef}/${meta.preview}?t=${Date.now()}`;
+          changed = true;
+        }
+      } catch { /* ignore */ }
+    }));
+
+    if (changed) await this.update();
   }
 
   /**
