@@ -22,6 +22,9 @@ export class BoxInteractionController {
     const start = this._toSvgPoint(event);
     if (!start) return false;
 
+    // Prevent default browser behavior (such as text selection) during dragging/resizing
+    event.preventDefault();
+
     this._onSelectBox(boxId);
     this._drag = new DragState({
       boxId,
