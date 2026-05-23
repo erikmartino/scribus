@@ -20,13 +20,32 @@ const enc = new TextEncoder();
 /**
  * Escape a JS string for use inside a PDF literal string ( ... ).
  * Only characters ≤ 0xFF are kept; others are replaced with '?'.
+ * Supports remapping ligatures to custom characters (240–244) using octal escapes
+ * when useLigatures is true.
  * @param {string} s
+ * @param {boolean} [useLigatures]
  * @returns {string}
  */
-function pdfLiteral(s) {
+function pdfLiteral(s, useLigatures = false) {
+  let mapped = s;
+  if (useLigatures) {
+    mapped = mapped.replaceAll('ffi', '\\363');
+    mapped = mapped.replaceAll('ffl', '\\364');
+    mapped = mapped.replaceAll('ff', '\\362');
+    mapped = mapped.replaceAll('fi', '\\360');
+    mapped = mapped.replaceAll('fl', '\\361');
+  }
+
   let out = '';
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
+  for (let i = 0; i < mapped.length; i++) {
+    const c = mapped.charCodeAt(i);
+    // If it's a pre-escaped octal sequence (e.g. \360), let it pass through unchanged
+    if (c === 0x5C && i + 3 < mapped.length && /^[0-7]{3}$/.test(mapped.slice(i + 1, i + 4))) {
+      out += mapped.slice(i, i + 4);
+      i += 3;
+      continue;
+    }
+
     if (c > 0xFF) {
       console.warn(`[pdf-writer] Non-Latin character U+${c.toString(16).toUpperCase()} replaced with '?'`);
       out += '?';
@@ -196,7 +215,13 @@ export class PdfWriter {
       `<< /Type /Font\n` +
       `   /Subtype /TrueType\n` +
       `   /BaseFont /${baseFontName}\n` +
-      `   /Encoding /WinAnsiEncoding\n` +
+      `   /Encoding <<\n` +
+      `     /Type /Encoding\n` +
+      `     /BaseEncoding /WinAnsiEncoding\n` +
+      `     /Differences [\n` +
+      `       240 /fi /fl /ff /ffi /ffl\n` +
+      `     ]\n` +
+      `   >>\n` +
       `   /FontDescriptor ${descriptorId} 0 R\n` +
       `>>\n`
     );
@@ -404,8 +429,8 @@ export function standardFontForStyle(style, baseFamily = 'Times') {
  * @param {number} pdfY       — y in PDF coordinates (points from bottom)
  * @returns {string}
  */
-export function textOp(text, fontAlias, fontSize, pdfX, pdfY) {
-  const escaped = pdfLiteral(text);
+export function textOp(text, fontAlias, fontSize, pdfX, pdfY, useLigatures = false) {
+  const escaped = pdfLiteral(text, useLigatures);
   return (
     `BT\n` +
     `  /${fontAlias} ${fontSize.toFixed(2)} Tf\n` +

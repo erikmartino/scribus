@@ -105,6 +105,13 @@ function collectFontData(pages, defaultFamily) {
             for (const char of frag.text) {
               data.unicodes.add(char.codePointAt(0));
             }
+
+            // Proactively include ligature codepoints in TrueType font subset if they are used in the text run
+            if (frag.text.includes('ffi')) data.unicodes.add(0xFB03);
+            if (frag.text.includes('ffl')) data.unicodes.add(0xFB04);
+            if (frag.text.includes('ff'))  data.unicodes.add(0xFB00);
+            if (frag.text.includes('fi'))  data.unicodes.add(0xFB01);
+            if (frag.text.includes('fl'))  data.unicodes.add(0xFB02);
           }
         }
       }
@@ -306,7 +313,9 @@ async function _generatePdf(engine, docPath, opts, writer) {
               if (g.text && g.text.trim()) {
                 const { alias } = standardFontForStyle(g.style);
                 const absX = box.x + padding + word.x + xOffset + g.dx;
-                ops += textOp(g.text, alias, line.fontSize, absX, pdfY);
+                const fontInfo = fontMap.get(alias);
+                const useLigatures = !!fontInfo?.subsetBytes;
+                ops += textOp(g.text, alias, line.fontSize, absX, pdfY, useLigatures);
               }
               xOffset += g.ax;
             }
@@ -316,7 +325,9 @@ async function _generatePdf(engine, docPath, opts, writer) {
               if (!frag.text || !frag.text.trim()) continue;
               const { alias } = standardFontForStyle(frag.style);
               const absX = box.x + padding + word.x;
-              ops += textOp(frag.text, alias, line.fontSize, absX, pdfY);
+              const fontInfo = fontMap.get(alias);
+              const useLigatures = !!fontInfo?.subsetBytes;
+              ops += textOp(frag.text, alias, line.fontSize, absX, pdfY, useLigatures);
             }
           }
         }

@@ -171,3 +171,24 @@ test('imageOp produces valid q/cm/Do/Q block', () => {
   assert.ok(op.includes('Q\n'), 'should restore graphics state');
   assert.ok(op.includes('200.00 0 0 100.00 10.00 20.00 cm'), 'should set transform');
 });
+
+test('textOp handles ligatures when useLigatures is true', () => {
+  const op = textOp('ffi fi fl', 'FT', 12, 0, 0, true);
+  assert.ok(op.includes('(\\363 \\360 \\361) Tj'), 'should replace ffi, fi, fl with custom octal codes');
+});
+
+test('textOp does not handle ligatures when useLigatures is false', () => {
+  const op = textOp('ffi fi fl', 'FT', 12, 0, 0, false);
+  assert.ok(op.includes('(ffi fi fl) Tj'), 'should leave ffi, fi, fl intact');
+});
+
+test('writeTrueTypeFont writes custom encoding differences for ligatures', async () => {
+  const pdf = new PdfWriter(595, 841);
+  pdf.writeHeader();
+  pdf.writeTrueTypeFont(1, 2, 3, 'F0', 'EBGaramond-Regular', new Uint8Array([1, 2, 3]));
+  pdf.writeXref(0, 3);
+  const buf = await drain(pdf.stream);
+  const text = buf.toString('latin1');
+  assert.ok(text.includes('/Differences ['), 'should contain /Differences');
+  assert.ok(text.includes('240 /fi /fl /ff /ffi /ffl'), 'should map ligature differences');
+});

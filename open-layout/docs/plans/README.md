@@ -36,3 +36,4 @@ Completed plans are removed per convention. Previously completed:
 - `streaming-downscale-test-fix-plan.md` — Fixing Streaming Downscale E2E Tests (completed).
 - `property-sync-fix-plan.md` — Fix Property Synchronization in App-Shell (completed).
 - `fix-failing-tests-plan.md` — Fix Failing Tests and Properties Panel Regression (completed).
+- `2026-05-23-pdf-ligatures-plan.md` — Ensure PDF exporter uses ligatures where possible (completed).
