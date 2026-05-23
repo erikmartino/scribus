@@ -67,6 +67,23 @@ export class AppShell extends EventTarget {
     this.element.addEventListener('marquee-start', (e) => this.dispatchEvent(new CustomEvent('marquee-start', { detail: e.detail })));
     this.element.addEventListener('marquee-change', (e) => this.dispatchEvent(new CustomEvent('marquee-change', { detail: e.detail })));
     this.element.addEventListener('marquee-end', (e) => this.dispatchEvent(new CustomEvent('marquee-end', { detail: e.detail })));
+
+    // Auto-save changes before exiting to the document browser
+    const browserLink = this.element.shadowRoot?.getElementById('document-browser-link');
+    if (browserLink) {
+      browserLink.addEventListener('click', async (e) => {
+        const hasSave = this.commands && this.commands.execute && this.commands.get && this.commands.get('doc.save');
+        if (hasSave && hasSave.isEnabled()) {
+          e.preventDefault();
+          try {
+            await this.commands.execute('doc.save');
+          } catch (err) {
+            console.error('Auto-save failed before navigation:', err);
+          }
+          window.location.href = browserLink.href;
+        }
+      });
+    }
     
     this._initialized = true;
 

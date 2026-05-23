@@ -736,8 +736,19 @@ export class SpreadEditorApp {
         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
         <rect x="6" y="14" width="12" height="8"></rect>
       </svg>`,
-      execute: () => {
-        window.open(`/pdf-exporter/index.html?doc=${encodeURIComponent(this._docPath)}`, '_blank');
+      execute: async () => {
+        if (this._docPath) {
+          // Auto-save any unsaved modifications first before exporting/printing
+          const hasSave = shell.commands.get('doc.save');
+          if (hasSave && hasSave.isEnabled()) {
+            try {
+              await shell.commands.execute('doc.save');
+            } catch (err) {
+              console.error('Auto-save failed before print:', err);
+            }
+          }
+          window.open(`/pdf-exporter/index.html?doc=${encodeURIComponent(this._docPath)}`, '_blank');
+        }
       },
       isEnabled: () => !!this._docPath,
     });
