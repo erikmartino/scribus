@@ -69,7 +69,8 @@ export class SvgRenderer {
     textEl.setAttribute('y', y.toFixed(1));
     textEl.setAttribute('font-size', fontSize);
     textEl.setAttribute('fill', '#222');
-    textEl.setAttribute('style', 'user-select:none;pointer-events:none');
+    textEl.setAttribute('text-rendering', 'optimizeLegibility');
+    textEl.setAttribute('style', 'user-select:none;pointer-events:none;font-variant-ligatures:common-ligatures;');
     return textEl;
   }
 
