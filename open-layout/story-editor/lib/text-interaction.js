@@ -67,8 +67,9 @@ export class TextInteractionController {
   async _handlePointerDown(e) {
     if (!this.enabled() || !this.cursor || e.button !== 0) return;
     
-    // Don't preventDefault if we want the browser to focus naturally,
-    // but we use manual container.focus() to be safe.
+    // Prevent default browser behavior (such as native text selection)
+    e.preventDefault();
+    
     this.container.focus();
 
     // Cancel any pending single-click update — a new click arrived
