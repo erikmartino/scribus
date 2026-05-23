@@ -302,6 +302,14 @@ function aggregateJsonFiles(dirPath, callback) {
           const parsed = JSON.parse(data);
           if (fp.endsWith('meta.json')) {
             parsed.id = sortKey;
+            if (parsed.preview) {
+              const previewPath = path.join(path.dirname(fp), parsed.preview);
+              if (!fs.existsSync(previewPath)) {
+                delete parsed.preview;
+                delete parsed.previewWidth;
+                delete parsed.previewHeight;
+              }
+            }
           }
           results[idx] = parsed;
         } catch (parseErr) {
