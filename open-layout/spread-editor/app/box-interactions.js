@@ -13,6 +13,7 @@ export class BoxInteractionController {
     this._drag = null;
     this._boundMove = (event) => this._pointerMove(event);
     this._boundUp = (event) => this._pointerUp(event);
+    this._boundSelectStart = (e) => e.preventDefault();
   }
 
   pointerDown(event, boxId, handle) {
@@ -22,8 +23,11 @@ export class BoxInteractionController {
     const start = this._toSvgPoint(event);
     if (!start) return false;
 
-    // Prevent default browser behavior (such as text selection) during dragging/resizing
-    event.preventDefault();
+    // Clear any active text selections in the window
+    window.getSelection()?.removeAllRanges();
+
+    // Prevent new text selections from starting during the drag/resize operation
+    window.addEventListener('selectstart', this._boundSelectStart);
 
     this._onSelectBox(boxId);
     this._drag = new DragState({
@@ -67,6 +71,7 @@ export class BoxInteractionController {
     window.removeEventListener('pointermove', this._boundMove);
     window.removeEventListener('pointerup', this._boundUp);
     window.removeEventListener('pointercancel', this._boundUp);
+    window.removeEventListener('selectstart', this._boundSelectStart);
 
     if (result.clickThrough) {
       this._onBodyClick(event, result.boxId, result.wasAlreadySelected);
