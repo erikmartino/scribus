@@ -280,28 +280,6 @@
           });
           if (!putMetaRes.ok) throw new Error(`PUT meta.json failed: ${putMetaRes.status}`);
 
-          // Update assets.aggregate.json so loadAssets() sees the preview field
-          // immediately on the next page load (without a full document re-scan).
-          try {
-            const aggUrl = `/store/${asset.user}/${asset.doc}/assets.aggregate.json`;
-            const aggRes = await fetch(aggUrl);
-            let agg = [];
-            if (aggRes.ok) {
-              try { agg = await aggRes.json(); } catch { agg = []; }
-            }
-            // Replace or insert the entry for this asset
-            const idx = agg.findIndex(e => e.id === asset.name);
-            const entry = { id: asset.name, ...updatedMeta };
-            if (idx >= 0) { agg[idx] = entry; } else { agg.push(entry); }
-            await fetch(aggUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(agg, null, 2),
-            });
-          } catch (aggErr) {
-            console.warn('[preview-worker] Could not update aggregate:', aggErr.message);
-          }
-
           generated++;
           notify({
             type: 'progress',

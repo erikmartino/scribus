@@ -299,7 +299,11 @@ function aggregateJsonFiles(dirPath, callback) {
           return;
         }
         try {
-          results[idx] = JSON.parse(data);
+          const parsed = JSON.parse(data);
+          if (fp.endsWith('meta.json')) {
+            parsed.id = sortKey;
+          }
+          results[idx] = parsed;
         } catch (parseErr) {
           failed = true;
           callback(new Error(`Bad JSON in ${sortKey}: ${parseErr.message}`), null);
