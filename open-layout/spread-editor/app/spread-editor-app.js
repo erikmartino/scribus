@@ -2308,6 +2308,218 @@ export class SpreadEditorApp {
     const container = document.createElement('div');
     container.className = 'assets-panel';
 
+    // Inject styles directly for shadow DOM encapsulation bypass
+    const style = document.createElement('style');
+    style.textContent = `
+      .shell-panel-content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .shell-panel-content-wrapper {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .assets-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        height: 100%;
+        max-height: 100%;
+        overflow: hidden;
+      }
+      .assets-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border, #2e2e32);
+        padding-bottom: 12px;
+        margin-bottom: 8px;
+      }
+      .assets-title {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-main, #e1e1e6);
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .assets-count {
+        font-size: 0.72rem;
+        color: var(--accent, #bb86fc);
+        background: rgba(187, 134, 252, 0.08);
+        border: 1px solid rgba(187, 134, 252, 0.2);
+        padding: 1px 6px;
+        border-radius: 20px;
+      }
+      .assets-upload-zone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 1px dashed var(--border, #2e2e32);
+        border-radius: 8px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.01);
+        transition: border-color var(--transition-fast, 0.2s), background var(--transition-fast, 0.2s);
+        cursor: pointer;
+      }
+      .assets-upload-zone:hover {
+        border-color: var(--accent, #bb86fc);
+        background: rgba(187, 134, 252, 0.02);
+      }
+      .assets-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+        padding-right: 4px;
+      }
+      .assets-grid::-webkit-scrollbar {
+        width: 6px;
+      }
+      .assets-grid::-webkit-scrollbar-thumb {
+        background: var(--border, #2e2e32);
+        border-radius: 3px;
+      }
+      .asset-card {
+        display: flex;
+        gap: 12px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--border, #2e2e32);
+        border-radius: 8px;
+        padding: 8px;
+        cursor: grab;
+        position: relative;
+        transition: transform var(--transition-fast, 0.2s), border-color var(--transition-fast, 0.2s), box-shadow var(--transition-fast, 0.2s), background var(--transition-fast, 0.2s);
+        user-select: none;
+      }
+      .asset-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent, #bb86fc);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .asset-card:active {
+        cursor: grabbing;
+      }
+      .asset-card.dragging {
+        opacity: 0.4;
+        border: 1px dashed var(--accent, #bb86fc);
+      }
+      .asset-thumbnail-wrapper {
+        width: 56px;
+        height: 56px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #1a1a1c;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .asset-thumbnail {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform var(--transition-slow, 0.4s);
+      }
+      .asset-card:hover .asset-thumbnail {
+        transform: scale(1.08);
+      }
+      .asset-info {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+        flex: 1;
+      }
+      .asset-name {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-main, #e1e1e6);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 2px;
+      }
+      .asset-meta {
+        font-size: 0.7rem;
+        color: var(--text-dim, #a1a1aa);
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .asset-actions {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        opacity: 0;
+        transition: opacity var(--transition-fast, 0.2s);
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        bottom: 8px;
+        background: rgba(30, 30, 32, 0.95);
+        padding: 0 6px;
+        border-radius: 4px;
+        backdrop-filter: blur(4px);
+        border: 1px solid var(--border, #2e2e32);
+      }
+      .asset-card:hover .asset-actions {
+        opacity: 1;
+      }
+      .asset-action-btn {
+        background: none;
+        border: none;
+        color: var(--text-dim, #a1a1aa);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: color var(--transition-fast, 0.2s), background var(--transition-fast, 0.2s);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .asset-action-btn:hover {
+        color: var(--accent, #bb86fc);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .asset-action-btn.delete:hover {
+        color: #ff6b6b;
+        background: rgba(255, 107, 107, 0.08);
+      }
+      .asset-empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 30px 15px;
+        text-align: center;
+        border: 1px dashed var(--border, #2e2e32);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.01);
+        color: var(--text-dim, #a1a1aa);
+        font-size: 0.78rem;
+      }
+      .asset-empty-icon {
+        font-size: 1.8rem;
+        margin-bottom: 10px;
+        color: var(--text-dim, #a1a1aa);
+        opacity: 0.4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+    `;
+    container.appendChild(style);
+
     // 1. Header
     const header = document.createElement('div');
     header.className = 'assets-header';

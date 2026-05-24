@@ -238,47 +238,69 @@ function safeResolveStorePath(pathname) {
 
 // Recursively list all files under `dir`, returning paths relative to `base`.
 function listFilesRecursive(dir, base, callback) {
+  let called = false;
+  const doneOnce = (err, resList) => {
+    if (called) return;
+    called = true;
+    callback(err, resList);
+  };
+
   const results = [];
   const walk = (current, done) => {
+    let walkDone = false;
+    const localDone = (err) => {
+      if (walkDone) return;
+      walkDone = true;
+      done(err);
+    };
+
     fs.readdir(current, { withFileTypes: true }, (err, entries) => {
       if (err) {
         if (err.code === 'ENOENT') {
-          done(null);
+          localDone(null);
         } else {
-          done(err);
+          localDone(err);
         }
         return;
       }
       let pending = entries.length;
-      if (pending === 0) { done(null); return; }
+      if (pending === 0) { localDone(null); return; }
       for (const entry of entries) {
         const full = path.join(current, entry.name);
         if (entry.isDirectory()) {
           walk(full, (walkErr) => {
-            if (walkErr) { done(walkErr); return; }
-            if (--pending === 0) done(null);
+            if (walkErr) { localDone(walkErr); return; }
+            if (--pending === 0) localDone(null);
           });
         } else {
           results.push(path.relative(base, full));
-          if (--pending === 0) done(null);
+          if (--pending === 0) localDone(null);
         }
       }
     });
   };
-  walk(dir, (err) => callback(err, results));
+  walk(dir, (err) => doneOnce(err, results));
 }
+
 
 // Aggregate JSON entries from a directory.  Collects from two sources:
 //   1. Any .json files directly in the directory  (flat collections)
 //   2. meta.json inside each immediate subdirectory (per-entry folders)
 // Returns them as a single sorted array via callback(err, items).
 function aggregateJsonFiles(dirPath, callback) {
+  let called = false;
+  const doneOnce = (err, items) => {
+    if (called) return;
+    called = true;
+    callback(err, items);
+  };
+
   fs.readdir(dirPath, { withFileTypes: true }, (err, entries) => {
     if (err) {
       if (err.code === 'ENOENT') {
-        callback(null, []);
+        doneOnce(null, []);
       } else {
-        callback(err, null);
+        doneOnce(err, null);
       }
       return;
     }
@@ -296,7 +318,7 @@ function aggregateJsonFiles(dirPath, callback) {
     }
 
     filesToRead.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-    if (filesToRead.length === 0) { callback(null, []); return; }
+    if (filesToRead.length === 0) { doneOnce(null, []); return; }
 
     const results = [];
     let pending = filesToRead.length;
@@ -310,7 +332,7 @@ function aggregateJsonFiles(dirPath, callback) {
         if (readErr) {
           // Subdirectory without meta.json — skip silently.
           results[idx] = null;
-          if (--pending === 0) callback(null, results.filter(r => r !== null));
+          if (--pending === 0) doneOnce(null, results.filter(r => r !== null));
           return;
         }
         try {
@@ -329,10 +351,10 @@ function aggregateJsonFiles(dirPath, callback) {
           results[idx] = parsed;
         } catch (parseErr) {
           failed = true;
-          callback(new Error(`Bad JSON in ${sortKey}: ${parseErr.message}`), null);
+          doneOnce(new Error(`Bad JSON in ${sortKey}: ${parseErr.message}`), null);
           return;
         }
-        if (--pending === 0) callback(null, results.filter(r => r !== null));
+        if (--pending === 0) doneOnce(null, results.filter(r => r !== null));
       });
     }
   });

@@ -87,6 +87,8 @@ scribus-app-shell:defined {
 .panels {
   grid-area: panels;
   width: var(--panel-width);
+  height: 100%;
+  overflow: hidden;
   background: var(--panel-bg);
   border-left: 1px solid var(--border);
   backdrop-filter: var(--glass);
