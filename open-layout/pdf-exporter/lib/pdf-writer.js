@@ -281,6 +281,32 @@ export class PdfWriter {
   }
 
   /**
+   * Write a CMYK image as an XObject stream (FlateDecode).
+   * @param {number}     id
+   * @param {Uint8Array} deflatedCmyk  — deflated 4-channel (CMYK) bytes, no alpha
+   * @param {number}     w
+   * @param {number}     h
+   */
+  writeCmykXObject(id, deflatedCmyk, w, h) {
+    this._beginObj(id);
+    this._emitStr(
+      `<< /Type /XObject\n` +
+      `   /Subtype /Image\n` +
+      `   /Width ${w}\n` +
+      `   /Height ${h}\n` +
+      `   /ColorSpace /DeviceCMYK\n` +
+      `   /BitsPerComponent 8\n` +
+      `   /Filter /FlateDecode\n` +
+      `   /Length ${deflatedCmyk.length}\n` +
+      `>>\n` +
+      `stream\n`
+    );
+    this._emit(deflatedCmyk);
+    this._emitStr('\nendstream\n');
+    this._endObj();
+  }
+
+  /**
    * Write a content stream (text / graphics operators).
    * @param {number} id
    * @param {string} ops  — PDF content stream as a string

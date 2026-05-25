@@ -382,7 +382,8 @@ async function _generatePdf(engine, docPath, opts, writer) {
               }
             }
 
-            if (current.interpretation !== 'srgb') {
+            const isCmyk = current.interpretation === 'cmyk';
+            if (!isCmyk && current.interpretation !== 'srgb') {
               const srgb = current.colourspace('srgb');
               toDelete.push(srgb);
               current = srgb;
@@ -414,7 +415,11 @@ async function _generatePdf(engine, docPath, opts, writer) {
             const rawBytes = final.writeToMemory();
             const deflated = await deflate(rawBytes);
 
-            pdf.writePngXObject(imageObjId, deflated, outW, outH);
+            if (isCmyk) {
+              pdf.writeCmykXObject(imageObjId, deflated, outW, outH);
+            } else {
+              pdf.writePngXObject(imageObjId, deflated, outW, outH);
+            }
             imageRefs.push({ alias, id: imageObjId });
           } finally {
             for (const obj of toDelete) {
