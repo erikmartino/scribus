@@ -73,6 +73,9 @@ const VENDOR_MAP = {
   '/vendor/fonts/EBGaramond.ttf': 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf',
   '/vendor/fonts/EBGaramond-Italic.ttf': 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf',
   '/vendor/wasm-vips/vips-es6.js': 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js',
+  '/vendor/wasm-vips/vips.js': 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips.js',
+  '/vendor/wasm-vips/vips.wasm': 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips.wasm',
+  '/vendor/wasm-vips/vips.worker.js': 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips.worker.js',
   '/vendor/css-tree/index.js': 'https://cdn.jsdelivr.net/npm/css-tree@2.3.1/+esm',
   '/vendor/utif2/index.js': 'https://cdn.jsdelivr.net/npm/utif2@4.1.0/+esm',
 };
@@ -125,7 +128,12 @@ function serveFile(filePath, res) {
 }
 
 function handleVendorRequest(pathname, filePath, res) {
-  const cdnUrl = VENDOR_MAP[pathname];
+  let cdnUrl = VENDOR_MAP[pathname];
+  if (!cdnUrl && pathname.startsWith('/vendor/wasm-vips/')) {
+    const filename = pathname.slice('/vendor/wasm-vips/'.length);
+    cdnUrl = `https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/${filename}`;
+  }
+
   if (!cdnUrl) {
     sendError(res, 404, 'Not Found');
     return;

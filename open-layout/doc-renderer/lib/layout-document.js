@@ -227,7 +227,7 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
       } else {
         imageUrl = frame.imageUrl || _emptyImagePlaceholder();
       }
-      imageBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height, imageUrl });
+      imageBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height, imageUrl, assetRef: frame.assetRef });
     } else {
       textBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height });
       if (frame.storyRef) {
@@ -366,6 +366,7 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
       .filter(ib => _overlapsPage(ib, pageRect))
       .map(ib => ({
         imageUrl: ib.imageUrl,
+        assetRef: ib.assetRef,
         x: ib.x - pageX,
         y: ib.y,
         width: ib.width,

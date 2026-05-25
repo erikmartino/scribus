@@ -15,8 +15,55 @@ import {
   imageOp,
 } from './pdf-writer.js';
 import { createSubsetter } from './subsetter.js';
+import { extFromMime } from '../../document-store/lib/document-store.js';
 
 export { createLayoutEngine };
+
+let vips = null;
+
+async function initVips() {
+  if (vips) return;
+
+  const origin = typeof location !== 'undefined' ? location.origin : '';
+  const vipsUrl = origin + '/vendor/wasm-vips/vips-es6.js';
+  const Vips = (await import(vipsUrl)).default;
+
+  const workerCode = `import "${vipsUrl}";`;
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const blobUrl = URL.createObjectURL(blob);
+
+  vips = await Vips({
+    mainScriptUrlOrBlob: blobUrl,
+    locateFile: (fileName) => origin + `/vendor/wasm-vips/${fileName}`
+  });
+
+  URL.revokeObjectURL(blobUrl);
+}
+
+async function deflate(data) {
+  const cs = new CompressionStream('deflate');
+  const writer = cs.writable.getWriter();
+  const writePromise = writer.write(data).then(() => writer.close());
+
+  const chunks = [];
+  const reader = cs.readable.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+
+  await writePromise;
+
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Image helpers
@@ -155,6 +202,13 @@ export function streamDocument(engine, docPath, opts = {}) {
 async function _generatePdf(engine, docPath, opts, writer) {
   const onProgress = opts.onProgress ?? (() => {});
 
+  // Initialize wasm-vips
+  try {
+    await initVips();
+  } catch (e) {
+    console.warn('[pdf-generator] Failed to initialise wasm-vips:', e);
+  }
+
   // 1. Layout all pages (no DOM created)
   const { pages, fontFamily } = await layoutDocument(engine, docPath, opts);
   const totalPages = pages.length;
@@ -247,43 +301,145 @@ async function _generatePdf(engine, docPath, opts, writer) {
     // 5a. Write image XObjects for this page
     for (let ii = 0; ii < page.imageBoxes.length; ii++) {
       const imgBox = page.imageBoxes[ii];
-      if (!imgBox.imageUrl) continue;
+      if (!imgBox.imageUrl && !imgBox.assetRef) continue;
 
       try {
-        const res = await fetch(imgBox.imageUrl);
-        if (!res.ok) continue;
-        const buf = new Uint8Array(await res.arrayBuffer());
-        const kind = detectImageType(buf);
+        let buf = null;
+        let mime = null;
+        let originalFetched = false;
+
+        if (imgBox.assetRef) {
+          try {
+            const metaRes = await fetch(`/store/${docPath}/assets/${imgBox.assetRef}/meta.json`);
+            if (metaRes.ok) {
+              const meta = await metaRes.json();
+              mime = meta.mime;
+              const ext = extFromMime(mime);
+              let originalUrl = `/store/${docPath}/assets/${imgBox.assetRef}/${imgBox.assetRef}.${ext}`;
+              let origRes = await fetch(originalUrl);
+              if (!origRes.ok && ext === 'tiff') {
+                originalUrl = `/store/${docPath}/assets/${imgBox.assetRef}/${imgBox.assetRef}.tif`;
+                origRes = await fetch(originalUrl);
+              }
+              if (origRes.ok) {
+                buf = new Uint8Array(await origRes.arrayBuffer());
+                originalFetched = true;
+              }
+            }
+          } catch (metaErr) {
+            console.warn(`[pdf-generator] failed to fetch original asset for ${imgBox.assetRef}:`, metaErr);
+          }
+        }
+
+        // Fallback to preview JPEG if original asset fetch failed or wasn't tried
+        if (!originalFetched) {
+          const res = await fetch(imgBox.imageUrl);
+          if (!res.ok) continue;
+          buf = new Uint8Array(await res.arrayBuffer());
+          mime = 'image/jpeg';
+        }
+
         const imageObjId = ids.next();
         const alias = `Im${pi}_${ii}`;
 
-        if (kind === 'jpeg') {
-          pdf.writeJpegXObject(imageObjId, buf, imgBox.width, imgBox.height);
-          imageRefs.push({ alias, id: imageObjId });
-        } else if (kind === 'png') {
-          const { rgb, width, height } = await decodePngToRgb(buf);
-          // Deflate the RGB bytes
-          const cs = new CompressionStream('deflate');
-          const cw = cs.writable.getWriter();
-          cw.write(rgb);
-          cw.close();
-          const deflatedChunks = [];
-          const cr = cs.readable.getReader();
-          while (true) {
-            const { done, value } = await cr.read();
-            if (done) break;
-            deflatedChunks.push(value);
+        let useVips = false;
+        let imgWidth = 0;
+        let imgHeight = 0;
+        let vipsImg = null;
+
+        if (vips) {
+          try {
+            vipsImg = vips.Image.newFromBuffer(buf);
+            imgWidth = vipsImg.width;
+            imgHeight = vipsImg.height;
+            useVips = true;
+          } catch (vipsErr) {
+            console.warn('[pdf-generator] failed to load image into vips:', vipsErr);
           }
-          const total = deflatedChunks.reduce((n, c) => n + c.length, 0);
-          const deflated = new Uint8Array(total);
-          let off = 0;
-          for (const c of deflatedChunks) { deflated.set(c, off); off += c.length; }
-          pdf.writePngXObject(imageObjId, deflated, width, height);
-          imageRefs.push({ alias, id: imageObjId });
         }
-        // unknown type: skip
+
+        // Calculate DPI
+        let dpiX = 72;
+        let dpiY = 72;
+        if (useVips) {
+          dpiX = (imgWidth / imgBox.width) * 72;
+          dpiY = (imgHeight / imgBox.height) * 72;
+        }
+
+        const isTooLarge = (dpiX > 300 || dpiY > 300);
+        const isUnsupported = (mime !== 'image/jpeg' && mime !== 'image/png');
+
+        if (useVips && (isTooLarge || isUnsupported)) {
+          let toDelete = [];
+          try {
+            let current = vipsImg;
+            if (isTooLarge) {
+              const scale = Math.min((imgBox.width * (300 / 72)) / imgWidth, (imgBox.height * (300 / 72)) / imgHeight);
+              if (scale < 1) {
+                const resized = vipsImg.resize(scale);
+                toDelete.push(resized);
+                current = resized;
+              }
+            }
+
+            if (current.interpretation !== 'srgb') {
+              const srgb = current.colourspace('srgb');
+              toDelete.push(srgb);
+              current = srgb;
+            }
+
+            let noAlpha = current;
+            if (current.hasAlpha()) {
+              try {
+                const nColor = current.bands - 1;
+                const colorBands = current.extract_band(0, { n: nColor });
+                toDelete.push(colorBands);
+                noAlpha = colorBands;
+              } catch (err) {
+                const flat = current.flatten();
+                toDelete.push(flat);
+                noAlpha = flat;
+              }
+            }
+
+            let final = noAlpha;
+            if (final.format !== 'uchar') {
+              const ucharImg = final.cast('uchar');
+              toDelete.push(ucharImg);
+              final = ucharImg;
+            }
+
+            const outW = final.width;
+            const outH = final.height;
+            const rawBytes = final.writeToMemory();
+            const deflated = await deflate(rawBytes);
+
+            pdf.writePngXObject(imageObjId, deflated, outW, outH);
+            imageRefs.push({ alias, id: imageObjId });
+          } finally {
+            for (const obj of toDelete) {
+              try { obj.delete(); } catch (_) {}
+            }
+            try { vipsImg.delete(); } catch (_) {}
+          }
+        } else {
+          // Pass-through or canvas fallback
+          const kind = detectImageType(buf);
+          if (kind === 'jpeg') {
+            pdf.writeJpegXObject(imageObjId, buf, imgBox.width, imgBox.height);
+            imageRefs.push({ alias, id: imageObjId });
+          } else if (kind === 'png') {
+            const { rgb, width, height } = await decodePngToRgb(buf);
+            const deflated = await deflate(rgb);
+            pdf.writePngXObject(imageObjId, deflated, width, height);
+            imageRefs.push({ alias, id: imageObjId });
+          }
+          if (vipsImg) {
+            try { vipsImg.delete(); } catch (_) {}
+          }
+        }
       } catch (e) {
-        console.warn(`[pdf-generator] failed to fetch image ${imgBox.imageUrl}:`, e);
+        console.warn(`[pdf-generator] failed to process image ${imgBox.imageUrl}:`, e);
       }
     }
 
