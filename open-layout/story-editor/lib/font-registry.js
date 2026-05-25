@@ -54,6 +54,7 @@ export class FontRegistry {
     if (!this._fonts[family]) this._fonts[family] = {};
 
     for (const { variant, bold } of variants) {
+      this._buffers[`${family}:${variant}`] = buffer;
       const blob = this._hb.createBlob(buffer);
       const face = this._hb.createFace(blob, 0);
       const font = this._hb.createFont(face);

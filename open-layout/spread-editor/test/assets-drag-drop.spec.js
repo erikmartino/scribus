@@ -144,8 +144,8 @@ test.describe('Assets Panel and Drag-and-Drop', () => {
     // Verify planck-cmb is not initially present
     await expect(page.locator('.asset-card:has-text("planck-cmb")')).toHaveCount(0);
 
-    // Read the real 21.7MB Planck CMB TIFF file from our local store to test standard decoders (wasm-vips)
-    const localTiffPath = path.join(STORE_DIR, 'alice/typography-sampler/assets/planck-cmb/planck-cmb.tiff');
+    // Read the real 20.7MB Vintage Press TIFF file from our local store to test standard decoders (wasm-vips)
+    const localTiffPath = path.join(STORE_DIR, 'demo/typography-sampler/assets/vintage-press/vintage-press.tif');
     const tiffBuffer = fs.readFileSync(localTiffPath);
 
     // Trigger file picker and upload Planck CMB TIFF

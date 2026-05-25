@@ -10,7 +10,6 @@
 import { layoutDocument, createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
 import {
   PdfWriter,
-  standardFontForStyle,
   textOp,
   imageOp,
 } from './pdf-writer.js';
@@ -117,6 +116,38 @@ class IdAllocator {
 }
 
 // ---------------------------------------------------------------------------
+function getFontVariant(style) {
+  const bold = !!style.bold;
+  const italic = !!style.italic;
+  if (bold && italic) return 'bolditalic';
+  if (bold) return 'bold';
+  if (italic) return 'italic';
+  return 'regular';
+}
+
+function getFontAlias(family, variant) {
+  const cleanFamily = (family || 'Default').replace(/[^a-zA-Z0-9]/g, '');
+  return `F_${cleanFamily}_${variant}`;
+}
+
+function getFallbackPdfFontName(family, variant) {
+  const isSans = /sans|helvetica|arial|inter|roboto/i.test(family);
+  const baseFamily = isSans ? 'Helvetica' : 'Times';
+  const bold = variant.includes('bold');
+  const italic = variant.includes('italic');
+  if (baseFamily === 'Helvetica') {
+    if (bold && italic) return 'Helvetica-BoldOblique';
+    if (bold)           return 'Helvetica-Bold';
+    if (italic)         return 'Helvetica-Oblique';
+    return 'Helvetica';
+  } else {
+    if (bold && italic) return 'Times-BoldItalic';
+    if (bold)           return 'Times-Bold';
+    if (italic)         return 'Times-Italic';
+    return 'Times-Roman';
+  }
+}
+
 // Collect all font variants used across all pages
 // ---------------------------------------------------------------------------
 
@@ -134,17 +165,11 @@ function collectFontData(pages, defaultFamily) {
           for (const frag of word.fragments) {
             if (!frag.text || !frag.text.trim()) continue;
 
-            const { alias } = standardFontForStyle(frag.style);
+            const family = frag.style.fontFamily || defaultFamily;
+            const variant = getFontVariant(frag.style);
+            const alias = getFontAlias(family, variant);
             
             if (!fontData.has(alias)) {
-              const bold = !!frag.style.bold;
-              const italic = !!frag.style.italic;
-              let variant = 'regular';
-              if (bold && italic) variant = 'bolditalic';
-              else if (bold) variant = 'bold';
-              else if (italic) variant = 'italic';
-              
-              const family = frag.style.fontFamily || defaultFamily;
               fontData.set(alias, { family, variant, unicodes: new Set() });
             }
             
@@ -241,14 +266,41 @@ async function _generatePdf(engine, docPath, opts, writer) {
   const fontMap = new Map();
   for (const [alias, data] of fontData.entries()) {
     const id = ids.next();
-    const { pdfName } = _aliasToPdfFont(alias);
+    const pdfName = getFallbackPdfFontName(data.family, data.variant);
 
     let subsetBytes;
     let descriptorId;
     let streamId;
+    let isFauxBold = false;
+    let isFauxItalic = false;
     
     if (subsetter) {
-      const ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, data.variant);
+      let ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, data.variant);
+      if (!ttfBuffer) {
+        // Cascade strategy: fallback to regular/best available buffer of same family
+        const hasItalic = !!engine._fontRegistry.getFontBuffer(data.family, 'italic');
+        const hasBold = !!engine._fontRegistry.getFontBuffer(data.family, 'bold');
+        
+        if (data.variant === 'bolditalic') {
+          if (hasItalic) {
+            ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'italic');
+            isFauxBold = true;
+          } else if (hasBold) {
+            ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'bold');
+            isFauxItalic = true;
+          } else {
+            ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'regular');
+            isFauxBold = true;
+            isFauxItalic = true;
+          }
+        } else if (data.variant === 'bold') {
+          ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'regular');
+          isFauxBold = true;
+        } else if (data.variant === 'italic') {
+          ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'regular');
+          isFauxItalic = true;
+        }
+      }
       if (ttfBuffer) {
         try {
           subsetBytes = subsetter.subset(ttfBuffer, data.unicodes);
@@ -262,7 +314,18 @@ async function _generatePdf(engine, docPath, opts, writer) {
       }
     }
 
-    fontMap.set(alias, { id, pdfName, alias, subsetBytes, descriptorId, streamId, family: data.family, variant: data.variant });
+    fontMap.set(alias, { 
+      id, 
+      pdfName, 
+      alias, 
+      subsetBytes, 
+      descriptorId, 
+      streamId, 
+      family: data.family, 
+      variant: data.variant,
+      isFauxBold,
+      isFauxItalic
+    });
   }
 
   // Per-page IDs (allocated lazily during the page loop below)
@@ -472,11 +535,15 @@ async function _generatePdf(engine, docPath, opts, writer) {
             let xOffset = 0;
             for (const g of word.glyphData) {
               if (g.text && g.text.trim()) {
-                const { alias } = standardFontForStyle(g.style);
+                const family = g.style.fontFamily || fontFamily;
+                const variant = getFontVariant(g.style);
+                const alias = getFontAlias(family, variant);
                 const absX = box.x + padding + word.x + xOffset + g.dx;
                 const fontInfo = fontMap.get(alias);
                 const useLigatures = !!fontInfo?.subsetBytes;
-                ops += textOp(g.text, alias, line.fontSize, absX, pdfY, useLigatures);
+                const isFauxBold = !!fontInfo?.isFauxBold;
+                const isFauxItalic = !!fontInfo?.isFauxItalic;
+                ops += textOp(g.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
               }
               xOffset += g.ax;
             }
@@ -484,11 +551,15 @@ async function _generatePdf(engine, docPath, opts, writer) {
             // Fallback: fragment-level positioning (no intra-word kerning)
             for (const frag of word.fragments) {
               if (!frag.text || !frag.text.trim()) continue;
-              const { alias } = standardFontForStyle(frag.style);
+              const family = frag.style.fontFamily || fontFamily;
+              const variant = getFontVariant(frag.style);
+              const alias = getFontAlias(family, variant);
               const absX = box.x + padding + word.x;
               const fontInfo = fontMap.get(alias);
               const useLigatures = !!fontInfo?.subsetBytes;
-              ops += textOp(frag.text, alias, line.fontSize, absX, pdfY, useLigatures);
+              const isFauxBold = !!fontInfo?.isFauxBold;
+              const isFauxItalic = !!fontInfo?.isFauxItalic;
+              ops += textOp(frag.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
             }
           }
         }
@@ -542,17 +613,4 @@ async function _pipeStream(readable, writer) {
   }
 }
 
-/** Recover PDF font name from alias string. */
-function _aliasToPdfFont(alias) {
-  const map = {
-    FT:   'Times-Roman',
-    FTB:  'Times-Bold',
-    FTI:  'Times-Italic',
-    FTBi: 'Times-BoldItalic',
-    FH:   'Helvetica',
-    FHB:  'Helvetica-Bold',
-    FHI:  'Helvetica-Oblique',
-    FHBi: 'Helvetica-BoldOblique',
-  };
-  return { pdfName: map[alias] ?? 'Times-Roman' };
-}
+

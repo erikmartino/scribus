@@ -455,15 +455,30 @@ export function standardFontForStyle(style, baseFamily = 'Times') {
  * @param {number} pdfY       — y in PDF coordinates (points from bottom)
  * @returns {string}
  */
-export function textOp(text, fontAlias, fontSize, pdfX, pdfY, useLigatures = false) {
+export function textOp(text, fontAlias, fontSize, pdfX, pdfY, useLigatures = false, isFauxBold = false, isFauxItalic = false) {
   const escaped = pdfLiteral(text, useLigatures);
-  return (
-    `BT\n` +
-    `  /${fontAlias} ${fontSize.toFixed(2)} Tf\n` +
-    `  ${pdfX.toFixed(2)} ${pdfY.toFixed(2)} Td\n` +
-    `  (${escaped}) Tj\n` +
-    `ET\n`
-  );
+  let ops = `BT\n`;
+  ops += `  /${fontAlias} ${fontSize.toFixed(2)} Tf\n`;
+
+  if (isFauxBold) {
+    const strokeWidth = fontSize * 0.025;
+    ops += `  2 Tr\n`;
+    ops += `  ${strokeWidth.toFixed(2)} w\n`;
+  }
+
+  if (isFauxItalic) {
+    ops += `  1 0 0.212 1 ${pdfX.toFixed(2)} ${pdfY.toFixed(2)} Tm\n`;
+  } else {
+    ops += `  ${pdfX.toFixed(2)} ${pdfY.toFixed(2)} Td\n`;
+  }
+
+  ops += `  (${escaped}) Tj\n`;
+
+  if (isFauxBold) {
+    ops += `  0 Tr\n`;
+  }
+  ops += `ET\n`;
+  return ops;
 }
 
 /**
