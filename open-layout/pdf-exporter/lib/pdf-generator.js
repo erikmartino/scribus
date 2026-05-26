@@ -104,6 +104,19 @@ async function decodePngToRgb(pngBytes) {
   return { rgb, width, height };
 }
 
+/**
+ * Get the dimensions of a JPEG image using createImageBitmap.
+ * @param {Uint8Array} jpegBytes
+ * @returns {Promise<{ width: number, height: number }>}
+ */
+async function getJpegDimensions(jpegBytes) {
+  const blob = new Blob([jpegBytes], { type: 'image/jpeg' });
+  const bmp = await createImageBitmap(blob);
+  const { width, height } = bmp;
+  bmp.close();
+  return { width, height };
+}
+
 // ---------------------------------------------------------------------------
 // Object-ID allocator
 // ---------------------------------------------------------------------------
@@ -494,7 +507,20 @@ async function _generatePdf(engine, docPath, opts, writer) {
           // Pass-through or canvas fallback
           const kind = detectImageType(buf);
           if (kind === 'jpeg') {
-            pdf.writeJpegXObject(imageObjId, buf, imgBox.width, imgBox.height);
+            let width = imgWidth;
+            let height = imgHeight;
+            if (!width || !height) {
+              try {
+                const dims = await getJpegDimensions(buf);
+                width = dims.width;
+                height = dims.height;
+              } catch (e) {
+                console.warn('[pdf-generator] failed to get JPEG dimensions, falling back to layout box size:', e);
+                width = imgBox.width;
+                height = imgBox.height;
+              }
+            }
+            pdf.writeJpegXObject(imageObjId, buf, width, height);
             imageRefs.push({ alias, id: imageObjId });
           } else if (kind === 'png') {
             const { rgb, width, height } = await decodePngToRgb(buf);
