@@ -41,3 +41,5 @@ Completed plans are removed per convention. Previously completed:
 - `property-sync-fix-plan.md` — Fix Property Synchronization in App-Shell (completed).
 - `fix-failing-tests-plan.md` — Fix Failing Tests and Properties Panel Regression (completed).
 - `2026-05-23-pdf-ligatures-plan.md` — Ensure PDF exporter uses ligatures where possible (completed).
+- `2026-05-25-pdf-high-resolution-images-plan.md` — PDF High Resolution Image Printing and Downscaling (completed).
+- `2026-05-26-pdf-jpeg-dimensions-bugfix-plan.md` — Resolve pass-through JPEG pixel dimensions mismatch in PDF exporter (completed).
