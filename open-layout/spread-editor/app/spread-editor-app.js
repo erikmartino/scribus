@@ -2415,7 +2415,24 @@ export class SpreadEditorApp {
   }
 
   getPanelContent(panelId, selected) {
+    // Reset panel-body to its default styles (overridden by the assets panel to
+    // enable internal scrolling; must be restored when switching to other panels).
+    const panelBody = this.shell?.element?.panelBody;
+    if (panelBody && panelId !== 'assets') {
+      panelBody.style.overflow = '';
+      panelBody.style.padding = '';
+      panelBody.style.display = '';
+      panelBody.style.flexDirection = '';
+    }
+
     if (panelId === 'pages') {
+      if (panelBody) {
+        panelBody.style.overflow = 'hidden';
+        panelBody.style.padding = '0';
+        panelBody.style.display = 'flex';
+        panelBody.style.flexDirection = 'column';
+      }
+
       const container = document.createElement('div');
       container.className = 'pages-panel';
 
@@ -2425,9 +2442,11 @@ export class SpreadEditorApp {
           display: flex;
           flex-direction: column;
           gap: 16px;
+          padding: 1rem;
           height: 100%;
           max-height: 100%;
           overflow: hidden;
+          box-sizing: border-box;
         }
         .pages-header {
           display: flex;
@@ -2618,6 +2637,16 @@ export class SpreadEditorApp {
 
     if (panelId !== 'assets') return null;
 
+    // .panel-body is in shadow DOM so CSS injection can't reach it.
+    // Set overflow/padding directly so the flex height chain works and
+    // .assets-grid (overflow-y: auto; flex: 1; min-height: 0) can scroll.
+    if (panelBody) {
+      panelBody.style.overflow = 'hidden';
+      panelBody.style.padding = '0';
+      panelBody.style.display = 'flex';
+      panelBody.style.flexDirection = 'column';
+    }
+
     const container = document.createElement('div');
     container.className = 'assets-panel';
 
@@ -2640,9 +2669,11 @@ export class SpreadEditorApp {
         display: flex;
         flex-direction: column;
         gap: 16px;
+        padding: 1rem;
         height: 100%;
         max-height: 100%;
         overflow: hidden;
+        box-sizing: border-box;
       }
       .assets-header {
         display: flex;
