@@ -14,6 +14,7 @@ Reference specifications live in `../../specs/`.
 
 Completed plans are removed per convention. Previously completed:
 
+- `2026-05-25-spread-editor-pages-panel-plan.md` — Multi-Spread Editing and Pages Side Panel in Spread Editor (completed).
 - `2026-05-23-drag-drop-assets-plan.md` — Implement sidebar Assets panel and drag-and-drop of assets into the spread editor (completed).
 - `2026-05-23-vintage-press-tif-and-preview-ref-plan.md` — Convert vintage-press to TIFF & Reference Previews (completed).
 - `2026-05-23-image-preview-generator-plan.md` — Browser-based proportional image preview generator (completed).

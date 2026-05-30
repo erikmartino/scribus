@@ -222,26 +222,12 @@ export class ScribusInput extends HTMLElement {
           width: 100%;
         }
         input[type="range"] {
-          -webkit-appearance: none;
+          appearance: none;
           height: 3px;
           background: rgba(255, 255, 255, 0.1);
           border: none;
           padding: 0;
           margin: 10px 0;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 12px;
-          height: 12px;
-          background: var(--accent, #bb86fc);
-          border-radius: 50%;
-          cursor: pointer;
-          box-shadow: 0 0 10px rgba(187, 134, 252, 0.4);
-          transition: transform 0.1s ease;
-        }
-        input[type="range"]::-webkit-slider-thumb:hover {
-          transform: scale(1.3);
-          background: #fff;
         }
       </style>
       <div class="header">

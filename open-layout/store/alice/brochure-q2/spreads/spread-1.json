@@ -14,9 +14,9 @@
     {
       "id": "frame-title",
       "type": "text",
-      "x": 266.78,
+      "x": 56.78,
       "y": 53.39,
-      "width": 170,
+      "width": 486,
       "height": 60,
       "storyRef": "story-title"
     },
@@ -24,16 +24,16 @@
       "id": "frame-intro",
       "type": "text",
       "x": 20,
-      "y": 80.11,
-      "width": 170,
-      "height": 180,
+      "y": 176.11,
+      "width": 523.5,
+      "height": 514,
       "storyRef": "story-title"
     },
     {
       "id": "image-2",
       "type": "image",
-      "x": 223.45,
-      "y": 171.55,
+      "x": 144.95,
+      "y": 390.05,
       "width": 314.11,
       "height": 372.87,
       "assetRef": "hund1-jpg"

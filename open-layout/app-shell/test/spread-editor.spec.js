@@ -28,6 +28,5 @@ test.describe('Spread Editor', () => {
 
     // If it's an error, it will show up in the console.
     expect(errors).toHaveLength(0);
-
   });
 });

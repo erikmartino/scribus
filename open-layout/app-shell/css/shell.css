@@ -23,12 +23,10 @@
 
 *:not(input):not(textarea):not([contenteditable="true"]) {
   user-select: none !important;
-  -webkit-user-select: none !important;
 }
 
-svg text {
+svg, svg * {
   user-select: none !important;
-  -webkit-user-select: none !important;
 }
 
 body, html {
@@ -39,7 +37,6 @@ body, html {
   background-color: var(--bg-color);
   color: var(--text-main);
   user-select: none;
-  -webkit-user-select: none;
 }
 
 scribus-app-shell:not(:defined) {
@@ -223,16 +220,6 @@ scribus-app-shell:defined {
   background: transparent;
   cursor: pointer;
   appearance: none;
-  -webkit-appearance: none;
-}
-
-.property-color-input::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.property-color-input::-webkit-color-swatch {
-  border: none;
-  border-radius: 4px;
 }
 
 .property-color-hex {

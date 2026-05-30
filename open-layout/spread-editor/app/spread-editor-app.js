@@ -2477,13 +2477,6 @@ export class SpreadEditorApp {
           min-height: 0;
           padding-right: 4px;
         }
-        .pages-list::-webkit-scrollbar {
-          width: 6px;
-        }
-        .pages-list::-webkit-scrollbar-thumb {
-          background: var(--border, #2e2e32);
-          border-radius: 3px;
-        }
         .spread-card {
           display: flex;
           align-items: center;
@@ -2705,13 +2698,6 @@ export class SpreadEditorApp {
         flex: 1;
         min-height: 0;
         padding-right: 4px;
-      }
-      .assets-grid::-webkit-scrollbar {
-        width: 6px;
-      }
-      .assets-grid::-webkit-scrollbar-thumb {
-        background: var(--border, #2e2e32);
-        border-radius: 3px;
       }
       .asset-card {
         display: flex;

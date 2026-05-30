@@ -39,13 +39,11 @@ export class ScribusAppShell extends HTMLElement {
           color: var(--text-main);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           user-select: none;
-          -webkit-user-select: none;
         }
 
         /* Allow selection in inputs and textareas if they are ever used */
         input, textarea, [contenteditable="true"] {
           user-select: text;
-          -webkit-user-select: text;
         }
 
         .app-shell {
@@ -72,9 +70,6 @@ export class ScribusAppShell extends HTMLElement {
           box-shadow: 0 4px 10px rgba(0,0,0,0.3);
           overflow-x: auto;
           scrollbar-width: none; /* Firefox */
-        }
-        .ribbon::-webkit-scrollbar {
-          display: none; /* Safari/Chrome */
         }
 
         .app-launcher {
@@ -205,7 +200,6 @@ export class ScribusAppShell extends HTMLElement {
           overflow-x: auto;
           scrollbar-width: none;
         }
-        .panel-tabs::-webkit-scrollbar { display: none; }
 
         .panel-tab {
           flex: 1;
