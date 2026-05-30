@@ -158,6 +158,7 @@ export class ScribusAppShell extends HTMLElement {
           width: var(--panel-width);
           min-width: 150px;
           max-width: 600px;
+          min-height: 0;
           background: var(--panel-bg);
           backdrop-filter: var(--glass);
           display: flex;
@@ -228,6 +229,25 @@ export class ScribusAppShell extends HTMLElement {
           flex: 1;
           overflow-y: auto;
           padding: 1rem;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+
+        .shell-panel-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          min-height: 0;
+        }
+
+        .shell-panel-content-wrapper {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          min-height: 0;
         }
 
         .marquee {

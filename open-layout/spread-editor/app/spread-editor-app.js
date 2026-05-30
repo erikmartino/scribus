@@ -2418,19 +2418,15 @@ export class SpreadEditorApp {
     // Reset panel-body to its default styles (overridden by the assets panel to
     // enable internal scrolling; must be restored when switching to other panels).
     const panelBody = this.shell?.element?.panelBody;
-    if (panelBody && panelId !== 'assets') {
+    if (panelBody && panelId !== 'assets' && panelId !== 'pages') {
       panelBody.style.overflow = '';
       panelBody.style.padding = '';
-      panelBody.style.display = '';
-      panelBody.style.flexDirection = '';
     }
 
     if (panelId === 'pages') {
       if (panelBody) {
         panelBody.style.overflow = 'hidden';
         panelBody.style.padding = '0';
-        panelBody.style.display = 'flex';
-        panelBody.style.flexDirection = 'column';
       }
 
       const container = document.createElement('div');
@@ -2443,8 +2439,8 @@ export class SpreadEditorApp {
           flex-direction: column;
           gap: 16px;
           padding: 1rem;
-          height: 100%;
-          max-height: 100%;
+          flex: 1;
+          min-height: 0;
           overflow: hidden;
           box-sizing: border-box;
         }
@@ -2643,8 +2639,6 @@ export class SpreadEditorApp {
     if (panelBody) {
       panelBody.style.overflow = 'hidden';
       panelBody.style.padding = '0';
-      panelBody.style.display = 'flex';
-      panelBody.style.flexDirection = 'column';
     }
 
     const container = document.createElement('div');
@@ -2653,25 +2647,13 @@ export class SpreadEditorApp {
     // Inject styles directly for shadow DOM encapsulation bypass
     const style = document.createElement('style');
     style.textContent = `
-      .shell-panel-content {
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      .shell-panel-content-wrapper {
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
       .assets-panel {
         display: flex;
         flex-direction: column;
         gap: 16px;
         padding: 1rem;
-        height: 100%;
-        max-height: 100%;
+        flex: 1;
+        min-height: 0;
         overflow: hidden;
         box-sizing: border-box;
       }
