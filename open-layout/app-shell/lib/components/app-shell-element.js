@@ -38,6 +38,14 @@ export class ScribusAppShell extends HTMLElement {
           background-color: var(--bg-color);
           color: var(--text-main);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+
+        /* Allow selection in inputs and textareas if they are ever used */
+        input, textarea, [contenteditable="true"] {
+          user-select: text;
+          -webkit-user-select: text;
         }
 
         .app-shell {

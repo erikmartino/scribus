@@ -21,14 +21,14 @@
   padding: 0;
 }
 
-*:not(input):not(textarea) {
-  user-select: none;
-  -webkit-user-select: none;
+*:not(input):not(textarea):not([contenteditable="true"]) {
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 svg text {
-  user-select: none;
-  -webkit-user-select: none;
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 body, html {
