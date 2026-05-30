@@ -35,8 +35,8 @@
   <div class="spinner" title="Generating image previews…"></div>
 
   <script type="module">
-    import { detectFormat }                        from './lib/format-detect.js';
-    import { decodeTiff, exportImage, cleanupOPFS } from './lib/tiff-decoder.js';
+    import { detectFormat }                                                  from './lib/format-detect.js';
+    import { canUseStreamingDecode, stageToOPFS, decodeTiff, exportImage, cleanupOPFS, resetVipsWorker } from './lib/tiff-decoder.js';
 
     /**
      * Post a structured message to the parent frame (if embedded in an iframe).
@@ -66,8 +66,12 @@
 
     /**
      * Generate a JPEG preview blob from a TIFF source using tiff-decoder.js.
-     * Uses the OPFS+Worker (streaming) path when available, otherwise
-     * falls back to the in-memory buffer path (exportImage not available).
+     *
+     * When OPFS is available, streams the file directly to OPFS and uses the
+     * Worker+wasm-vips export path (thumbnailBuffer) — single pass, low peak RAM.
+     *
+     * Falls back to a full in-memory decode via decodeTiff when OPFS is not
+     * available (rare: requires OPFS + Worker + SharedArrayBuffer).
      *
      * @param {string} url - URL of the TIFF file
      * @param {number} srcWidth - original width from meta.json
@@ -80,69 +84,47 @@
 
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${url}`);
-      const stream = response.body;
 
-      let opfsFileName = null;
-      let headerInfo = null;
-
-      const { opfsFileName: stagingFile } = await decodeTiff(
-        stream,
-        {
-          scale,
-          onHeader(header) { headerInfo = header; },
-          onRow() { /* no per-row rendering needed; exportImage handles it */ },
-          onEnd() {},
-        }
-      );
-      opfsFileName = stagingFile;
-
-      // Fast path: use exportImage when OPFS Worker path was used
-      if (opfsFileName) {
+      // Fast path: stream to OPFS once, then export via Worker (no redundant decode).
+      if (canUseStreamingDecode()) {
+        console.log(`[preview-worker] Staging ${url} to OPFS (scale=${scale.toFixed(1)})…`);
+        const opfsFileName = await stageToOPFS(response.body);
+        console.log(`[preview-worker] Staged. Exporting thumbnail ${targetW}×${targetH}…`);
         try {
-          const result = await exportImage(opfsFileName, {
-            scale,
-            quality: 85,
-            format: 'jpeg',
-          });
-          // exportImage already returns the downscaled dimensions
+          const result = await exportImage(opfsFileName, { scale, quality: 85, format: 'jpeg' });
+          console.log(`[preview-worker] Export done: ${result.width}×${result.height}`);
           return result;
         } finally {
           await cleanupOPFS(opfsFileName);
+          // Terminate and recreate the vips Worker after each large TIFF export.
+          // wasm linear memory is fixed-size and never shrinks — a second large
+          // allocation on the same instance will Abort(). A fresh Worker gives
+          // each asset a clean wasm heap (wasm module is browser-cached).
+          resetVipsWorker();
         }
       }
 
-
-      // Fallback path: the buffer decode already called onRow — but since we
-      // didn't capture rows, we need a second decode via an OffscreenCanvas approach.
-      // Re-fetch and use createImageBitmap (browsers can decode TIFF via wasm-vips
-      // in the buffer path but can't use createImageBitmap for TIFF natively).
-      // We therefore do a full re-decode capturing rows onto an OffscreenCanvas.
-      const response2 = await fetch(url);
-      const buffer = await response2.arrayBuffer();
+      // Fallback: in-memory decode. Collect downscaled rows onto an OffscreenCanvas.
+      const buffer = await response.arrayBuffer();
 
       const canvas = new OffscreenCanvas(targetW, targetH);
       const ctx = canvas.getContext('2d');
-
-      // Temp full-res canvas to collect rows
       const tempCanvas = new OffscreenCanvas(srcWidth, srcHeight);
       const tempCtx = tempCanvas.getContext('2d');
       const tempImageData = tempCtx.createImageData(srcWidth, srcHeight);
 
-      await decodeTiff(
-        buffer,
-        {
-          scale: 1, // decode at full res
-          onHeader() {},
-          onRow(rowIndex, rgba) {
-            const offset = rowIndex * srcWidth * 4;
-            tempImageData.data.set(rgba.subarray(0, srcWidth * 4), offset);
-          },
-          onEnd() {
-            tempCtx.putImageData(tempImageData, 0, 0);
-            ctx.drawImage(tempCanvas, 0, 0, targetW, targetH);
-          },
-        }
-      );
+      await decodeTiff(buffer, {
+        scale: 1,
+        onHeader() {},
+        onRow(rowIndex, rgba) {
+          const offset = rowIndex * srcWidth * 4;
+          tempImageData.data.set(rgba.subarray(0, srcWidth * 4), offset);
+        },
+        onEnd() {
+          tempCtx.putImageData(tempImageData, 0, 0);
+          ctx.drawImage(tempCanvas, 0, 0, targetW, targetH);
+        },
+      });
 
       const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
       return { blob, width: targetW, height: targetH };
@@ -254,6 +236,7 @@
           const headerRes = await fetch(asset.originalUrl, { headers: { Range: 'bytes=0-11' } });
           const headerBuf = await headerRes.arrayBuffer();
           const fmt = detectFormat(new Uint8Array(headerBuf));
+          console.log(`[preview-worker] ${asset.name}: format=${fmt}, ${srcWidth}×${srcHeight}`);
 
           // Generate JPEG preview
           let result;

@@ -24,7 +24,7 @@
  * @module vips-worker
  */
 
-const VIPS_CDN = 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js';
+const VIPS_CDN = '/vendor/wasm-vips/vips-es6.js';
 
 /** How many rows to batch into a single postMessage. */
 const ROW_BATCH_SIZE = 32;
@@ -46,17 +46,16 @@ async function initVips() {
 
   const Vips = (await import(VIPS_CDN)).default;
 
-  const workerCode = `import "${VIPS_CDN}";`;
-  const blob = new Blob([workerCode], { type: 'application/javascript' });
-  const blobUrl = URL.createObjectURL(blob);
+  // Pass the vendor URL directly so pthread sub-workers can import it without
+  // needing a blob wrapper. When vips-es6.js runs inside a pthread sub-worker,
+  // it detects globalThis.name === "em-pthread" and skips main initialisation.
+  const mainUrl = new URL(VIPS_CDN, self.location.href).href;
 
   vips = await Vips({
-    mainScriptUrlOrBlob: blobUrl,
-    locateFile: (fileName) =>
-      `https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/${fileName}`,
+    mainScriptUrlOrBlob: mainUrl,
+    locateFile: (fileName) => new URL(`/vendor/wasm-vips/${fileName}`, self.location.href).href,
   });
 
-  URL.revokeObjectURL(blobUrl);
   self.postMessage({ type: 'ready' });
 }
 
@@ -287,7 +286,9 @@ async function decodeFromOPFS(opfsFileName, scale) {
 async function exportFromOPFS(opfsFileName, scale, quality, format) {
   await initPromise;
 
+  self.postMessage({ type: 'log', message: `export: reading OPFS file ${opfsFileName}` });
   const fileData = await readOPFSFile(opfsFileName);
+  self.postMessage({ type: 'log', message: `export: read ${(fileData.byteLength / 1048576).toFixed(1)} MB, calling thumbnailBuffer scale=${scale.toFixed(2)}` });
 
   let image;
   if (scale > 1) {
@@ -295,9 +296,11 @@ async function exportFromOPFS(opfsFileName, scale, quality, format) {
     const targetWidth = Math.max(1, Math.floor(headerImg.width / scale));
     headerImg.delete();
 
+    self.postMessage({ type: 'log', message: `export: thumbnailBuffer targetWidth=${targetWidth}` });
     image = vips.Image.thumbnailBuffer(fileData, targetWidth, {
       size: vips.Size.down,
     });
+    self.postMessage({ type: 'log', message: `export: thumbnailBuffer done → ${image.width}×${image.height}` });
   } else {
     image = vips.Image.newFromBuffer(fileData);
   }

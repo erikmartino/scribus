@@ -262,20 +262,13 @@ function ensureRGBA(vipsModule, srcImage) {
  */
 async function decodeTiffBuffer(buffer, callbacks) {
   if (!vips) {
-    const vipsUrl = 'https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/vips-es6.js';
+    const vipsUrl = '/vendor/wasm-vips/vips-es6.js';
     const Vips = (await import(vipsUrl)).default;
 
-    const workerCode = `import "${vipsUrl}";`;
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const blobUrl = URL.createObjectURL(blob);
-
     vips = await Vips({
-      mainScriptUrlOrBlob: blobUrl,
-      locateFile: (fileName) =>
-        `https://cdn.jsdelivr.net/npm/wasm-vips@0.0.17/lib/${fileName}`,
+      mainScriptUrlOrBlob: new URL(vipsUrl, location.href).href,
+      locateFile: (fileName) => new URL(`/vendor/wasm-vips/${fileName}`, location.href).href,
     });
-
-    URL.revokeObjectURL(blobUrl);
   }
 
   let image;
@@ -371,6 +364,44 @@ async function decodeTiffFallback(buffer, callbacks) {
 }
 
 // --- Public API ---
+
+/**
+ * Whether the fast streaming OPFS+Worker path is available.
+ * Exported so callers can branch before choosing between stageToOPFS
+ * and a buffer-based fallback.
+ */
+export { canUseStreamingDecode };
+
+/**
+ * Stream a source (ReadableStream or ArrayBuffer) into an OPFS staging file
+ * and return the file name.  The caller is responsible for calling
+ * cleanupOPFS(fileName) when done.
+ *
+ * Throws if OPFS is not available (use canUseStreamingDecode() to check).
+ *
+ * @param {ReadableStream<Uint8Array> | ArrayBuffer} source
+ * @param {{ onProgress?: (bytes: number) => void }} [opts]
+ * @returns {Promise<string>} opfsFileName
+ */
+export async function stageToOPFS(source, opts = {}) {
+  if (!canUseStreamingDecode()) {
+    throw new Error('OPFS is not available in this context');
+  }
+  const opfsFileName = `stage-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
+  let stream;
+  if (source instanceof ArrayBuffer) {
+    stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(source));
+        controller.close();
+      },
+    });
+  } else {
+    stream = source;
+  }
+  await streamToOPFS(stream, opfsFileName, opts.onProgress);
+  return opfsFileName;
+}
 
 /**
  * Consume a ReadableStream into a single ArrayBuffer.
@@ -495,6 +526,27 @@ export async function cleanupOPFS(opfsFileName) {
   if (opfsFileName) {
     await removeOPFSFile(opfsFileName);
   }
+}
+
+/**
+ * Terminate the current vips Worker and immediately pre-warm a replacement.
+ *
+ * wasm linear memory is fixed-size and never shrinks. After processing a large
+ * TIFF the wasm heap is nearly exhausted — a second large allocation will
+ * Abort(). Terminating and recreating the Worker gives each export a fresh
+ * wasm heap, at the cost of re-downloading and re-compiling wasm-vips (which
+ * is cached by the browser after the first load).
+ *
+ * Call this in the `finally` block after each TIFF export when multiple large
+ * files are processed sequentially.
+ */
+export function resetVipsWorker() {
+  if (worker) {
+    worker.terminate();
+    worker = null;
+  }
+  // Pre-warm a replacement immediately so wasm-vips is ready for the next asset
+  warmUpWorker();
 }
 
 // Eagerly construct the Worker so wasm-vips starts downloading immediately

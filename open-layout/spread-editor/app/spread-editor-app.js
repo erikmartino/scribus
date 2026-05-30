@@ -79,6 +79,10 @@ export class SpreadEditorApp {
     this._docPath = null;
     this._saving = false;
     this._assets = {};
+
+    this._activeSpreadId = 'spread-1';
+    this._spreadsList = null;
+    this._spreadsMetadata = {};
   }
 
   /** Active editor — returns the EditorState of the currently active story. */
@@ -90,6 +94,7 @@ export class SpreadEditorApp {
     if (shell) {
       this.shell = shell;
       shell.registerPanel({ id: 'assets', label: 'Assets' });
+      shell.registerPanel({ id: 'pages', label: 'Pages' });
     }
 
     this.container = this.root.querySelector('#svg-container');
@@ -262,11 +267,82 @@ export class SpreadEditorApp {
   // Store loading — read spread + stories from the document store
   // ---------------------------------------------------------------------------
 
+  async _loadAllSpreadsMetadata() {
+    if (!this._spreadsList || this._spreadsList.length === 0) return;
+    
+    this._spreadsMetadata = {};
+    const promises = this._spreadsList.map(async (spreadId) => {
+      try {
+        const spreadJson = await loadSpread(this._docPath, spreadId);
+        this._spreadsMetadata[spreadId] = {
+          pages: spreadJson.pages || []
+        };
+      } catch (err) {
+        console.warn(`Failed to load metadata for spread ${spreadId}:`, err);
+        this._spreadsMetadata[spreadId] = { pages: [] };
+      }
+    });
+    await Promise.all(promises);
+  }
+
   async _loadFromStore() {
     this.setStatus('Loading document from store...');
 
+    // Clear existing spread-specific data to prevent accumulation when switching
+    this.boxes = [];
+    this.imageBoxes = [];
+    this._stories = [];
+    this._activeStory = null;
+    this._imageBoxCounter = 0;
+    this._storyCounter = 0;
+    this._loadedFromStore = false;
+
+    // Discover spreads dynamically if not already done
+    if (!this._spreadsList) {
+      try {
+        const response = await fetch(`/store/${this._docPath}`);
+        if (response.ok) {
+          const files = await response.json();
+          const spreadFiles = files.filter(f => f.startsWith('spreads/') && f.endsWith('.json'));
+          this._spreadsList = spreadFiles.map(f => {
+            const parts = f.split('/');
+            const filename = parts[parts.length - 1];
+            return filename.replace('.json', '');
+          });
+          // Sort spreads list numerically if possible
+          this._spreadsList.sort((a, b) => {
+            const numA = parseInt(a.replace(/[^\d]/g, ''), 10);
+            const numB = parseInt(b.replace(/[^\d]/g, ''), 10);
+            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+            return a.localeCompare(b);
+          });
+          
+          await this._loadAllSpreadsMetadata();
+        }
+      } catch (err) {
+        console.warn('Failed to list spreads from store:', err);
+      }
+    }
+
+    if (!this._spreadsList || this._spreadsList.length === 0) {
+      this._spreadsList = ['spread-1'];
+      this._spreadsMetadata['spread-1'] = {
+        pages: [{ index: 0, label: '1' }, { index: 1, label: '2' }]
+      };
+    }
+
+    if (!this._activeSpreadId) {
+      this._activeSpreadId = this._spreadsList[0] || 'spread-1';
+    }
+
     // 1. Load the spread definition
-    const spreadJson = await loadSpread(this._docPath, 'spread-1');
+    const spreadJson = await loadSpread(this._docPath, this._activeSpreadId);
+    
+    // Save pages configuration for serialization
+    this._activeSpreadPages = spreadJson.pages || [
+      { index: 0, label: '1' },
+      { index: 1, label: '2' }
+    ];
 
     // 2. Load paragraph style definitions (for resolving styleRef)
     const styleMap = await loadParagraphStyles(this._docPath);
@@ -441,6 +517,16 @@ export class SpreadEditorApp {
           if (box && msg.docPath === this._docPath) {
             box.imageUrl = msg.previewUrl + '?t=' + Date.now();
             await this.update();
+          }
+          // Live-swap the asset panel card thumbnail
+          const card = document.getElementById('asset-card-' + msg.assetRef);
+          if (card && msg.docPath === this._docPath) {
+            const wrapper = card.querySelector('.asset-thumbnail-wrapper');
+            const img = card.querySelector('.asset-thumbnail');
+            if (wrapper && img) {
+              img.src = msg.previewUrl + '?t=' + Date.now();
+              wrapper.classList.remove('asset-thumbnail-wrapper--pending');
+            }
           }
           if (spinnerLabel) {
             spinnerLabel.textContent =
@@ -997,7 +1083,7 @@ export class SpreadEditorApp {
 
       // Spread
       puts.push(
-        putJson(`/store/${this._docPath}/spreads/spread-1.json`, this._serializeSpread())
+        putJson(`/store/${this._docPath}/spreads/${this._activeSpreadId}.json`, this._serializeSpread())
       );
 
       // Stories (using shared serializer)
@@ -1069,8 +1155,8 @@ export class SpreadEditorApp {
     }
 
     return {
-      id: 'spread-1',
-      pages: [
+      id: this._activeSpreadId,
+      pages: this._activeSpreadPages || [
         { index: 0, label: '1' },
         { index: 1, label: '2' },
       ],
@@ -2302,7 +2388,234 @@ export class SpreadEditorApp {
     return descriptors;
   }
 
+  async selectSpread(spreadId) {
+    if (spreadId === this._activeSpreadId) return;
+
+    // Auto-save current spread first
+    if (this._docPath && !this._saving) {
+      try {
+        await this._save();
+      } catch (err) {
+        console.error('Auto-save failed before switching spreads:', err);
+      }
+    }
+
+    this._activeSpreadId = spreadId;
+    this.selectedBoxId = null;
+    this.cursor = null;
+    if (this._textInteraction) {
+      this._textInteraction.destroy();
+      this._textInteraction = null;
+    }
+
+    await this._loadFromStore();
+    await this.update();
+    this.setStatus('Ready - spread editor active.', 'ok');
+    this.shell?.updatePanels();
+  }
+
   getPanelContent(panelId, selected) {
+    if (panelId === 'pages') {
+      const container = document.createElement('div');
+      container.className = 'pages-panel';
+
+      const style = document.createElement('style');
+      style.textContent = `
+        .pages-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          height: 100%;
+          max-height: 100%;
+          overflow: hidden;
+        }
+        .pages-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid var(--border, #2e2e32);
+          padding-bottom: 12px;
+          margin-bottom: 8px;
+        }
+        .pages-title {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: var(--text-main, #e1e1e6);
+          margin: 0;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .pages-count {
+          font-size: 0.72rem;
+          color: var(--accent, #bb86fc);
+          background: rgba(187, 134, 252, 0.08);
+          border: 1px solid rgba(187, 134, 252, 0.2);
+          padding: 1px 6px;
+          border-radius: 20px;
+        }
+        .pages-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          overflow-y: auto;
+          flex: 1;
+          min-height: 0;
+          padding-right: 4px;
+        }
+        .pages-list::-webkit-scrollbar {
+          width: 6px;
+        }
+        .pages-list::-webkit-scrollbar-thumb {
+          background: var(--border, #2e2e32);
+          border-radius: 3px;
+        }
+        .spread-card {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--border, #2e2e32);
+          border-radius: 8px;
+          padding: 10px 12px;
+          cursor: pointer;
+          position: relative;
+          transition: transform var(--transition-fast, 0.2s), border-color var(--transition-fast, 0.2s), box-shadow var(--transition-fast, 0.2s), background var(--transition-fast, 0.2s);
+          user-select: none;
+        }
+        .spread-card:hover {
+          transform: translateY(-2px);
+          border-color: var(--accent, #bb86fc);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          background: rgba(255, 255, 255, 0.04);
+        }
+        .spread-card.active {
+          border-color: var(--accent, #bb86fc);
+          background: rgba(187, 134, 252, 0.08);
+          box-shadow: 0 0 8px rgba(187, 134, 252, 0.2);
+        }
+        .spread-icon {
+          color: var(--text-dim, #a1a1aa);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: color var(--transition-fast, 0.2s);
+        }
+        .spread-card.active .spread-icon, .spread-card:hover .spread-icon {
+          color: var(--accent, #bb86fc);
+        }
+        .spread-details {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          min-width: 0;
+          flex: 1;
+        }
+        .spread-name {
+          font-size: 0.8rem;
+          font-weight: 500;
+          color: var(--text-main, #e1e1e6);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-bottom: 2px;
+        }
+        .spread-meta {
+          font-size: 0.7rem;
+          color: var(--text-dim, #a1a1aa);
+        }
+        .spread-card.active .spread-meta {
+          color: rgba(161, 161, 170, 0.8);
+        }
+      `;
+      container.appendChild(style);
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'pages-header';
+
+      const title = document.createElement('h3');
+      title.className = 'pages-title';
+      title.textContent = 'Document Spreads';
+      header.appendChild(title);
+
+      const countBadge = document.createElement('span');
+      countBadge.className = 'pages-count';
+      countBadge.textContent = `${this._spreadsList?.length || 0} Spreads`;
+      header.appendChild(countBadge);
+
+      container.appendChild(header);
+
+      // List
+      const list = document.createElement('div');
+      list.className = 'pages-list';
+
+      if (this._spreadsList) {
+        this._spreadsList.forEach((spreadId) => {
+          const card = document.createElement('div');
+          card.className = 'spread-card' + (spreadId === this._activeSpreadId ? ' active' : '');
+          card.dataset.spreadId = spreadId;
+
+          // Get pages for display
+          const metadata = this._spreadsMetadata?.[spreadId];
+          const pages = metadata?.pages || [];
+          const labels = pages.map(p => p.label).join(', ');
+          const pageStr = pages.length > 1 ? `Pages: ${labels}` : `Page: ${labels || '?'}`;
+          
+          // Icon
+          const iconContainer = document.createElement('div');
+          iconContainer.className = 'spread-icon';
+          if (pages.length > 1) {
+            iconContainer.innerHTML = `
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="5" width="8" height="14" rx="1" ry="1"></rect>
+                <rect x="13" y="5" width="8" height="14" rx="1" ry="1"></rect>
+                <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"></line>
+              </svg>
+            `;
+          } else {
+            iconContainer.innerHTML = `
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="7" y="5" width="10" height="14" rx="1" ry="1"></rect>
+              </svg>
+            `;
+          }
+          card.appendChild(iconContainer);
+
+          // Details
+          const details = document.createElement('div');
+          details.className = 'spread-details';
+
+          const name = document.createElement('span');
+          name.className = 'spread-name';
+          name.textContent = spreadId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          details.appendChild(name);
+
+          const meta = document.createElement('span');
+          meta.className = 'spread-meta';
+          meta.textContent = pageStr;
+          details.appendChild(meta);
+
+          card.appendChild(details);
+
+          card.addEventListener('click', () => {
+            if (spreadId !== this._activeSpreadId) {
+              card.classList.add('active'); // immediate feedback
+              this.setStatus(`Loading ${spreadId}...`);
+              setTimeout(() => {
+                this.selectSpread(spreadId);
+              }, 10);
+            }
+          });
+
+          list.appendChild(card);
+        });
+      }
+
+      container.appendChild(list);
+      return container;
+    }
+
     if (panelId !== 'assets') return null;
 
     const container = document.createElement('div');
@@ -2432,6 +2745,16 @@ export class SpreadEditorApp {
       }
       .asset-card:hover .asset-thumbnail {
         transform: scale(1.08);
+      }
+      .asset-thumbnail-wrapper--pending .asset-thumbnail {
+        display: none;
+      }
+      .asset-thumbnail-wrapper--pending::after {
+        content: '';
+        display: block;
+        width: 24px;
+        height: 24px;
+        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpath d='m21 15-5-5L5 21'/%3E%3C/svg%3E") center / contain no-repeat;
       }
       .asset-info {
         display: flex;
@@ -2632,8 +2955,9 @@ export class SpreadEditorApp {
 
       for (const [key, asset] of Object.entries(this._assets)) {
         const ext = extFromMime(asset.mime);
-        const preview = asset.preview || `${key}.${ext}`;
-        const previewUrl = `/store/${this._docPath}/assets/${key}/${preview}`;
+        const previewUrl = asset.preview
+          ? `/store/${this._docPath}/assets/${key}/${asset.preview}`
+          : null;
 
         const card = document.createElement('div');
         card.className = 'asset-card';
@@ -2652,11 +2976,11 @@ export class SpreadEditorApp {
 
         // Thumbnail
         const thumbWrapper = document.createElement('div');
-        thumbWrapper.className = 'asset-thumbnail-wrapper';
+        thumbWrapper.className = 'asset-thumbnail-wrapper' + (previewUrl ? '' : ' asset-thumbnail-wrapper--pending');
 
         const img = document.createElement('img');
         img.className = 'asset-thumbnail';
-        img.src = previewUrl;
+        if (previewUrl) img.src = previewUrl;
         img.alt = key;
         thumbWrapper.appendChild(img);
         card.appendChild(thumbWrapper);
