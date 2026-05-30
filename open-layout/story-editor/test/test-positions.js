@@ -36,9 +36,9 @@ describe('splitGlyphsIntoWords', () => {
     const groups = splitGlyphsIntoWords(glyphs, 'ab c', 4);
     assert.equal(groups.length, 2);
     assert.deepEqual(groups[0].glyphs.map((g) => g.cl), [0, 1]);
-    assert.equal(groups[0].spaceGlyph?.cl, 2);
+    assert.equal(groups[0].spaceGlyphs[0]?.cl, 2);
     assert.deepEqual(groups[1].glyphs.map((g) => g.cl), [3]);
-    assert.equal(groups[1].spaceGlyph, null);
+    assert.equal(groups[1].spaceGlyphs.length, 0);
   });
 });
 

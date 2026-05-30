@@ -66,8 +66,13 @@ export function splitGlyphsIntoWords(glyphs, text, lineEndChar) {
     while (i < glyphs.length && text[glyphs[i].cl] !== ' ') i++;
     const wordGlyphs = glyphs.slice(start, i);
     const endCl = i < glyphs.length ? glyphs[i].cl : lineEndChar;
-    const spaceGlyph = (i < glyphs.length && text[glyphs[i].cl] === ' ') ? glyphs[i++] : null;
-    wordGroups.push({ glyphs: wordGlyphs, endCl, spaceGlyph });
+    
+    const spaceGlyphs = [];
+    while (i < glyphs.length && text[glyphs[i].cl] === ' ') {
+      spaceGlyphs.push(glyphs[i++]);
+    }
+    
+    wordGroups.push({ glyphs: wordGlyphs, endCl, spaceGlyphs });
   }
   return wordGroups;
 }
@@ -120,13 +125,16 @@ export function buildPositions(entry, baseX) {
   }
 
   let wx = baseX;
+  let wordIndex = 0;
   for (let wi = 0; wi < wordGroups.length; wi++) {
-    const word = words[wi];
     const group = wordGroups[wi];
 
-    // If a justified/aligned word exists, snap our wx to its computed start
-    if (word) {
-      wx = baseX + word.x;
+    // If this group has non-space content, it corresponds to a justified word
+    if (group.glyphs.length > 0) {
+      const word = words[wordIndex++];
+      if (word) {
+        wx = baseX + word.x;
+      }
     }
 
     // Process characters in the word
@@ -148,19 +156,23 @@ export function buildPositions(entry, baseX) {
       }
     }
 
-    // Process the space following this word (or the trailing space itself)
-    if (group.spaceGlyph) {
-      addPos(hyphToOrig[group.spaceGlyph.cl], wx);
-      
-      // Calculate how much to advance wx after this space
-      // If there's a subsequent word, we should align with its x in the next iteration.
-      // But if there isn't (trailing spaces), we use the space's actual width.
-      const nextWord = words[wi + 1];
+    // Process the spaces following this word group
+    if (group.spaceGlyphs.length > 0) {
+      const nextWord = words[wordIndex]; // words was already incremented if current group had glyphs
+      let spaceAdvance = 0;
       if (nextWord) {
-        // wx will be recalculated from nextWord.x in the next loop iteration
-      } else {
-        // Just use the space's actual advance
-        wx += group.spaceGlyph.ax;
+        // The total gap between current wx and nextWord.x should be divided among spaces
+        const totalGap = (baseX + nextWord.x) - wx;
+        spaceAdvance = totalGap / group.spaceGlyphs.length;
+      }
+
+      for (const sg of group.spaceGlyphs) {
+        addPos(hyphToOrig[sg.cl], wx);
+        if (nextWord) {
+          wx += spaceAdvance;
+        } else {
+          wx += sg.ax;
+        }
       }
     }
   }

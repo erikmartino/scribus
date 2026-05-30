@@ -541,51 +541,53 @@ async function _generatePdf(engine, docPath, opts, writer) {
     const padding = 16; // matches SvgRenderer._padding default
     let ops = '';
 
-    // Image placement operators
-    for (let ii = 0; ii < imageRefs.length; ii++) {
-      const imgBox = page.imageBoxes[ii];
-      const { alias } = imageRefs[ii];
-      // PDF y: flip from top-left to bottom-left
-      const pdfY = pageHeight - imgBox.y - imgBox.height;
-      ops += imageOp(alias, imgBox.x, pdfY, imgBox.width, imgBox.height);
-    }
-
-    // Text operators
-    for (const { box, lines } of page.textBoxes) {
-      for (const line of lines) {
-        const pdfY = pageHeight - line.y;
-        for (const word of line.words) {
-          if (word.glyphData && word.glyphData.length > 0) {
-            // Per-glyph positioning: uses HarfBuzz advances including GPOS kerning,
-            // so the PDF matches the SVG renderer exactly.
-            let xOffset = 0;
-            for (const g of word.glyphData) {
-              if (g.text && g.text.trim()) {
-                const family = g.style.fontFamily || fontFamily;
-                const variant = getFontVariant(g.style);
+    // Render interleaved frames (maintains original depth order)
+    for (const frame of (page.frames || [])) {
+      if (frame.type === 'image') {
+        const imgBox = frame.data;
+        const ref = imageRefs[frame.index];
+        if (!ref) continue;
+        const { alias } = ref;
+        // PDF y: flip from top-left to bottom-left
+        const pdfY = pageHeight - imgBox.y - imgBox.height;
+        ops += imageOp(alias, imgBox.x, pdfY, imgBox.width, imgBox.height);
+      } else {
+        const { box, lines } = frame.data;
+        for (const line of lines) {
+          const pdfY = pageHeight - line.y;
+          for (const word of line.words) {
+            if (word.glyphData && word.glyphData.length > 0) {
+              // Per-glyph positioning: uses HarfBuzz advances including GPOS kerning,
+              // so the PDF matches the SVG renderer exactly.
+              let xOffset = 0;
+              for (const g of word.glyphData) {
+                if (g.text && g.text.trim()) {
+                  const family = g.style.fontFamily || fontFamily;
+                  const variant = getFontVariant(g.style);
+                  const alias = getFontAlias(family, variant);
+                  const absX = box.x + padding + word.x + xOffset + g.dx;
+                  const fontInfo = fontMap.get(alias);
+                  const useLigatures = !!fontInfo?.subsetBytes;
+                  const isFauxBold = !!fontInfo?.isFauxBold;
+                  const isFauxItalic = !!fontInfo?.isFauxItalic;
+                  ops += textOp(g.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
+                }
+                xOffset += g.ax;
+              }
+            } else {
+              // Fallback: fragment-level positioning (no intra-word kerning)
+              for (const frag of word.fragments) {
+                if (!frag.text || !frag.text.trim()) continue;
+                const family = frag.style.fontFamily || fontFamily;
+                const variant = getFontVariant(frag.style);
                 const alias = getFontAlias(family, variant);
-                const absX = box.x + padding + word.x + xOffset + g.dx;
+                const absX = box.x + padding + word.x;
                 const fontInfo = fontMap.get(alias);
                 const useLigatures = !!fontInfo?.subsetBytes;
                 const isFauxBold = !!fontInfo?.isFauxBold;
                 const isFauxItalic = !!fontInfo?.isFauxItalic;
-                ops += textOp(g.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
+                ops += textOp(frag.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
               }
-              xOffset += g.ax;
-            }
-          } else {
-            // Fallback: fragment-level positioning (no intra-word kerning)
-            for (const frag of word.fragments) {
-              if (!frag.text || !frag.text.trim()) continue;
-              const family = frag.style.fontFamily || fontFamily;
-              const variant = getFontVariant(frag.style);
-              const alias = getFontAlias(family, variant);
-              const absX = box.x + padding + word.x;
-              const fontInfo = fontMap.get(alias);
-              const useLigatures = !!fontInfo?.subsetBytes;
-              const isFauxBold = !!fontInfo?.isFauxBold;
-              const isFauxItalic = !!fontInfo?.isFauxItalic;
-              ops += textOp(frag.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
             }
           }
         }

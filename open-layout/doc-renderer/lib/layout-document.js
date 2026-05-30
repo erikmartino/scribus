@@ -143,6 +143,7 @@ export async function createLayoutEngine() {
  * @property {number}              height  — points
  * @property {TextBoxLayoutData[]} textBoxes
  * @property {ImageBoxData[]}      imageBoxes
+ * @property {({ type: 'text', data: TextBoxLayoutData } | { type: 'image', data: ImageBoxData, index: number })[]} frames
  */
 
 /**
@@ -334,44 +335,53 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
     const pageX = i * pageWidth;
     const pageRect = { x: pageX, y: 0, width: pageWidth, height: pageHeight };
 
-    // Text boxes that overlap this page
+    // Interleaved frames for this page, preserving spreadJson.frames order
+    const pageFrames = [];
     const pageTextBoxes = [];
-    for (const { box, lines } of boxLineMap.values()) {
-      if (_overlapsPage(box, pageRect)) {
-        // Translate box and line y-coordinates to page-local space
-        const localBox = {
-          x: box.x - pageX,
-          y: box.y,
-          width: box.width,
-          height: box.height,
-        };
-        const localLines = lines.map(l => ({
-          ...l,
-          y: l.y, // y is already spread-space; caller does pdf_y = pageHeight - l.y
-          words: l.words.map(w => ({
-            ...w,
-            fragments: w.fragments.map(f => ({
-              ...f,
-              // x is word.x (relative to box interior, after padding),
-              // absolute page x = localBox.x + padding + w.x
+    const pageImageBoxes = [];
+
+    for (const frame of (spreadJson.frames || [])) {
+      if (!_overlapsPage(frame, pageRect)) continue;
+
+      if (frame.type === 'image') {
+        const ib = imageBoxes.find(b => b.id === frame.id);
+        if (ib) {
+          const pageIb = {
+            imageUrl: ib.imageUrl,
+            assetRef: ib.assetRef,
+            x: ib.x - pageX,
+            y: ib.y,
+            width: ib.width,
+            height: ib.height,
+          };
+          const index = pageImageBoxes.length;
+          pageImageBoxes.push(pageIb);
+          pageFrames.push({ type: 'image', data: pageIb, index });
+        }
+      } else {
+        const bl = boxLineMap.get(frame.id);
+        if (bl) {
+          const { box, lines } = bl;
+          const localBox = {
+            x: box.x - pageX,
+            y: box.y,
+            width: box.width,
+            height: box.height,
+          };
+          const localLines = lines.map(l => ({
+            ...l,
+            y: l.y,
+            words: l.words.map(w => ({
+              ...w,
+              fragments: w.fragments.map(f => ({ ...f })),
             })),
-          })),
-        }));
-        pageTextBoxes.push({ box: localBox, lines: localLines });
+          }));
+          const pageTb = { box: localBox, lines: localLines };
+          pageTextBoxes.push(pageTb);
+          pageFrames.push({ type: 'text', data: pageTb });
+        }
       }
     }
-
-    // Image boxes that overlap this page
-    const pageImageBoxes = imageBoxes
-      .filter(ib => _overlapsPage(ib, pageRect))
-      .map(ib => ({
-        imageUrl: ib.imageUrl,
-        assetRef: ib.assetRef,
-        x: ib.x - pageX,
-        y: ib.y,
-        width: ib.width,
-        height: ib.height,
-      }));
 
     return {
       pageIndex: i,
@@ -380,6 +390,7 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
       height: pageHeight,
       textBoxes: pageTextBoxes,
       imageBoxes: pageImageBoxes,
+      frames: pageFrames,
     };
   });
 }
