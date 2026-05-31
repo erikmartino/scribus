@@ -3033,13 +3033,31 @@ export class SpreadEditorApp {
             this.setStatus(`Deleting ${key}...`);
             try {
               const res = await fetch(`/store/${this._docPath}/assets/${key}`, { method: 'DELETE' });
-              if (res.ok) {
-                this._assets = await loadAssets(this._docPath);
-                this.setStatus('Asset deleted successfully.', 'ok');
-                this.shell?.updatePanels();
-              } else {
-                throw new Error(`Delete failed: ${res.status}`);
-              }
+              if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+              const trash = await res.json();
+              this._assets = await loadAssets(this._docPath);
+              this.setStatus('Asset deleted.', 'ok');
+              this.shell?.updatePanels();
+              this.shell?.history.submit({
+                undo: async () => {
+                  await fetch('/store/.trash/restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(trash),
+                  });
+                  this._assets = await loadAssets(this._docPath);
+                  this.setStatus('Asset restored.', 'ok');
+                  this.shell?.updatePanels();
+                },
+                redo: async () => {
+                  const r = await fetch(`/store/${this._docPath}/assets/${key}`, { method: 'DELETE' });
+                  if (!r.ok) throw new Error(`Re-delete failed: ${r.status}`);
+                  Object.assign(trash, await r.json());
+                  this._assets = await loadAssets(this._docPath);
+                  this.setStatus('Asset deleted.', 'ok');
+                  this.shell?.updatePanels();
+                },
+              });
             } catch (err) {
               console.error('Failed to delete asset:', err);
               this.setStatus('Delete failed.', 'error');

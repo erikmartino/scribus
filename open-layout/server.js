@@ -403,6 +403,42 @@ function copyDirRecursive(src, dest, callback) {
 function handleStoreRequest(req, res, pathname) {
   const method = req.method;
 
+  // --- POST /store/.trash/restore: move item back from trash to original location ---
+  if (method === 'POST' && pathname === '/store/.trash/restore') {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      let body;
+      try { body = JSON.parse(Buffer.concat(chunks).toString('utf-8')); }
+      catch { sendError(res, 400, 'Bad Request: invalid JSON'); return; }
+      const { trashPath, originalPath } = body || {};
+      if (!trashPath || !originalPath) {
+        sendError(res, 400, 'Bad Request: trashPath and originalPath required');
+        return;
+      }
+      const src = path.resolve(storeDir, '.trash', trashPath);
+      const dest = path.resolve(storeDir, originalPath);
+      if (!src.startsWith(path.resolve(storeDir, '.trash')) || !dest.startsWith(path.resolve(storeDir))) {
+        sendError(res, 400, 'Bad Request: invalid path');
+        return;
+      }
+      fs.stat(src, (statErr) => {
+        if (statErr) { sendError(res, 404, 'Trash item not found'); return; }
+        fs.mkdir(path.dirname(dest), { recursive: true }, (mkErr) => {
+          if (mkErr) { sendError(res, 500, 'Restore mkdir failed'); return; }
+          fs.rename(src, dest, (renameErr) => {
+            if (renameErr) { sendError(res, 500, 'Restore failed'); return; }
+            res.statusCode = 200;
+            setIsolationHeaders(res);
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ restored: originalPath }));
+          });
+        });
+      });
+    });
+    return;
+  }
+
   // --- /edit suffix: serve the story editor for a store story ---
   // GET /store/{user}/{doc}/stories/{storyId}/edit
   //   → serve story-editor/index.html (the editor reads its own URL to
@@ -565,16 +601,33 @@ function handleStoreRequest(req, res, pathname) {
     return;
   }
 
-  // --- DELETE: remove a file ---
+  // --- DELETE: move to trash ---
   if (method === 'DELETE') {
-    fs.unlink(filePath, (unlinkErr) => {
-      if (unlinkErr) {
+    fs.stat(filePath, (statErr) => {
+      if (statErr) {
         sendError(res, 404, 'Not Found');
         return;
       }
-      res.statusCode = 204;
-      setIsolationHeaders(res);
-      res.end();
+      const relative = path.relative(storeDir, filePath);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const trashRelative = `${relative}_${timestamp}`;
+      const trashDest = path.join(storeDir, '.trash', trashRelative);
+      fs.mkdir(path.dirname(trashDest), { recursive: true }, (mkErr) => {
+        if (mkErr) {
+          sendError(res, 500, 'Trash mkdir failed');
+          return;
+        }
+        fs.rename(filePath, trashDest, (renameErr) => {
+          if (renameErr) {
+            sendError(res, 500, 'Trash move failed');
+            return;
+          }
+          res.statusCode = 200;
+          setIsolationHeaders(res);
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ trashPath: trashRelative, originalPath: relative }));
+        });
+      });
     });
     return;
   }

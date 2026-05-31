@@ -10,3 +10,5 @@ node_modules/
 vendor/
 store/alice
 pnpm-lock.yaml
+.trash/
+
