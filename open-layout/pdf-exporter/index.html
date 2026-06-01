@@ -180,7 +180,8 @@
         <p>Generates a PDF from the specified document without any external library.</p>
         <ul>
           <li>Text is laid out using HarfBuzz (same engine as the spread editor)</li>
-          <li>JPEG images are passed through with no re-encoding</li>
+          <li>High-resolution images are optimized and downscaled to 300 DPI (with CMYK conversion) using wasm-vips</li>
+          <li>JPEG images are passed through with no re-encoding when already optimized</li>
           <li>PNG images are decoded and deflate-compressed</li>
           <li>Output streams directly to disk via the File System Access API when available</li>
         </ul>
@@ -262,6 +263,9 @@
             setStatus(`Writing page ${page} of ${total}…`);
             showProgress(page, total);
           },
+          onStatusUpdate(statusText) {
+            setStatus(statusText);
+          }
         });
 
         if ('showSaveFilePicker' in window) {

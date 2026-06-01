@@ -239,8 +239,10 @@ export function streamDocument(engine, docPath, opts = {}) {
 
 async function _generatePdf(engine, docPath, opts, writer) {
   const onProgress = opts.onProgress ?? (() => {});
+  const onStatusUpdate = opts.onStatusUpdate ?? (() => {});
 
   // Initialize wasm-vips
+  onStatusUpdate('Initialising image processing library (wasm-vips)…');
   try {
     await initVips();
   } catch (e) {
@@ -248,6 +250,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
   }
 
   // 1. Layout all pages (no DOM created)
+  onStatusUpdate('Loading document spreads and computing layout…');
   const { pages, fontFamily } = await layoutDocument(engine, docPath, opts);
   const totalPages = pages.length;
 
@@ -267,7 +270,10 @@ async function _generatePdf(engine, docPath, opts, writer) {
   const ids = new IdAllocator(1);
 
   // Font objects
+  onStatusUpdate('Collecting font usage and character sets…');
   const fontData = collectFontData(pages, fontFamily);
+  
+  onStatusUpdate('Initialising font subsetter (HarfBuzz)…');
   let subsetter;
   try {
     subsetter = await createSubsetter();
@@ -288,6 +294,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
     let isFauxItalic = false;
     
     if (subsetter) {
+      onStatusUpdate(`Resolving font file: ${data.family} (${data.variant})…`);
       let ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, data.variant);
       if (!ttfBuffer) {
         // Cascade strategy: fallback to regular/best available buffer of same family
@@ -316,6 +323,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
       }
       if (ttfBuffer) {
         try {
+          onStatusUpdate(`Subsetting font to active characters: ${data.family} (${data.variant})…`);
           subsetBytes = subsetter.subset(ttfBuffer, data.unicodes);
           descriptorId = ids.next();
           streamId = ids.next();
@@ -406,6 +414,8 @@ async function _generatePdf(engine, docPath, opts, writer) {
     const page = pages[pi];
     const imageRefs = [];
 
+    onStatusUpdate(`Preparing resources for page ${pi + 1} of ${totalPages}…`);
+
     // 5a. Write image XObjects for this page
     for (let ii = 0; ii < page.imageBoxes.length; ii++) {
       const imgBox = page.imageBoxes[ii];
@@ -418,6 +428,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
 
         if (imgBox.assetRef) {
           try {
+            onStatusUpdate(`Fetching image asset ${imgBox.assetRef} for page ${pi + 1}…`);
             const metaRes = await fetch(`/store/${docPath}/assets/${imgBox.assetRef}/meta.json`);
             if (metaRes.ok) {
               const meta = await metaRes.json();
@@ -441,6 +452,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
 
         // Fallback to preview JPEG if original asset fetch failed or wasn't tried
         if (!originalFetched) {
+          onStatusUpdate(`Fetching image asset ${ii + 1} for page ${pi + 1}…`);
           const res = await fetch(imgBox.imageUrl);
           if (!res.ok) continue;
           buf = new Uint8Array(await res.arrayBuffer());
@@ -478,6 +490,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
         const isUnsupported = (mime !== 'image/jpeg' && mime !== 'image/png');
 
         if (useVips && (isTooLarge || isUnsupported)) {
+          onStatusUpdate(`Optimising/converting image ${ii + 1} (CMYK/DPI conversion) for page ${pi + 1}…`);
           let toDelete = [];
           try {
             let current = vipsImg;
@@ -536,6 +549,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
             try { vipsImg.delete(); } catch (_) {}
           }
         } else {
+          onStatusUpdate(`Processing standard image ${ii + 1} for page ${pi + 1}…`);
           // Pass-through or canvas fallback
           const kind = detectImageType(buf);
           if (kind === 'jpeg') {
@@ -570,6 +584,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
     }
 
     // 5b. Build content stream
+    onStatusUpdate(`Assembling page ${pi + 1} content streams…`);
     const padding = 16; // matches SvgRenderer._padding default
     let ops = '';
 
@@ -664,6 +679,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
     const contentId = ids.next();
     pdf.writeContentStream(contentId, ops);
 
+    onStatusUpdate(`Writing page ${pi + 1} dictionary…`);
     const pageId = ids.next();
     pageObjIds.push(pageId);
     pdf.writePageDict(pageId, {
@@ -679,11 +695,13 @@ async function _generatePdf(engine, docPath, opts, writer) {
   }
 
   // 6. Write Pages tree and Catalog
+  onStatusUpdate('Assembling page tree and catalog…');
   const catalogId = ids.next();
   pdf.writePageTree(pageTreeObjId, pageObjIds, pageWidth, pageHeight);
   pdf.writeCatalog(catalogId, pageTreeObjId);
 
   // 7. Write xref + trailer
+  onStatusUpdate('Writing cross-reference table and final trailer…');
   pdf.writeXref(catalogId, ids.total);
 
   // writer is closed by PdfWriter via controller.close() → pipe ends
