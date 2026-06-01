@@ -399,6 +399,7 @@ export class SpreadEditorApp {
           imageUrl,
           imgWidth,
           imgHeight,
+          placement: frame.placement,
           ...(assetRef ? { assetRef, assetExt } : {}),
         });
         this._imageBoxCounter++;
@@ -1160,6 +1161,9 @@ export class SpreadEditorApp {
         width: Math.round(box.width * 100) / 100,
         height: Math.round(box.height * 100) / 100,
       };
+      if (box.placement) {
+        frame.placement = box.placement;
+      }
       if (box.assetRef) {
         frame.assetRef = box.assetRef;
       } else {

@@ -66,8 +66,13 @@ export function getImagePlacement(box) {
   if (fitMode === 'stretch') {
     w = frameW;
     h = frameH;
-    x = 0;
-    y = 0;
+    const scaleX = placement.scaleX ?? placement.scale ?? 1.0;
+    const scaleY = placement.scaleY ?? placement.scale ?? 1.0;
+    const finalW = w * scaleX;
+    const finalH = h * scaleY;
+    const finalX = (placement.offsetX ?? 0) - (finalW - w) / 2;
+    const finalY = (placement.offsetY ?? 0) - (finalH - h) / 2;
+    return { w: finalW, h: finalH, x: finalX, y: finalY };
   } else if (fitMode === 'fit') {
     const s = Math.min(frameW / imgW, frameH / imgH);
     w = imgW * s;
