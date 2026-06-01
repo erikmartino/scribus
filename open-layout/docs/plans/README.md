@@ -46,5 +46,7 @@ Completed plans are removed per convention. Previously completed:
 - `2026-05-26-pdf-jpeg-dimensions-bugfix-plan.md` — Resolve pass-through JPEG pixel dimensions mismatch in PDF exporter (completed).
 - `pdf-exporter-font-metrics-widths-plan.md` — Dynamic character widths, required PDF metrics, and unmapped cursive ligature spacing (completed).
 - `pdf-exporter-use-app-shell-plan.md` — Reusable `<scribus-app-shell>` framework integration in the PDF exporter (completed).
+- `app-shell-dynamic-launcher-plan.md` — Dynamic Apps launcher dropdown menu for doc-compatible apps (completed).
+
 
 

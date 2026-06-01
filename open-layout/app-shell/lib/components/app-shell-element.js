@@ -308,6 +308,41 @@ export class ScribusAppShell extends HTMLElement {
     const btn = this.shadowRoot.getElementById('app-launcher-btn');
     const menu = this.shadowRoot.getElementById('app-launcher-menu');
 
+    // Parse active document from query parameters
+    const params = new URLSearchParams(window.location.search);
+    const doc = params.get('doc');
+
+    // Clear and dynamically populate apps list
+    menu.innerHTML = '';
+
+    // 1. Document Browser link (always present)
+    const browserLink = document.createElement('a');
+    browserLink.href = '/document-browser/';
+    browserLink.id = 'document-browser-link';
+    browserLink.textContent = 'Document Browser';
+    menu.appendChild(browserLink);
+
+    // 2. Compatible app links (only if active document is present)
+    if (doc) {
+      const encodedDoc = encodeURIComponent(doc);
+      const apps = [
+        { name: 'Spread Editor', path: `/spread-editor/index.html?doc=${encodedDoc}` },
+        { name: 'Story Editor', path: `/story-editor/index.html?doc=${encodedDoc}` },
+        { name: 'PDF Exporter', path: `/pdf-exporter/index.html?doc=${encodedDoc}` }
+      ];
+
+      for (const app of apps) {
+        // Exclude the active application from launcher choices
+        const isCurrentApp = window.location.pathname.includes(app.path.split('?')[0]);
+        if (!isCurrentApp) {
+          const appLink = document.createElement('a');
+          appLink.href = app.path;
+          appLink.textContent = app.name;
+          menu.appendChild(appLink);
+        }
+      }
+    }
+
     const close = () => {
       menu.removeAttribute('open');
       btn.setAttribute('aria-expanded', 'false');
