@@ -44,3 +44,5 @@ Completed plans are removed per convention. Previously completed:
 - `2026-05-23-pdf-ligatures-plan.md` — Ensure PDF exporter uses ligatures where possible (completed).
 - `2026-05-25-pdf-high-resolution-images-plan.md` — PDF High Resolution Image Printing and Downscaling (completed).
 - `2026-05-26-pdf-jpeg-dimensions-bugfix-plan.md` — Resolve pass-through JPEG pixel dimensions mismatch in PDF exporter (completed).
+- `pdf-exporter-font-metrics-widths-plan.md` — Dynamic character widths, required PDF metrics, and unmapped cursive ligature spacing (completed).
+
