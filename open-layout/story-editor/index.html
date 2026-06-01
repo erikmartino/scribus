@@ -13,7 +13,7 @@
   <style>
     #svg-container {
       background: #fffcf5;
-      padding: 60px;
+      padding: 40px;
       border-radius: 8px;
       border: 1px solid #cdc2af;
       box-shadow: 0 30px 90px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
@@ -22,7 +22,7 @@
       caret-color: transparent;
       overflow: visible;
 
-      margin: 40px auto;
+      margin: 10px auto;
       max-width: fit-content;
       color: #1a1a1a;
       outline: none;
@@ -35,7 +35,7 @@
     }
 
     .workspace-wrapper {
-      padding: 40px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -50,13 +50,6 @@
 
     <div class="workspace-wrapper">
       <div id="svg-container" tabindex="0" class="selectable" spellcheck="false"></div>
-
-      <div class="info-card" style="margin-top: 40px; max-width: 800px; padding: 24px;">
-        <p><strong>Story Editor Pro:</strong> Powered by HarfBuzz WASM & Scribus Layout Logic. 
-           This environment provides pixel-perfect typography with full OpenType support, 
-            ligatures, and professional hyphenation.
-        </p>
-      </div>
     </div>
 
     <div slot="panels" id="properties-panel">
@@ -102,123 +95,6 @@
       <n> the final impression on the page.</n>
     </p>
   </div>
-
-  <div class="info">
-    <p><strong>What this demonstrates:</strong> Text is shaped with HarfBuzz (the same engine Scribus uses)
-      to resolve ligatures and compute glyph advances. Style runs are extracted from a DOM tree
-      (like Scribus's <code>TextShaper::itemizeStyles()</code>), each run shaped separately.
-      A greedy line-breaking algorithm with hyphenation wraps and justifies text to fit the box.
-      Each line is rendered as an SVG <code>&lt;text&gt;</code> element with styled
-      <code>&lt;tspan&gt;</code> elements.
-    </p>
-    <p><strong>Features:</strong> OpenType ligatures (fi, fl, ffi, ffl) via HarfBuzz, English hyphenation
-      via Knuth-Liang patterns, full justification, two-column flow, and
-      <b>bold</b>/<em>italic</em>/<b><em>bold-italic</em></b> styled runs.
-    </p>
-  </div>
-
-  <details>
-    <summary><strong>Comparison with Scribus text layout algorithm</strong></summary>
-    <div class="info" style="margin-top:0">
-      <table style="border-collapse:collapse; width:100%; font-size:0.85em; line-height:1.5">
-        <thead>
-          <tr style="border-bottom:2px solid #ccc; text-align:left">
-            <th style="padding:4px 8px; width:22%">Aspect</th>
-            <th style="padding:4px 8px; width:39%">This demo</th>
-            <th style="padding:4px 8px; width:39%">Scribus (<code>pageitem_textframe.cpp</code>)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Styled text model</strong></td>
-            <td style="padding:4px 8px">DOM tree walked to produce style runs — each run has text + {bold, italic}. Like
-              Scribus's <code>TextShaper::itemizeStyles()</code></td>
-            <td style="padding:4px 8px">Per-character <code>ScText</code> objects (each inherits
-              <code>CharStyle</code>), collapsed into runs by style before shaping
-            </td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Font handling</strong></td>
-            <td style="padding:4px 8px">Variable font (EB Garamond) loaded once per axis file (upright + italic). Bold
-              uses <code>font.setVariations({wght:700})</code> on the same binary. Same buffers registered as
-              <code>@font-face</code> so HarfBuzz and browser metrics match exactly
-            </td>
-            <td style="padding:4px 8px">Fonts managed by <code>SCFonts</code> registry. Each style variant is a separate
-              <code>ScFace</code> with its own HarfBuzz <code>hb_font_t</code>. Supports variable fonts via
-              <code>hb_font_set_variations()</code> with user-specified axis values
-            </td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Shaping</strong></td>
-            <td style="padding:4px 8px">HarfBuzz WASM, one shape call per style run with <code>wght</code> variation
-              axis set for bold (700). Glyph streams stitched per paragraph</td>
-            <td style="padding:4px 8px">HarfBuzz (native), text itemized by BiDi level, script, style, and OT features —
-              each run shaped separately</td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Line breaking</strong></td>
-            <td style="padding:4px 8px">Greedy, single-pass — break at last space or soft hyphen when line overflows
-            </td>
-            <td style="padding:4px 8px">Also greedy single-pass (not Knuth-Plass). Records break opportunities at spaces
-              and <code>ScLayout_HyphenationPossible</code> flags, then uses the best one when line is full</td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Hyphenation</strong></td>
-            <td style="padding:4px 8px">Pre-inserted soft hyphens via Knuth-Liang patterns (<code>hyphen</code> JS
-              library). All break points computed up front</td>
-            <td style="padding:4px 8px">Hyphenation points flagged during shaping phase onto <code>GlyphCluster</code>
-              objects. Supports consecutive-hyphen limit, manual soft hyphens, and per-style enable/disable</td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Justification</strong></td>
-            <td style="padding:4px 8px">Single strategy: distribute extra space evenly across inter-word gaps</td>
-            <td style="padding:4px 8px">Multi-priority: (1) shrink spaces &amp; extend glyphs to min ratio, (2) extend
-              glyphs to max ratio, (3) insert CJK implicit spaces &amp; extend word spaces, (4) letter spacing.
-              Controlled by min/max word &amp; glyph extension settings</td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Glyph positioning</strong></td>
-            <td style="padding:4px 8px">Browser handles final glyph placement via <code>&lt;text&gt;</code> +
-              <code>@font-face</code>; HarfBuzz used only for width measurement
-            </td>
-            <td style="padding:4px 8px">HarfBuzz provides exact x/y offsets and advances; Scribus places each glyph
-              precisely in a <code>GlyphBox</code> within a box tree hierarchy (<code>LineBox</code> →
-              <code>GlyphBox</code>)
-            </td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>BiDi / scripts</strong></td>
-            <td style="padding:4px 8px">None — LTR Latin only</td>
-            <td style="padding:4px 8px">Full Unicode BiDi algorithm, per-script itemization, RTL reordering</td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Columns / flow</strong></td>
-            <td style="padding:4px 8px">Two equal-width columns — text flows from first to second at the midpoint (like
-              linked frames)</td>
-            <td style="padding:4px 8px">N-column layout within a single frame, plus linked frames across pages. Text
-              flows automatically when a column or frame fills up</td>
-          </tr>
-          <tr style="border-bottom:1px solid #eee">
-            <td style="padding:4px 8px"><strong>Frame features</strong></td>
-            <td style="padding:4px 8px">Fixed-width rectangle, no indents or wraps</td>
-            <td style="padding:4px 8px">Drop caps, baseline grid, optical margins, text-wraps around objects,
-              first/left/right line indents, column gap control</td>
-          </tr>
-          <tr>
-            <td style="padding:4px 8px"><strong>Caching</strong></td>
-            <td style="padding:4px 8px">None — reshapes on every update</td>
-            <td style="padding:4px 8px"><code>ShapedTextCache</code> per-paragraph; only edited paragraphs are re-shaped
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="margin-top:0.75em">Both use the same fundamental approach: <strong>itemize by style → HarfBuzz shapes
-          each run → greedy line fill → justify → flow across columns</strong>.
-        The difference is depth — Scribus handles the full complexity of professional typesetting
-        (mixed scripts, frame geometry, optical margins, glyph-level stretch) while this demo
-        isolates the core loop in ~300 lines of JavaScript.</p>
-    </div>
-  </details>
 
   <script type="module">
     import '../app-shell/lib/components/app-shell-element.js';
@@ -318,7 +194,14 @@
         const boxWidthInput = document.getElementById('box-width');
         const lineHeightInput = document.getElementById('line-height');
 
-        const boxWidth = boxWidthInput ? +boxWidthInput.value : 1040;
+        // Dynamic width: use the container's parent width minus padding.
+        // The workspace-wrapper has 10px padding (total 20px).
+        // The #svg-container has 40px padding (total 80px).
+        // We subtract 100px total plus a small 4px safety buffer to avoid pixel rounding scrollbars.
+        const parentWidth = container.parentElement?.clientWidth || 1040;
+        const dynamicWidth = Math.max(300, Math.min(1040, parentWidth - 104));
+
+        const boxWidth = boxWidthInput ? +boxWidthInput.value : dynamicWidth;
         const lineHeightPct = lineHeightInput ? +lineHeightInput.value : 140;
 
         const currentParaIndex = Math.max(0, Math.min(editor.story.length - 1, editor.cursor.paraIndex));
@@ -386,6 +269,12 @@
       window.addEventListener('beforeunload', () => {
         if (cursor) cursor.destroy();
       });
+
+      // Reflow text when the container or window is resized
+      const resizeObserver = new ResizeObserver(() => {
+        update();
+      });
+      resizeObserver.observe(container.parentElement || document.body);
 
       await update();
     }

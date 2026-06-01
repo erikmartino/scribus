@@ -78,7 +78,8 @@ scribus-app-shell:defined {
   grid-area: main;
   position: relative;
   background: var(--bg-color);
-  padding: 2rem;
+  padding: 0.75rem;
+  overflow: auto;
 }
 
 .panels {

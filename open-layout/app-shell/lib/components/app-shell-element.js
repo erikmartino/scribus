@@ -32,13 +32,17 @@ export class ScribusAppShell extends HTMLElement {
           --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
           
           display: block;
-          width: 100vw;
-          height: 100vh;
+          width: 100%;
+          height: 100%;
           overflow: hidden;
           background-color: var(--bg-color);
           color: var(--text-main);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           user-select: none;
+        }
+
+        * {
+          box-sizing: border-box;
         }
 
         /* Allow selection in inputs and textareas if they are ever used */
@@ -52,7 +56,7 @@ export class ScribusAppShell extends HTMLElement {
             "ribbon ribbon ribbon"
             "main handle panels";
           grid-template-rows: var(--ribbon-height) 1fr;
-          grid-template-columns: 1fr 4px auto;
+          grid-template-columns: minmax(0, 1fr) 4px auto;
           width: 100%;
           height: 100%;
         }
@@ -154,6 +158,8 @@ export class ScribusAppShell extends HTMLElement {
           overflow: auto;
           position: relative;
           background: var(--bg-color);
+          min-width: 0;
+          padding: 0.75rem;
         }
 
         .panels {
