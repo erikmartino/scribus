@@ -50,6 +50,58 @@ function svgAttrsForStyle(style, defaultFamily = '') {
   return attrs;
 }
 
+export function getImagePlacement(box) {
+  const imgW = box.imgWidth || box.width;
+  const imgH = box.imgHeight || box.height;
+  const frameW = box.width;
+  const frameH = box.height;
+
+  const placement = box.placement || {};
+  const fitMode = placement.fitMode || 'stretch';
+  const alignH = placement.alignH || 'center';
+  const alignV = placement.alignV || 'center';
+  
+  let w, h, x, y;
+
+  if (fitMode === 'stretch') {
+    w = frameW;
+    h = frameH;
+    x = 0;
+    y = 0;
+  } else if (fitMode === 'fit') {
+    const s = Math.min(frameW / imgW, frameH / imgH);
+    w = imgW * s;
+    h = imgH * s;
+    const baseTranslateX = (alignH === 'left') ? 0 : (alignH === 'right' ? (frameW - w) : (frameW - w) / 2);
+    const baseTranslateY = (alignV === 'top') ? 0 : (alignV === 'bottom' ? (frameH - h) : (frameH - h) / 2);
+    
+    const scaleX = placement.scaleX ?? placement.scale ?? 1.0;
+    const scaleY = placement.scaleY ?? placement.scale ?? 1.0;
+    const finalW = w * scaleX;
+    const finalH = h * scaleY;
+    const finalX = baseTranslateX + (placement.offsetX ?? 0) - (finalW - w) / 2;
+    const finalY = baseTranslateY + (placement.offsetY ?? 0) - (finalH - h) / 2;
+    return { w: finalW, h: finalH, x: finalX, y: finalY };
+  } else {
+    // cover / fill
+    const s = Math.max(frameW / imgW, frameH / imgH);
+    w = imgW * s;
+    h = imgH * s;
+    const baseTranslateX = (alignH === 'left') ? 0 : (alignH === 'right' ? (frameW - w) : (frameW - w) / 2);
+    const baseTranslateY = (alignV === 'top') ? 0 : (alignV === 'bottom' ? (frameH - h) : (frameH - h) / 2);
+
+    const scaleX = placement.scaleX ?? placement.scale ?? 1.0;
+    const scaleY = placement.scaleY ?? placement.scale ?? 1.0;
+    const finalW = w * scaleX;
+    const finalH = h * scaleY;
+    const finalX = baseTranslateX + (placement.offsetX ?? 0) - (finalW - w) / 2;
+    const finalY = baseTranslateY + (placement.offsetY ?? 0) - (finalH - h) / 2;
+    return { w: finalW, h: finalH, x: finalX, y: finalY };
+  }
+
+  return { w, h, x, y };
+}
+
 export class SvgRenderer {
   /**
    * @param {{ fontFamily: string, padding?: number }} options
@@ -216,14 +268,25 @@ export class SvgRenderer {
       svg.appendChild(g);
 
       for (const box of pageData.imageBoxes) {
+        const placement = getImagePlacement(box);
+        const nested = document.createElementNS(SVG_NS, 'svg');
+        nested.setAttribute('x', String(box.x));
+        nested.setAttribute('y', String(box.y));
+        nested.setAttribute('width', String(box.width));
+        nested.setAttribute('height', String(box.height));
+        nested.setAttribute('overflow', 'hidden');
+        nested.setAttribute('style', 'pointer-events: none;');
+
         const imgEl = document.createElementNS(SVG_NS, 'image');
         imgEl.setAttribute('href', box.imageUrl);
-        imgEl.setAttribute('x', String(box.x));
-        imgEl.setAttribute('y', String(box.y));
-        imgEl.setAttribute('width', String(box.width));
-        imgEl.setAttribute('height', String(box.height));
+        imgEl.setAttribute('x', String(placement.x));
+        imgEl.setAttribute('y', String(placement.y));
+        imgEl.setAttribute('width', String(placement.w));
+        imgEl.setAttribute('height', String(placement.h));
         imgEl.setAttribute('pointer-events', 'none');
-        g.appendChild(imgEl);
+        
+        nested.appendChild(imgEl);
+        g.appendChild(nested);
       }
     }
 

@@ -101,7 +101,7 @@ test.describe('Image Drag and Drop', () => {
       const svg = document.querySelector('#svg-container svg.content-svg');
       const img = svg.querySelector('image[data-image-box]');
       if (!img) return null;
-      const ctm = svg.getScreenCTM();
+      const ctm = img.getScreenCTM();
       const x = parseFloat(img.getAttribute('x'));
       const y = parseFloat(img.getAttribute('y'));
       const w = parseFloat(img.getAttribute('width'));

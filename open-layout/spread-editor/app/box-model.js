@@ -86,3 +86,79 @@ export function resizeBox(box, handle, dx, dy, bounds) {
     height,
   }, bounds);
 }
+
+export function resizeBoxWithAspect(box, handle, dx, dy, aspect = null) {
+  let x = box.x;
+  let y = box.y;
+  let width = box.width;
+  let height = box.height;
+
+  if (!aspect || handle === 'body') {
+    if (handle.includes('e')) width += dx;
+    if (handle.includes('s')) height += dy;
+    if (handle.includes('w')) { x += dx; width -= dx; }
+    if (handle.includes('n')) { y += dy; height -= dy; }
+  } else {
+    // Preserve aspect ratio
+    const origW = box.width;
+    const origH = box.height;
+    
+    if (handle === 'e' || handle === 'w') {
+      const deltaW = (handle === 'e') ? dx : -dx;
+      width = Math.max(10, origW + deltaW);
+      height = width / aspect;
+      if (handle === 'w') {
+        x = box.x - (width - origW);
+      }
+    } else if (handle === 'n' || handle === 's') {
+      const deltaH = (handle === 's') ? dy : -dy;
+      height = Math.max(10, origH + deltaH);
+      width = height * aspect;
+      if (handle === 'n') {
+        y = box.y - (height - origH);
+      }
+    } else {
+      // Corner handles: NW, NE, SW, SE
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      
+      let deltaW = 0;
+      if (absDx > absDy) {
+        deltaW = handle.includes('e') ? dx : -dx;
+      } else {
+        const deltaH = handle.includes('s') ? dy : -dy;
+        deltaW = deltaH * aspect;
+      }
+      
+      width = Math.max(10, origW + deltaW);
+      height = width / aspect;
+      
+      if (handle.includes('w')) {
+        x = box.x - (width - origW);
+      }
+      if (handle.includes('n')) {
+        y = box.y - (height - origH);
+      }
+    }
+  }
+
+  const minWidth = box.minWidth ?? 10;
+  const minHeight = box.minHeight ?? 10;
+
+  if (width < minWidth) {
+    if (handle.includes('w')) x -= (minWidth - width);
+    width = minWidth;
+  }
+  if (height < minHeight) {
+    if (handle.includes('n')) y -= (minHeight - height);
+    height = minHeight;
+  }
+
+  return {
+    ...box,
+    x,
+    y,
+    width,
+    height,
+  };
+}

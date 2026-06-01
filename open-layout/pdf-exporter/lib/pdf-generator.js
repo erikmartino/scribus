@@ -8,6 +8,7 @@
 // hb-subset.wasm and embedded as TrueType font streams, keeping file size small.
 
 import { layoutDocument, createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
+import { getImagePlacement } from '../../doc-renderer/lib/svg-renderer.js';
 import {
   PdfWriter,
   textOp,
@@ -595,9 +596,36 @@ async function _generatePdf(engine, docPath, opts, writer) {
         const ref = imageRefs[frame.index];
         if (!ref) continue;
         const { alias } = ref;
-        // PDF y: flip from top-left to bottom-left
-        const pdfY = pageHeight - imgBox.y - imgBox.height;
-        ops += imageOp(alias, imgBox.x, pdfY, imgBox.width, imgBox.height);
+
+        const placement = getImagePlacement(imgBox);
+        
+        // Bounding crop window coordinates (PDF bottom-left y)
+        const cropX = imgBox.x;
+        const cropY = pageHeight - imgBox.y - imgBox.height;
+        const cropW = imgBox.width;
+        const cropH = imgBox.height;
+
+        // Image uncropped absolute coordinates in page coordinates
+        const absX = imgBox.x + placement.x;
+        const absY = imgBox.y + placement.y;
+
+        // Convert to PDF coordinate space (y flips from bottom-left corner of image)
+        const pdfImgX = absX;
+        const pdfImgY = pageHeight - absY - placement.h;
+
+        // PDF operators:
+        // q: Save graphics state
+        // re: Construct rectangular path (for clip frame boundary)
+        // W n: Intersect path with clipping path, clear current path
+        // cm: Concatenate matrix (scales and translates the image XObject to final placement bounds)
+        // Do: Paint XObject
+        // Q: Restore graphics state (removes clipping region)
+        ops += `q\n`;
+        ops += `${cropX.toFixed(2)} ${cropY.toFixed(2)} ${cropW.toFixed(2)} ${cropH.toFixed(2)} re\n`;
+        ops += `W n\n`;
+        ops += `${placement.w.toFixed(2)} 0 0 ${placement.h.toFixed(2)} ${pdfImgX.toFixed(2)} ${pdfImgY.toFixed(2)} cm\n`;
+        ops += `/${alias} Do\n`;
+        ops += `Q\n`;
       } else {
         const { box, lines } = frame.data;
         for (const line of lines) {

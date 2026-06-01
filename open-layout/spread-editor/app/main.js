@@ -3,5 +3,6 @@ import shell from '../../app-shell/lib/shell-core.js';
 
 const root = document;
 const app = new SpreadEditorApp(root);
+window.app = app;
 
 shell.registerPlugin(app);

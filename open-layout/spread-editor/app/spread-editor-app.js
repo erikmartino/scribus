@@ -31,7 +31,7 @@ import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
 import { registerTextCommands } from '../../app-shell/lib/text-commands.js';
 import { createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
-import { decorateSpreadForEditor } from '../../doc-renderer/lib/svg-renderer.js';
+import { decorateSpreadForEditor, getImagePlacement } from '../../doc-renderer/lib/svg-renderer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -49,6 +49,7 @@ export class SpreadEditorApp {
     this.currentSpread = null;
     this._svg = null;
     this.mode = 'object';
+    this.activeCroppingMode = 1; // 1: Combined, 2: Box-Only, 3: Content-Only
     this._isDragging = false;
     this._lastClickTime = 0;
     this.shell = shell;
@@ -127,6 +128,7 @@ export class SpreadEditorApp {
         getSvg: () => this._svg,
         getBounds: () => this.currentSpread?.pasteboardRect,
         getBoxes: () => [...this.boxes, ...this.imageBoxes],
+        getActiveCroppingMode: () => this.activeCroppingMode,
         setBoxes: (next) => {
           const all = [...this.boxes, ...this.imageBoxes];
           const updated = typeof next === 'function' ? next(all) : next;
@@ -361,14 +363,23 @@ export class SpreadEditorApp {
         let imageUrl;
         let assetRef;
         let assetExt;
+        let imgWidth = null;
+        let imgHeight = null;
 
         if (frame.assetRef) {
           // Resolve assetRef to a URL using metadata or fallback
           assetRef = frame.assetRef;
           const meta = assetMeta[assetRef];
-          if (meta && meta.preview) {
-            imageUrl = `/store/${this._docPath}/assets/${assetRef}/${meta.preview}`;
-            assetExt = 'jpg';
+          if (meta) {
+            imgWidth = meta.width;
+            imgHeight = meta.height;
+            if (meta.preview) {
+              imageUrl = `/store/${this._docPath}/assets/${assetRef}/${meta.preview}`;
+              assetExt = 'jpg';
+            } else {
+              imageUrl = this._emptyImagePlaceholder();
+              assetExt = 'jpg';
+            }
           } else {
             imageUrl = this._emptyImagePlaceholder();
             assetExt = 'jpg';
@@ -386,6 +397,8 @@ export class SpreadEditorApp {
           minWidth: 20,
           minHeight: 20,
           imageUrl,
+          imgWidth,
+          imgHeight,
           ...(assetRef ? { assetRef, assetExt } : {}),
         });
         this._imageBoxCounter++;
@@ -1038,6 +1051,7 @@ export class SpreadEditorApp {
       linkMode: this._linkSource,
       project,
       projectSize,
+      activeCroppingMode: this.activeCroppingMode,
     });
   }
 
@@ -1512,6 +1526,8 @@ export class SpreadEditorApp {
       x, y, width: w, height: h,
       minWidth: 20, minHeight: 20,
       imageUrl: asset.imageUrl,
+      imgWidth: asset.width,
+      imgHeight: asset.height,
       ...(asset.assetRef ? { assetRef: asset.assetRef, assetExt: asset.assetExt } : {}),
     };
 
@@ -1543,6 +1559,8 @@ export class SpreadEditorApp {
       x, y, width: w, height: h,
       minWidth: 20, minHeight: 20,
       imageUrl: asset.imageUrl,
+      imgWidth: asset.width,
+      imgHeight: asset.height,
       ...(asset.assetRef ? { assetRef: asset.assetRef, assetExt: asset.assetExt } : {}),
     };
 
@@ -1575,6 +1593,8 @@ export class SpreadEditorApp {
       x, y, width: w, height: h,
       minWidth: 20, minHeight: 20,
       imageUrl,
+      imgWidth: width,
+      imgHeight: height,
       assetRef,
       assetExt: ext,
     };
@@ -1736,15 +1756,65 @@ export class SpreadEditorApp {
     svg.appendChild(g);
 
     for (const box of this.imageBoxes) {
-      const imgEl = document.createElementNS(SVG_NS, 'image');
-      imgEl.setAttribute('href', box.imageUrl);
-      imgEl.setAttribute('x', String(box.x));
-      imgEl.setAttribute('y', String(box.y));
-      imgEl.setAttribute('width', String(box.width));
-      imgEl.setAttribute('height', String(box.height));
-      imgEl.setAttribute('data-image-box', 'true');
-      imgEl.setAttribute('pointer-events', 'none');
-      g.appendChild(imgEl);
+      const placement = getImagePlacement(box);
+      const isSelected = box.id === this.selectedBoxId;
+      const isMode3 = isSelected && this.activeCroppingMode === 3;
+
+      if (isMode3) {
+        // Mode 3 layered rendering:
+        // 1. Semi-transparent background of full image
+        const bgImg = document.createElementNS(SVG_NS, 'image');
+        bgImg.setAttribute('href', box.imageUrl);
+        bgImg.setAttribute('x', String(box.x + placement.x));
+        bgImg.setAttribute('y', String(box.y + placement.y));
+        bgImg.setAttribute('width', String(placement.w));
+        bgImg.setAttribute('height', String(placement.h));
+        bgImg.setAttribute('style', 'opacity: 0.5; pointer-events: none;');
+        bgImg.setAttribute('data-image-box-bg', 'true');
+        g.appendChild(bgImg);
+
+        // 2. Fully-opaque inner image inside the locked crop frame
+        const nested = document.createElementNS(SVG_NS, 'svg');
+        nested.setAttribute('x', String(box.x));
+        nested.setAttribute('y', String(box.y));
+        nested.setAttribute('width', String(box.width));
+        nested.setAttribute('height', String(box.height));
+        nested.setAttribute('overflow', 'hidden');
+        nested.setAttribute('style', 'pointer-events: none;');
+
+        const fgImg = document.createElementNS(SVG_NS, 'image');
+        fgImg.setAttribute('href', box.imageUrl);
+        fgImg.setAttribute('x', String(placement.x));
+        fgImg.setAttribute('y', String(placement.y));
+        fgImg.setAttribute('width', String(placement.w));
+        fgImg.setAttribute('height', String(placement.h));
+        fgImg.setAttribute('data-image-box', 'true');
+        fgImg.setAttribute('data-box-id', box.id);
+        
+        nested.appendChild(fgImg);
+        g.appendChild(nested);
+      } else {
+        // Standard clipped/nested svg rendering
+        const nested = document.createElementNS(SVG_NS, 'svg');
+        nested.setAttribute('x', String(box.x));
+        nested.setAttribute('y', String(box.y));
+        nested.setAttribute('width', String(box.width));
+        nested.setAttribute('height', String(box.height));
+        nested.setAttribute('overflow', 'hidden');
+        nested.setAttribute('style', 'pointer-events: none;');
+
+        const imgEl = document.createElementNS(SVG_NS, 'image');
+        imgEl.setAttribute('href', box.imageUrl);
+        imgEl.setAttribute('x', String(placement.x));
+        imgEl.setAttribute('y', String(placement.y));
+        imgEl.setAttribute('width', String(placement.w));
+        imgEl.setAttribute('height', String(placement.h));
+        imgEl.setAttribute('data-image-box', 'true');
+        imgEl.setAttribute('data-box-id', box.id);
+        
+        nested.appendChild(imgEl);
+        g.appendChild(nested);
+      }
     }
   }
 
@@ -1755,12 +1825,35 @@ export class SpreadEditorApp {
   }
 
   bindEvents() {
+    this.container.addEventListener('dblclick', async (e) => {
+      if (!this._svg) return;
+      const target = e.target;
+      const boxId = target?.dataset?.boxId;
+      if (boxId) {
+        const isImage = this.imageBoxes.some(b => b.id === boxId);
+        if (isImage) {
+          e.stopPropagation();
+          e.preventDefault();
+          this.selectedBoxId = boxId;
+          this.activeCroppingMode = 3;
+          await this.update();
+        }
+      } else {
+        if (this.activeCroppingMode === 3) {
+          this.activeCroppingMode = 1;
+          await this.update();
+        }
+      }
+    });
+
     this.container.addEventListener('pointerdown', async (e) => {
       if (!this._svg) return;
 
       const target = e.target;
       const boxId = target?.dataset?.boxId;
       const handle = target?.dataset?.handle;
+
+      this._wasSelectedBeforeDown = (this.selectedBoxId === boxId);
 
       // --- Port clicks (output port or overflow marker) ---
       const portType = target?.dataset?.port;
@@ -1920,8 +2013,10 @@ export class SpreadEditorApp {
       
       if (this.mode !== 'text' && boxId) {
         // Just selecting a box in object mode
-        this.selectedBoxId = boxId;
-        await this.update();
+        if (!this._wasSelectedBeforeDown) {
+          this.selectedBoxId = boxId;
+          await this.update();
+        }
       }
     });
 
@@ -2224,6 +2319,39 @@ export class SpreadEditorApp {
           commandId: 'doc.print',
         }));
       }));
+    }
+
+    // Cropping & Placement section — visible when an image box is selected
+    if (this.mode === 'object' && this.selectedBoxId) {
+      const isImage = this.imageBoxes.some(b => b.id === this.selectedBoxId);
+      if (isImage) {
+        sections.push(AppShell.createRibbonSection('Cropping', (container) => {
+          container.appendChild(this.shell.ui.createButton({
+            label: 'Combined',
+            active: this.activeCroppingMode === 1,
+            onClick: () => {
+              this.activeCroppingMode = 1;
+              this.update();
+            }
+          }));
+          container.appendChild(this.shell.ui.createButton({
+            label: 'Edit Frame',
+            active: this.activeCroppingMode === 2,
+            onClick: () => {
+              this.activeCroppingMode = 2;
+              this.update();
+            }
+          }));
+          container.appendChild(this.shell.ui.createButton({
+            label: 'Edit Content',
+            active: this.activeCroppingMode === 3,
+            onClick: () => {
+              this.activeCroppingMode = 3;
+              this.update();
+            }
+          }));
+        }));
+      }
     }
 
     // Story section — "Edit Story" button when a text box is selected

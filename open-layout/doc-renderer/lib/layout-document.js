@@ -217,18 +217,22 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
 
   for (const frame of (spreadJson.frames || [])) {
     if (frame.type === 'image') {
+      let imgWidth = null;
+      let imgHeight = null;
       let imageUrl;
       if (frame.assetRef) {
         const meta = assetMeta[frame.assetRef];
         if (meta && meta.preview) {
           imageUrl = `/store/${docPath}/assets/${frame.assetRef}/${meta.preview}`;
+          imgWidth = meta.width;
+          imgHeight = meta.height;
         } else {
           imageUrl = _emptyImagePlaceholder();
         }
       } else {
         imageUrl = frame.imageUrl || _emptyImagePlaceholder();
       }
-      imageBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height, imageUrl, assetRef: frame.assetRef });
+      imageBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height, imageUrl, assetRef: frame.assetRef, placement: frame.placement, imgWidth, imgHeight });
     } else {
       textBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height });
       if (frame.storyRef) {

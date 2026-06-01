@@ -1,3 +1,5 @@
+import { getImagePlacement } from '../../doc-renderer/lib/svg-renderer.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const HANDLE_SIZE = 10;
 const PORT_SIZE = 10;
@@ -51,7 +53,7 @@ function handlePosition(box, handle) {
  *   projectSize: (size: number) => number,
  * }} opts
  */
-export function drawBoxOverlay(overlaySvg, { boxes, selectedBoxId, stories, linkMode, project, projectSize }) {
+export function drawBoxOverlay(overlaySvg, { boxes, selectedBoxId, stories, linkMode, project, projectSize, activeCroppingMode = 1 }) {
   // Full redraw every time (overlay is cheap, no incremental diffing needed)
   let layer = overlaySvg.querySelector('[data-layer="box-overlay"]');
   if (layer) layer.remove();
@@ -80,36 +82,110 @@ export function drawBoxOverlay(overlaySvg, { boxes, selectedBoxId, stories, link
     frame.setAttribute('width', String(w));
     frame.setAttribute('height', String(h));
     frame.setAttribute('fill', 'rgba(255,255,255,0.001)');
-    frame.setAttribute('stroke', box.id === selectedBoxId ? '#2f6ea4' : '#7b7568');
-    frame.setAttribute('stroke-width', box.id === selectedBoxId ? '1.8' : '1.1');
-    frame.setAttribute('stroke-dasharray', box.id === selectedBoxId ? '5 3' : '4 4');
+    const isSelected = box.id === selectedBoxId;
+    const isMode3 = isSelected && activeCroppingMode === 3;
+    frame.setAttribute('stroke', isSelected ? (isMode3 ? 'none' : '#2f6ea4') : '#7b7568');
+    frame.setAttribute('stroke-width', isSelected ? '1.8' : '1.1');
+    frame.setAttribute('stroke-dasharray', isSelected ? '5 3' : '4 4');
     boxesG.appendChild(frame);
   }
 
   // 2. Resize handles for selected box
   const selected = boxes.find((box) => box.id === selectedBoxId);
   if (selected) {
-    const handlesG = document.createElementNS(SVG_NS, 'g');
-    handlesG.setAttribute('data-sublayer', 'handles');
-    layer.appendChild(handlesG);
+    const isImage = !!selected.imageUrl;
+    const isMode3 = isImage && activeCroppingMode === 3;
 
-    for (const handle of HANDLES) {
-      const pos = handlePosition(selected, handle);
-      const sp = project(pos.x, pos.y);
-      const grip = document.createElementNS(SVG_NS, 'rect');
-      grip.setAttribute('x', String(sp.x - HANDLE_SIZE / 2));
-      grip.setAttribute('y', String(sp.y - HANDLE_SIZE / 2));
-      grip.setAttribute('width', String(HANDLE_SIZE));
-      grip.setAttribute('height', String(HANDLE_SIZE));
-      grip.setAttribute('rx', '2');
-      grip.setAttribute('ry', '2');
-      grip.setAttribute('fill', '#fffef8');
-      grip.setAttribute('stroke', '#2f6ea4');
-      grip.setAttribute('stroke-width', '1.3');
-      grip.style.cursor = HANDLE_CURSOR[handle];
-      grip.dataset.boxId = selected.id;
-      grip.dataset.handle = handle;
-      handlesG.appendChild(grip);
+    if (isMode3) {
+      // Draw simple selection outline on locked crop frame (no handles)
+      const tlFrame = project(selected.x, selected.y);
+      const wFrame = projectSize(selected.width);
+      const hFrame = projectSize(selected.height);
+      
+      const frameOutline = document.createElementNS(SVG_NS, 'rect');
+      frameOutline.setAttribute('x', String(tlFrame.x));
+      frameOutline.setAttribute('y', String(tlFrame.y));
+      frameOutline.setAttribute('width', String(wFrame));
+      frameOutline.setAttribute('height', String(hFrame));
+      frameOutline.setAttribute('fill', 'none');
+      frameOutline.setAttribute('stroke', '#2f6ea4');
+      frameOutline.setAttribute('stroke-width', '1.5');
+      layer.appendChild(frameOutline);
+
+      // Draw orange outline for underlying image bounds
+      const placement = getImagePlacement(selected);
+      const contentBox = {
+        x: selected.x + placement.x,
+        y: selected.y + placement.y,
+        width: placement.w,
+        height: placement.h
+      };
+
+      const tlContent = project(contentBox.x, contentBox.y);
+      const wContent = projectSize(contentBox.width);
+      const hContent = projectSize(contentBox.height);
+
+      const contentOutline = document.createElementNS(SVG_NS, 'rect');
+      contentOutline.setAttribute('x', String(tlContent.x));
+      contentOutline.setAttribute('y', String(tlContent.y));
+      contentOutline.setAttribute('width', String(wContent));
+      contentOutline.setAttribute('height', String(hContent));
+      contentOutline.setAttribute('fill', 'none');
+      contentOutline.setAttribute('stroke', '#ff9800');
+      contentOutline.setAttribute('stroke-width', '1.8');
+      contentOutline.setAttribute('stroke-dasharray', '5 3');
+      contentOutline.dataset.boxId = selected.id;
+      contentOutline.dataset.handle = 'content_body'; // dragging moves content!
+      contentOutline.style.cursor = 'move';
+      layer.appendChild(contentOutline);
+
+      // Draw orange active handles for the content box
+      const handlesG = document.createElementNS(SVG_NS, 'g');
+      handlesG.setAttribute('data-sublayer', 'content-handles');
+      layer.appendChild(handlesG);
+
+      for (const handle of HANDLES) {
+        const pos = handlePosition(contentBox, handle);
+        const sp = project(pos.x, pos.y);
+        const grip = document.createElementNS(SVG_NS, 'rect');
+        grip.setAttribute('x', String(sp.x - HANDLE_SIZE / 2));
+        grip.setAttribute('y', String(sp.y - HANDLE_SIZE / 2));
+        grip.setAttribute('width', String(HANDLE_SIZE));
+        grip.setAttribute('height', String(HANDLE_SIZE));
+        grip.setAttribute('rx', '2');
+        grip.setAttribute('ry', '2');
+        grip.setAttribute('fill', '#fffef8');
+        grip.setAttribute('stroke', '#ff9800');
+        grip.setAttribute('stroke-width', '1.5');
+        grip.style.cursor = HANDLE_CURSOR[handle];
+        grip.dataset.boxId = selected.id;
+        grip.dataset.handle = 'content_' + handle; // prefixed handle!
+        handlesG.appendChild(grip);
+      }
+    } else {
+      // Standard handles
+      const handlesG = document.createElementNS(SVG_NS, 'g');
+      handlesG.setAttribute('data-sublayer', 'handles');
+      layer.appendChild(handlesG);
+
+      for (const handle of HANDLES) {
+        const pos = handlePosition(selected, handle);
+        const sp = project(pos.x, pos.y);
+        const grip = document.createElementNS(SVG_NS, 'rect');
+        grip.setAttribute('x', String(sp.x - HANDLE_SIZE / 2));
+        grip.setAttribute('y', String(sp.y - HANDLE_SIZE / 2));
+        grip.setAttribute('width', String(HANDLE_SIZE));
+        grip.setAttribute('height', String(HANDLE_SIZE));
+        grip.setAttribute('rx', '2');
+        grip.setAttribute('ry', '2');
+        grip.setAttribute('fill', '#fffef8');
+        grip.setAttribute('stroke', '#2f6ea4');
+        grip.setAttribute('stroke-width', '1.3');
+        grip.style.cursor = HANDLE_CURSOR[handle];
+        grip.dataset.boxId = selected.id;
+        grip.dataset.handle = handle;
+        handlesG.appendChild(grip);
+      }
     }
   }
 
