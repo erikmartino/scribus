@@ -288,6 +288,7 @@ export class SvgRenderer {
         imgEl.setAttribute('y', String(placement.y));
         imgEl.setAttribute('width', String(placement.w));
         imgEl.setAttribute('height', String(placement.h));
+        imgEl.setAttribute('preserveAspectRatio', 'none');
         imgEl.setAttribute('pointer-events', 'none');
         
         nested.appendChild(imgEl);

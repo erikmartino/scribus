@@ -94,3 +94,4 @@ The PDF exporter only outputs the final print version, meaning Mode 3's 0.5 opac
 *   **Milestone 4:** Implement interactive Mode 3 orange bounding outline and handle transformations.
 *   **Milestone 5:** Implement Mode 2 coordinate offsets adjustment math during box resize.
 *   **Milestone 6:** Integrate mode switches and indicators into the App Shell ribbon component.
+*   **Milestone 7 (Active):** Set `preserveAspectRatio="none"` on all SVG `<image>` elements (both in the editor layout renderer and the document SVG renderer) to visually enable aspect ratio changes when scaled/stretched (e.g. in Mode 1 with Shift, and Mode 3).

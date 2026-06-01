@@ -1773,6 +1773,7 @@ export class SpreadEditorApp {
         bgImg.setAttribute('y', String(box.y + placement.y));
         bgImg.setAttribute('width', String(placement.w));
         bgImg.setAttribute('height', String(placement.h));
+        bgImg.setAttribute('preserveAspectRatio', 'none');
         bgImg.setAttribute('style', 'opacity: 0.5; pointer-events: none;');
         bgImg.setAttribute('data-image-box-bg', 'true');
         g.appendChild(bgImg);
@@ -1792,6 +1793,7 @@ export class SpreadEditorApp {
         fgImg.setAttribute('y', String(placement.y));
         fgImg.setAttribute('width', String(placement.w));
         fgImg.setAttribute('height', String(placement.h));
+        fgImg.setAttribute('preserveAspectRatio', 'none');
         fgImg.setAttribute('data-image-box', 'true');
         fgImg.setAttribute('data-box-id', box.id);
         
@@ -1813,6 +1815,7 @@ export class SpreadEditorApp {
         imgEl.setAttribute('y', String(placement.y));
         imgEl.setAttribute('width', String(placement.w));
         imgEl.setAttribute('height', String(placement.h));
+        imgEl.setAttribute('preserveAspectRatio', 'none');
         imgEl.setAttribute('data-image-box', 'true');
         imgEl.setAttribute('data-box-id', box.id);
         
