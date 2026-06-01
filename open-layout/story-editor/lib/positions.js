@@ -61,6 +61,10 @@ export function mergeLigatureClusters(rawGlyphs) {
 export function splitGlyphsIntoWords(glyphs, text, lineEndChar) {
   const wordGroups = [];
   let i = 0;
+  
+  // Skip leading spaces to stay in sync with justifier.js
+  while (i < glyphs.length && text[glyphs[i].cl] === ' ') i++;
+
   while (i < glyphs.length) {
     const start = i;
     while (i < glyphs.length && text[glyphs[i].cl] !== ' ') i++;

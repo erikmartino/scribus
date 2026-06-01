@@ -192,3 +192,15 @@ test('writeTrueTypeFont writes custom encoding differences for ligatures', async
   assert.ok(text.includes('/Differences ['), 'should contain /Differences');
   assert.ok(text.includes('240 /fi /fl /ff /ffi /ffl'), 'should map ligature differences');
 });
+
+test('writeTrueTypeFont writes widths array and range if provided', async () => {
+  const pdf = new PdfWriter(595, 841);
+  pdf.writeHeader();
+  pdf.writeTrueTypeFont(1, 2, 3, 'F0', 'EBGaramond-Regular', new Uint8Array([1, 2, 3]), [500, 600, 700], 32, 34);
+  pdf.writeXref(0, 3);
+  const buf = await drain(pdf.stream);
+  const text = buf.toString('latin1');
+  assert.ok(text.includes('/FirstChar 32'), 'should contain /FirstChar 32');
+  assert.ok(text.includes('/LastChar 34'), 'should contain /LastChar 34');
+  assert.ok(text.includes('/Widths [ 500 600 700 ]'), 'should contain /Widths [ 500 600 700 ]');
+});

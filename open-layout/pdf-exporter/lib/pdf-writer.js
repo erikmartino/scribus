@@ -179,7 +179,7 @@ export class PdfWriter {
    * @param {string} baseFontName 
    * @param {Uint8Array} ttfBytes 
    */
-  writeTrueTypeFont(fontId, descriptorId, streamId, alias, baseFontName, ttfBytes) {
+  writeTrueTypeFont(fontId, descriptorId, streamId, alias, baseFontName, ttfBytes, widths = null, firstChar = 32, lastChar = 255) {
     // 1. Font Stream (Length1 is required for TrueType, matching Length)
     this._beginObj(streamId);
     this._emitStr(
@@ -211,11 +211,15 @@ export class PdfWriter {
 
     // 3. Font Dictionary (relies on TTF hmtx for widths)
     this._beginObj(fontId);
-    this._emitStr(
-      `<< /Type /Font\n` +
+    let dict = `<< /Type /Font\n` +
       `   /Subtype /TrueType\n` +
-      `   /BaseFont /${baseFontName}\n` +
-      `   /Encoding <<\n` +
+      `   /BaseFont /${baseFontName}\n`;
+    if (widths) {
+      dict += `   /FirstChar ${firstChar}\n` +
+              `   /LastChar ${lastChar}\n` +
+              `   /Widths [ ${widths.join(' ')} ]\n`;
+    }
+    dict += `   /Encoding <<\n` +
       `     /Type /Encoding\n` +
       `     /BaseEncoding /WinAnsiEncoding\n` +
       `     /Differences [\n` +
@@ -223,8 +227,8 @@ export class PdfWriter {
       `     ]\n` +
       `   >>\n` +
       `   /FontDescriptor ${descriptorId} 0 R\n` +
-      `>>\n`
-    );
+      `>>\n`;
+    this._emitStr(dict);
     this._endObj();
   }
 

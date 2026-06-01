@@ -16,7 +16,7 @@ import {
 import { createSubsetter } from './subsetter.js';
 import { extFromMime } from '../../document-store/lib/document-store.js';
 
-export { createLayoutEngine };
+export { createLayoutEngine, layoutDocument };
 
 let vips = null;
 
@@ -356,7 +356,39 @@ async function _generatePdf(engine, docPath, opts, writer) {
   for (const { id, pdfName, alias, subsetBytes, descriptorId, streamId, family, variant } of fontMap.values()) {
     if (subsetBytes) {
       const baseFontName = `${family.replace(/\s+/g, '')}-${variant}`;
-      pdf.writeTrueTypeFont(id, descriptorId, streamId, alias, baseFontName, subsetBytes);
+      
+      // Calculate design-unit widths (1000 units = 1em) for ASCII 32 to ligature 244
+      const firstChar = 32;
+      const lastChar = 244;
+      const widths = [];
+      
+      for (let c = firstChar; c <= lastChar; c++) {
+        let text = '';
+        if (c >= 240) {
+          if (c === 240)      text = 'fi';
+          else if (c === 241) text = 'fl';
+          else if (c === 242) text = 'ff';
+          else if (c === 243) text = 'ffi';
+          else if (c === 244) text = 'ffl';
+        } else {
+          text = String.fromCharCode(c);
+        }
+        
+        // Shape character or ligature at size 1000 to get exact design-unit widths
+        const glyphs = engine._shaper.shapeRun(text, { 
+          bold: variant.includes('bold'), 
+          italic: variant.includes('italic'), 
+          fontFamily: family 
+        }, 1000);
+        
+        const width = Math.round(glyphs.reduce((sum, g) => sum + g.ax, 0));
+        widths.push(width);
+      }
+      
+      const fontInfo = fontMap.get(alias);
+      if (fontInfo) fontInfo.widths = widths;
+      
+      pdf.writeTrueTypeFont(id, descriptorId, streamId, alias, baseFontName, subsetBytes, widths, firstChar, lastChar);
     } else {
       pdf.writeStandardFont(id, alias, pdfName);
     }
@@ -561,6 +593,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
               // so the PDF matches the SVG renderer exactly.
               let xOffset = 0;
               for (const g of word.glyphData) {
+                let actualAdvance = g.ax;
                 if (g.text && g.text.trim()) {
                   const family = g.style.fontFamily || fontFamily;
                   const variant = getFontVariant(g.style);
@@ -571,22 +604,55 @@ async function _generatePdf(engine, docPath, opts, writer) {
                   const isFauxBold = !!fontInfo?.isFauxBold;
                   const isFauxItalic = !!fontInfo?.isFauxItalic;
                   ops += textOp(g.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
+                  
+                  const isMappedLigature = useLigatures && ['ffi', 'ffl', 'ff', 'fi', 'fl'].includes(g.text);
+                  if (!isMappedLigature && g.text.length > 1) {
+                    // Sum the individual widths of the characters in the font
+                    let sumWidths = 0;
+                    for (let i = 0; i < g.text.length; i++) {
+                      const charCode = g.text.charCodeAt(i);
+                      const wArray = fontInfo?.widths || [];
+                      const wVal = (charCode >= 32 && charCode <= 244)
+                        ? (wArray[charCode - 32] ?? 500)
+                        : 500;
+                      sumWidths += wVal;
+                    }
+                    actualAdvance = sumWidths * (line.fontSize / 1000);
+                  }
                 }
-                xOffset += g.ax;
+                xOffset += actualAdvance;
               }
             } else {
               // Fallback: fragment-level positioning (no intra-word kerning)
+              let xOffset = 0;
               for (const frag of word.fragments) {
                 if (!frag.text || !frag.text.trim()) continue;
                 const family = frag.style.fontFamily || fontFamily;
                 const variant = getFontVariant(frag.style);
                 const alias = getFontAlias(family, variant);
-                const absX = box.x + padding + word.x;
+                const absX = box.x + padding + word.x + xOffset;
                 const fontInfo = fontMap.get(alias);
                 const useLigatures = !!fontInfo?.subsetBytes;
                 const isFauxBold = !!fontInfo?.isFauxBold;
                 const isFauxItalic = !!fontInfo?.isFauxItalic;
                 ops += textOp(frag.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
+
+                // Estimate fragment width for fallback positioning
+                // This is a rough estimate; per-glyph path is preferred.
+                const vk = engine._fontRegistry.variantForStyle(frag.style);
+                const fontEntry = engine._shaper._resolveFontEntry(family, vk);
+                if (fontEntry) {
+                  const scale = line.fontSize / fontEntry.upem;
+                  const buffer = engine._hb.createBuffer();
+                  buffer.addText(frag.text);
+                  buffer.guessSegmentProperties();
+                  engine._hb.shape(fontEntry.hbFont, buffer);
+                  const glyphs = buffer.json(fontEntry.hbFont);
+                  buffer.destroy();
+                  xOffset += glyphs.reduce((sum, g) => sum + (g.ax || 0) * scale, 0);
+                } else {
+                  xOffset += frag.text.length * (line.fontSize * 0.5);
+                }
               }
             }
           }

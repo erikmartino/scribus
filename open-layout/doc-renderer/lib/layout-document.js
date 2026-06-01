@@ -289,7 +289,7 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
               ? group.glyphs[gi + 1].cl
               : group.endCl;
             const rawText = entry.text.slice(g.cl, nextCl).replace(/\u00AD/g, '');
-            return { text: rawText, ax: g.ax, dx: g.dx || 0, style: g.style || {} };
+            return { text: rawText, ax: g.ax, ay: g.ay || 0, dx: g.dx || 0, dy: g.dy || 0, style: g.style || {} };
           });
 
           // Add synthetic hyphen glyph for hyphenated line breaks
