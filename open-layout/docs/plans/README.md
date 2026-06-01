@@ -6,6 +6,7 @@ All implementation planning should live under `docs/plans/`.
 
 ## Active plans
 
+- `2026-06-01-image-placement-scaling-plan.md` — Interactive image placement, fit modes, scaling, and clipping. (Proposed/Awaiting approval).
 - `story-editor-do-not-implement-yet-plan.md` — Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
 
 Reference specifications live in `../../specs/`.
