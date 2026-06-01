@@ -10,20 +10,14 @@ import {
   cloneParagraphStyle,
 } from '../lib/story-editor-core.js';
 import {
-  serializeStory,
-  putJson,
-  updateDocTimestamp,
-  uploadImageAsset,
-  assetNameFromFilename,
-  extFromMime,
   loadSpread,
-  loadParagraphStyles,
-  loadStoryFromStore,
   loadAssets,
+  extFromMime,
+  assetNameFromFilename,
+  uploadImageAsset,
 } from '../../document-store/lib/document-store.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
-import { drawBoxOverlay } from './box-overlay.js';
 import { BoxInteractionController } from './box-interactions.js';
 import shell, { AppShell } from '../../app-shell/lib/shell-core.js';
 import { AbstractItem } from '../../app-shell/lib/document-model.js';
@@ -32,6 +26,46 @@ import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-de
 import { registerTextCommands } from '../../app-shell/lib/text-commands.js';
 import { createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
 import { decorateSpreadForEditor, getImagePlacement } from '../../doc-renderer/lib/svg-renderer.js';
+
+import {
+  emptyImagePlaceholder,
+  loadAllSpreadsMetadata,
+  loadFromStore,
+  saveSpread,
+  serializeSpread,
+  refreshPlaceholderBoxes,
+} from './persistence.js';
+import {
+  initClipboard,
+  initSelectionSync,
+  handlePaste,
+  blobToDataUrl,
+  loadImageBlob,
+  prepareImageAsset,
+  placeImageBox,
+} from './clipboard.js';
+import {
+  initDragDrop,
+  showDropHighlight,
+  hideDropHighlight,
+  placeImageBoxAt,
+  placeAssetBoxAt,
+} from './drag-drop.js';
+import {
+  registerCreatables,
+  createTextFrame,
+  createImageFrame,
+  deleteSelectedBox,
+} from './frames.js';
+import {
+  zoomBy,
+  zoomToFit,
+  applyZoom,
+  projectPoint,
+  projectSize,
+  updateOverlay,
+  decorateSpreadOverlay,
+} from './zoom.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -270,227 +304,11 @@ export class SpreadEditorApp {
   // ---------------------------------------------------------------------------
 
   async _loadAllSpreadsMetadata() {
-    if (!this._spreadsList || this._spreadsList.length === 0) return;
-    
-    this._spreadsMetadata = {};
-    const promises = this._spreadsList.map(async (spreadId) => {
-      try {
-        const spreadJson = await loadSpread(this._docPath, spreadId);
-        this._spreadsMetadata[spreadId] = {
-          pages: spreadJson.pages || []
-        };
-      } catch (err) {
-        console.warn(`Failed to load metadata for spread ${spreadId}:`, err);
-        this._spreadsMetadata[spreadId] = { pages: [] };
-      }
-    });
-    await Promise.all(promises);
+    return loadAllSpreadsMetadata(this);
   }
 
   async _loadFromStore() {
-    this.setStatus('Loading document from store...');
-
-    // Clear existing spread-specific data to prevent accumulation when switching
-    this.boxes = [];
-    this.imageBoxes = [];
-    this._stories = [];
-    this._activeStory = null;
-    this._imageBoxCounter = 0;
-    this._storyCounter = 0;
-    this._loadedFromStore = false;
-
-    // Discover spreads dynamically if not already done
-    if (!this._spreadsList) {
-      try {
-        const response = await fetch(`/store/${this._docPath}`);
-        if (response.ok) {
-          const files = await response.json();
-          const spreadFiles = files.filter(f => f.startsWith('spreads/') && f.endsWith('.json'));
-          this._spreadsList = spreadFiles.map(f => {
-            const parts = f.split('/');
-            const filename = parts[parts.length - 1];
-            return filename.replace('.json', '');
-          });
-          // Sort spreads list numerically if possible
-          this._spreadsList.sort((a, b) => {
-            const numA = parseInt(a.replace(/[^\d]/g, ''), 10);
-            const numB = parseInt(b.replace(/[^\d]/g, ''), 10);
-            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-            return a.localeCompare(b);
-          });
-          
-          await this._loadAllSpreadsMetadata();
-        }
-      } catch (err) {
-        console.warn('Failed to list spreads from store:', err);
-      }
-    }
-
-    if (!this._spreadsList || this._spreadsList.length === 0) {
-      this._spreadsList = ['spread-1'];
-      this._spreadsMetadata['spread-1'] = {
-        pages: [{ index: 0, label: '1' }, { index: 1, label: '2' }]
-      };
-    }
-
-    if (!this._activeSpreadId) {
-      this._activeSpreadId = this._spreadsList[0] || 'spread-1';
-    }
-
-    // 1. Load the spread definition
-    const spreadJson = await loadSpread(this._docPath, this._activeSpreadId);
-    
-    // Save pages configuration for serialization
-    this._activeSpreadPages = spreadJson.pages || [
-      { index: 0, label: '1' },
-      { index: 1, label: '2' }
-    ];
-
-    // 2. Load paragraph style definitions (for resolving styleRef)
-    const styleMap = await loadParagraphStyles(this._docPath);
-
-    // 3. Parse frames into boxes and collect storyRefs to load
-    const storyRefsToLoad = new Set();
-    // Map from storyRef -> ordered list of box IDs in that story chain
-    const storyBoxMap = new Map();
-
-    // Pre-load asset metadata so we can resolve assetRefs to URLs
-    const assetMeta = await loadAssets(this._docPath);
-    this._assets = assetMeta;
-
-    for (const frame of spreadJson.frames || []) {
-      if (frame.type === 'image') {
-        let imageUrl;
-        let assetRef;
-        let assetExt;
-        let imgWidth = null;
-        let imgHeight = null;
-
-        if (frame.assetRef) {
-          // Resolve assetRef to a URL using metadata or fallback
-          assetRef = frame.assetRef;
-          const meta = assetMeta[assetRef];
-          if (meta) {
-            imgWidth = meta.width;
-            imgHeight = meta.height;
-            if (meta.preview) {
-              imageUrl = `/store/${this._docPath}/assets/${assetRef}/${meta.preview}`;
-              assetExt = 'jpg';
-            } else {
-              imageUrl = this._emptyImagePlaceholder();
-              assetExt = 'jpg';
-            }
-          } else {
-            imageUrl = this._emptyImagePlaceholder();
-            assetExt = 'jpg';
-          }
-        } else {
-          imageUrl = frame.imageUrl || this._emptyImagePlaceholder();
-        }
-
-        this.imageBoxes.push({
-          id: frame.id,
-          x: frame.x,
-          y: frame.y,
-          width: frame.width,
-          height: frame.height,
-          minWidth: 20,
-          minHeight: 20,
-          imageUrl,
-          imgWidth,
-          imgHeight,
-          placement: frame.placement,
-          ...(assetRef ? { assetRef, assetExt } : {}),
-        });
-        this._imageBoxCounter++;
-      } else {
-        // Text frame
-        this.boxes.push({
-          id: frame.id,
-          x: frame.x,
-          y: frame.y,
-          width: frame.width,
-          height: frame.height,
-          minWidth: 80,
-          minHeight: 60,
-        });
-        if (frame.storyRef) {
-          storyRefsToLoad.add(frame.storyRef);
-          if (!storyBoxMap.has(frame.storyRef)) {
-            storyBoxMap.set(frame.storyRef, []);
-          }
-          storyBoxMap.get(frame.storyRef).push(frame.id);
-        }
-      }
-    }
-
-    // 4. Load each referenced story
-    const storyPromises = [...storyRefsToLoad].map(async (storyRef) => {
-      try {
-        const { story, paragraphStyles } = await loadStoryFromStore(
-          this._docPath,
-          storyRef,
-          { baseFontSize: this._fontSize, styleMap }
-        );
-
-        // Ensure at least one paragraph
-        if (story.length === 0) {
-          story.push([{ text: '', style: cloneStyle() }]);
-          paragraphStyles.push(cloneParagraphStyle({ fontSize: this._fontSize }));
-        }
-
-        return {
-          storyRef,
-          id: storyRef,
-          story,
-          paragraphStyles,
-          boxIds: storyBoxMap.get(storyRef) || [],
-        };
-      } catch (err) {
-        console.warn(`Failed to load story ${storyRef}:`, err);
-        return null;
-      }
-    });
-
-    const loadedStories = (await Promise.all(storyPromises)).filter(Boolean);
-
-    // 5. Build story entries
-    this._stories = [];
-    for (const loaded of loadedStories) {
-      const storyEntry = {
-        id: loaded.id,
-        editor: new EditorState(loaded.story, loaded.paragraphStyles),
-        boxIds: loaded.boxIds,
-        lineMap: [],
-      };
-      this._stories.push(storyEntry);
-      this._storyCounter++;
-    }
-
-    // If no stories were loaded, create an empty fallback
-    if (this._stories.length === 0) {
-      const emptyStory = [[{ text: '', style: cloneStyle() }]];
-      const emptyStyles = [cloneParagraphStyle({ fontSize: this._fontSize })];
-      this._stories.push({
-        id: `story-${this._storyCounter++}`,
-        editor: new EditorState(emptyStory, emptyStyles),
-        boxIds: this.boxes.map(b => b.id),
-        lineMap: [],
-      });
-    }
-
-    this._activeStory = this._stories[0];
-    // Mark boxes as loaded so update() won't overwrite with defaults
-    this._loadedFromStore = true;
-    this.selectedBoxId = this.boxes[0]?.id || this.imageBoxes[0]?.id || null;
-
-    // Kick off browser-based preview generation for any image boxes that
-    // are still showing the empty placeholder (no preview in meta.json yet).
-    const placeholder = this._emptyImagePlaceholder();
-    const needsPreview = this.imageBoxes.some(b => b.imageUrl === placeholder);
-    if (needsPreview) {
-      this._startPreviewWorker();
-    }
+    return loadFromStore(this);
   }
 
   /**
@@ -513,7 +331,7 @@ export class SpreadEditorApp {
 
     const iframe = document.createElement('iframe');
     iframe.id = 'preview-worker-frame';
-    iframe.src = '/image-converter/preview-worker.html';
+    iframe.src = '/image-converter/preview-worker.html?docPath=' + encodeURIComponent(this._docPath);
     iframe.title = 'Preview generator';
     document.body.appendChild(iframe);
     this._previewWorkerFrame = iframe;
@@ -587,25 +405,7 @@ export class SpreadEditorApp {
    * all previews were already on disk).
    */
   async _refreshPlaceholderBoxes() {
-    const placeholder = this._emptyImagePlaceholder();
-    const stale = this.imageBoxes.filter(b => b.imageUrl === placeholder && b.assetRef);
-    if (stale.length === 0) return;
-
-    let changed = false;
-    await Promise.all(stale.map(async (box) => {
-      try {
-        const metaUrl = `/store/${this._docPath}/assets/${box.assetRef}/meta.json`;
-        const res = await fetch(metaUrl);
-        if (!res.ok) return;
-        const meta = await res.json();
-        if (meta.preview) {
-          box.imageUrl = `/store/${this._docPath}/assets/${box.assetRef}/${meta.preview}?t=${Date.now()}`;
-          changed = true;
-        }
-      } catch { /* ignore */ }
-    }));
-
-    if (changed) await this.update();
+    return refreshPlaceholderBoxes(this);
   }
 
   /**
@@ -720,31 +520,7 @@ export class SpreadEditorApp {
    * stay linked.
    */
   _deleteSelectedBox() {
-    if (this.mode !== 'object' || !this.selectedBoxId) return;
-
-    const boxId = this.selectedBoxId;
-    const isImage = this.imageBoxes.some(b => b.id === boxId);
-
-    this.submitAction('Delete Frame', () => {
-      if (isImage) {
-        this.imageBoxes = this.imageBoxes.filter(b => b.id !== boxId);
-      } else {
-        // Remove from the story chain
-        const story = this._findStoryForBox(boxId);
-        if (story) {
-          story.boxIds = story.boxIds.filter(id => id !== boxId);
-          // If no boxes remain, remove the story entirely
-          if (story.boxIds.length === 0) {
-            this._stories = this._stories.filter(s => s !== story);
-            if (this._activeStory === story) {
-              this._activeStory = this._stories[0] || null;
-            }
-          }
-        }
-        this.boxes = this.boxes.filter(b => b.id !== boxId);
-      }
-      this.selectedBoxId = null;
-    });
+    return deleteSelectedBox(this);
   }
 
   _registerCommands(shell) {
@@ -927,158 +703,31 @@ export class SpreadEditorApp {
    *   pixels; when provided the content under that point stays fixed after zoom.
    */
   zoomBy(factor, origin) {
-    const oldZoom = this._zoom;
-    this._zoom = Math.max(this._zoomMin, Math.min(this._zoomMax, oldZoom * factor));
-    const actualFactor = this._zoom / oldZoom;
-
-    if (origin && actualFactor !== 1) {
-      // Content pixel under origin before zoom: scrollOffset + originInViewport
-      const contentX = this.container.scrollLeft + origin.x;
-      const contentY = this.container.scrollTop + origin.y;
-      this._applyZoom();
-      // Shift scroll so the same content pixel is back under origin
-      this.container.scrollLeft = contentX * actualFactor - origin.x;
-      this.container.scrollTop = contentY * actualFactor - origin.y;
-    } else {
-      this._applyZoom();
-    }
+    return zoomBy(this, factor, origin);
   }
 
-  /**
-   * Set the zoom level to fit the full spread in the container.
-   */
   zoomToFit() {
-    this._zoom = 1.0;
-    this._applyZoom();
+    return zoomToFit(this);
   }
 
-  /**
-   * Apply current zoom level by scaling the SVG element size.
-   * The viewBox always shows the full pasteboard (1:1 SVG units).
-   * The width/height attributes grow/shrink with zoom so the browser
-   * renders the same content at a larger/smaller CSS pixel size —
-   * the container scrolls naturally via overflow:auto.
-   */
   _applyZoom() {
-    const svg = this._svg;
-    const spread = this.currentSpread;
-    if (!svg || !spread) return;
-
-    const pb = spread.pasteboardRect;
-    svg.setAttribute('width', String(pb.width * this._zoom));
-    svg.setAttribute('height', String(pb.height * this._zoom));
-    svg.setAttribute(
-      'viewBox',
-      `${pb.x} ${pb.y} ${pb.width} ${pb.height}`,
-    );
-
-    this._updateOverlay();
-
-    const pct = Math.round(this._zoom * 100);
-    this.setStatus(`${pct}%`, 'ok');
+    return applyZoom(this);
   }
 
-  // ---------------------------------------------------------------------------
-  // Overlay — non-zoomed SVG layer for handles, ports, page decoration
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Project a content-SVG coordinate to overlay-SVG coordinate.
-   * The overlay is position:sticky so it stays at the container's
-   * visible viewport corner. Coordinates are relative to the viewport.
-   */
   _projectPoint(x, y) {
-    const svg = this._svg;
-    if (!svg) return { x: 0, y: 0 };
-
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return { x: 0, y: 0 };
-
-    const pt = new DOMPoint(x, y).matrixTransform(ctm);
-    const cr = this.container.getBoundingClientRect();
-    return {
-      x: pt.x - cr.left,
-      y: pt.y - cr.top,
-    };
+    return projectPoint(this, x, y);
   }
 
-  /**
-   * Project a content-SVG distance (width/height) to overlay pixels.
-   */
   _projectSize(size) {
-    const svg = this._svg;
-    if (!svg) return size;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return size;
-    return size * ctm.a;
+    return projectSize(this, size);
   }
 
-  /**
-   * Redraw the overlay SVG with current box/decoration state.
-   * Called on zoom, scroll, resize, and after full update().
-   */
   _updateOverlay() {
-    const overlay = this._overlaySvg;
-    const spread = this.currentSpread;
-    if (!overlay || !spread) return;
-
-    // Size the overlay to match the container's visible viewport,
-    // positioned at the current scroll offset so it tracks the viewport.
-    const vw = this.container.clientWidth;
-    const vh = this.container.clientHeight;
-    overlay.setAttribute('width', String(vw));
-    overlay.setAttribute('height', String(vh));
-    overlay.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
-    overlay.style.top = `${this.container.scrollTop}px`;
-    overlay.style.left = `${this.container.scrollLeft}px`;
-
-    // Clear previous content
-    overlay.innerHTML = '';
-
-    const project = (x, y) => this._projectPoint(x, y);
-    const projectSize = (s) => this._projectSize(s);
-
-    // 1. Spread decoration (pasteboard, pages, spine, margin guides)
-    this._decorateSpreadOverlay(overlay, spread, project, projectSize);
-
-    // 2. Box overlay (frames, handles, ports, link highlights)
-    drawBoxOverlay(overlay, {
-      boxes: [...this.boxes, ...this.imageBoxes],
-      selectedBoxId: this.selectedBoxId,
-      stories: this._stories.map(s => ({
-        boxIds: s.boxIds,
-        overflow: s.overflow || false,
-      })),
-      linkMode: this._linkSource,
-      project,
-      projectSize,
-      activeCroppingMode: this.activeCroppingMode,
-    });
+    return updateOverlay(this);
   }
 
-  /**
-   * Draw margin guides into the overlay SVG using projected coordinates.
-   * Only UI chrome goes here — page backgrounds stay in the content SVG.
-   */
   _decorateSpreadOverlay(overlay, spread, project, projectSize) {
-    const mg = spread.margin || 0;
-    if (mg <= 0) return;
-
-    for (const page of spread.pageRects) {
-      const gTL = project(page.x + mg, page.y + mg);
-      const gW = projectSize(page.width - mg * 2);
-      const gH = projectSize(page.height - mg * 2);
-      const guide = document.createElementNS(SVG_NS, 'rect');
-      guide.setAttribute('x', String(gTL.x));
-      guide.setAttribute('y', String(gTL.y));
-      guide.setAttribute('width', String(gW));
-      guide.setAttribute('height', String(gH));
-      guide.setAttribute('fill', 'none');
-      guide.setAttribute('stroke', '#b0d0f0');
-      guide.setAttribute('stroke-width', '0.5');
-      guide.classList.add('margin-guide');
-      overlay.appendChild(guide);
-    }
+    return decorateSpreadOverlay(this, overlay, spread, project, projectSize);
   }
 
   // ---------------------------------------------------------------------------
@@ -1086,100 +735,11 @@ export class SpreadEditorApp {
   // ---------------------------------------------------------------------------
 
   async _save() {
-    if (!this._docPath || this._saving) return;
-
-    this._saving = true;
-    this.setStatus('Saving...', '');
-    this.shell?.requestUpdate();
-
-    try {
-      // PUT spread + stories + timestamp in parallel
-      const puts = [];
-
-      // Spread
-      puts.push(
-        putJson(`/store/${this._docPath}/spreads/${this._activeSpreadId}.json`, this._serializeSpread())
-      );
-
-      // Stories (using shared serializer)
-      for (const storyEntry of this._stories) {
-        const json = serializeStory(storyEntry.id, storyEntry.editor);
-        puts.push(
-          putJson(`/store/${this._docPath}/stories/${storyEntry.id}.json`, json)
-        );
-      }
-
-      // document.json timestamp
-      puts.push(updateDocTimestamp(this._docPath));
-
-      const results = await Promise.all(puts);
-      // updateDocTimestamp returns void, so filter only Response objects
-      const failed = results.filter(r => r && typeof r.ok === 'boolean' && !r.ok);
-      if (failed.length > 0) {
-        throw new Error(`${failed.length} file(s) failed to save`);
-      }
-
-      this.setStatus('Saved.', 'ok');
-    } catch (err) {
-      this.setStatus(`Save failed: ${err.message}`, 'error');
-      console.error('Save failed:', err);
-    } finally {
-      this._saving = false;
-      this.shell?.requestUpdate();
-    }
+    return saveSpread(this);
   }
 
-  /**
-   * Serialize boxes and image boxes into a single spread JSON object
-   * matching the store format.
-   */
   _serializeSpread() {
-    const frames = [];
-
-    // Text frames: each box references its story via storyRef
-    for (const box of this.boxes) {
-      const story = this._findStoryForBox(box.id);
-      const frame = {
-        id: box.id,
-        type: 'text',
-        x: Math.round(box.x * 100) / 100,
-        y: Math.round(box.y * 100) / 100,
-        width: Math.round(box.width * 100) / 100,
-        height: Math.round(box.height * 100) / 100,
-      };
-      if (story) frame.storyRef = story.id;
-      frames.push(frame);
-    }
-
-    // Image frames — prefer assetRef (spec convention) over inline imageUrl
-    for (const box of this.imageBoxes) {
-      const frame = {
-        id: box.id,
-        type: 'image',
-        x: Math.round(box.x * 100) / 100,
-        y: Math.round(box.y * 100) / 100,
-        width: Math.round(box.width * 100) / 100,
-        height: Math.round(box.height * 100) / 100,
-      };
-      if (box.placement) {
-        frame.placement = box.placement;
-      }
-      if (box.assetRef) {
-        frame.assetRef = box.assetRef;
-      } else {
-        frame.imageUrl = box.imageUrl;
-      }
-      frames.push(frame);
-    }
-
-    return {
-      id: this._activeSpreadId,
-      pages: this._activeSpreadPages || [
-        { index: 0, label: '1' },
-        { index: 1, label: '2' },
-      ],
-      frames,
-    };
+    return serializeSpread(this);
   }
 
   /**
@@ -1187,134 +747,23 @@ export class SpreadEditorApp {
    * and wire up paste-received / cut-executed event handlers.
    */
   _initClipboard(shell) {
-    const storyItem = new AbstractItem('spread-story', 'story');
-    storyItem.serialize = () => {
-      if (this.mode !== 'text' && !this.selectedBoxId) return null;
-      const selectedText = this.editor.getSelectedText();
-      const range = this.editor.getSelectionRange();
-      if (selectedText && range) {
-        return {
-          type: 'story',
-          data: selectedText,
-          story: this.editor.getRichSelection(),
-          paragraphStyles: this.editor.paragraphStyles.slice(range.start.paraIndex, range.end.paraIndex + 1).map(s => ({...s}))
-        };
-      }
-      return null;
-    };
-    shell.doc.registerItem(storyItem);
-    this.storyItem = storyItem;
-
-    this._initSelectionSync(shell);
-
-    shell.addEventListener('paste-received', (e) => this.handlePaste(e.detail));
-
-    shell.addEventListener('cut-executed', () => {
-      if (this.mode !== 'text' || !this.editor.hasSelection()) return;
-      this.submitAction('Cut', () => {
-        this.editor.replaceSelectionWithText('');
-      });
-    });
+    return initClipboard(this, shell);
   }
 
   _registerCreatables(shell) {
-    shell.registerCreatable({
-      id: 'spread.textFrame',
-      label: 'Text Frame',
-      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-        <line x1="7" y1="8" x2="17" y2="8"></line>
-        <line x1="7" y1="12" x2="17" y2="12"></line>
-        <line x1="7" y1="16" x2="13" y2="16"></line>
-      </svg>`,
-      onCreate: () => this._createTextFrame()
-    });
-
-    shell.registerCreatable({
-      id: 'spread.imageFrame',
-      label: 'Image Frame',
-      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-        <polyline points="21 15 16 10 5 21"></polyline>
-      </svg>`,
-      onCreate: () => this._createImageFrame()
-    });
+    return registerCreatables(this, shell);
   }
 
   _createTextFrame() {
-    if (!this.currentSpread) return;
-    const page = this.currentSpread.pageRects[0];
-    const boxId = `text-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    const w = 200;
-    const h = 150;
-    const x = page.x + (page.width - w) / 2;
-    const y = page.y + (page.height - h) / 2;
-
-    const box = {
-      id: boxId,
-      x, y,
-      width: w,
-      height: h,
-      minWidth: 80,
-      minHeight: 60,
-    };
-
-    // Each new text frame gets its own independent story
-    const emptyStory = [[{ text: '', style: { bold: false, italic: false } }]];
-    const emptyStyles = [{ fontSize: this._fontSize }];
-    const newStoryEntry = {
-      id: `story-${this._storyCounter++}`,
-      editor: new EditorState(emptyStory, emptyStyles),
-      boxIds: [boxId],
-      lineMap: [],
-    };
-
-    this.submitAction('Create Text Frame', () => {
-      this.boxes = [...this.boxes, box];
-      this._stories = [...this._stories, newStoryEntry];
-      this.selectedBoxId = boxId;
-      this._activeStory = newStoryEntry;
-      // Select the new box in object mode; the user double-clicks to edit.
-      this.setMode('object');
-    });
+    return createTextFrame(this);
   }
 
   _createImageFrame() {
-    if (!this.currentSpread) return;
-    const page = this.currentSpread.pageRects[0];
-    const boxId = `image-${++this._imageBoxCounter}`;
-    const w = 200;
-    const h = 150;
-    const x = page.x + (page.width - w) / 2;
-    const y = page.y + (page.height - h) / 2;
-
-    const imageBox = {
-      id: boxId,
-      x, y,
-      width: w,
-      height: h,
-      minWidth: 20,
-      minHeight: 20,
-      imageUrl: this._emptyImagePlaceholder(),
-    };
-
-    this.submitAction('Create Image Frame', () => {
-      this.imageBoxes = [...this.imageBoxes, imageBox];
-      this.selectedBoxId = boxId;
-      this.setMode('object');
-    });
+    return createImageFrame(this);
   }
 
-  /** Generate a simple SVG data URL as a placeholder for empty image frames. */
   _emptyImagePlaceholder() {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
-      <rect width="200" height="150" fill="#e0ddd5" stroke="#b0ab9f" stroke-width="1"/>
-      <line x1="0" y1="0" x2="200" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
-      <line x1="200" y1="0" x2="0" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
-      <text x="100" y="80" text-anchor="middle" fill="#8a857a" font-size="14" font-family="sans-serif">Image</text>
-    </svg>`;
-    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return emptyImagePlaceholder();
   }
 
   submitAction(label, fn) {
@@ -1370,381 +819,43 @@ export class SpreadEditorApp {
   }
 
   async handlePaste(payload) {
-    if (!payload || !payload.items) return;
-
-    // 1. Image paste
-    const imageItem = payload.items.find(it => it && it.type === 'image');
-    if (imageItem) {
-      if (this.mode === 'text') {
-        // Insert inline image placeholder in text flow
-        const dataUrl = await this._blobToDataUrl(imageItem.data);
-        this.submitAction('Paste Inline Image', () => {
-          const run = { text: '\uFFFC', style: { bold: false, italic: false, inlineImage: dataUrl } };
-          this.editor.insertStory([[run]]);
-        });
-      } else {
-        // Object mode: place image box on the pasteboard (upload as asset if possible)
-        await this._placeImageBox(imageItem.data, imageItem.data.name || 'pasted-image');
-      }
-      return;
-    }
-
-    if (this.mode !== 'text') return;
-
-    // 2. Native Story Data (preferred)
-    const storyItem = payload.items.find(it => it && it.type === 'story');
-    if (storyItem && storyItem.story) {
-      this.submitAction('Paste Story', () => {
-        this.editor.insertStory(storyItem.story, storyItem.paragraphStyles);
-      });
-      return;
-    }
-
-    // 3. Rich text (HTML from external sources)
-    const htmlItem = payload.items.find(it => it && it.type === 'text/html');
-    if (htmlItem) {
-      const story = parseHtmlToStory(htmlItem.data);
-      if (story.length > 0) {
-        this.submitAction('Paste Rich Text', () => {
-          this.editor.insertStory(story);
-        });
-        return;
-      }
-    }
-
-    // 4. Plain Text fallback
-    const textItem = payload.items.find(it => it && (it.type === 'plain-text' || it.type === 'rich-text-fragment'));
-    if (textItem) {
-      this.submitAction('Paste Text', () => {
-        const raw = textItem.data;
-        const text = textItem.type === 'rich-text-fragment' 
-          ? raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ') 
-          : raw;
-        
-        if (this.editor.hasSelection()) {
-          this.editor.replaceSelectionWithText(text);
-        } else {
-          this.editor.applyOperation('insertText', { text });
-        }
-      });
-    }
+    return handlePaste(this, payload);
   }
 
-  /** Convert a Blob or File to a data URL string. */
   _blobToDataUrl(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
+    return blobToDataUrl(blob);
   }
 
-  /**
-   * Load an image blob to get its natural dimensions.
-   * @param {Blob} blob
-   * @returns {Promise<{ width: number, height: number, dataUrl: string }>}
-   */
   _loadImageBlob(blob) {
-    if (blob.type === 'image/tiff' || blob.name?.endsWith('.tiff') || blob.name?.endsWith('.tif')) {
-      return new Promise(async (resolve, reject) => {
-        try {
-          const buffer = await blob.arrayBuffer();
-          const utifModule = await import('https://esm.sh/utif2@4.1.0');
-          const UTIF = utifModule.default || utifModule;
-          const ifds = UTIF.decode(buffer);
-          if (ifds.length === 0 || !ifds[0].t256 || !ifds[0].t257) {
-            throw new Error('Invalid TIFF dimensions');
-          }
-          const width = ifds[0].t256[0];
-          const height = ifds[0].t257[0];
-          resolve({ width, height, dataUrl: '' });
-        } catch (err) {
-          resolve({ width: 120, height: 90, dataUrl: '' });
-        }
-      });
-    }
-
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onload = () => {
-        const dataUrl = reader.result;
-        const img = new Image();
-        img.onload = () => resolve({ width: img.width, height: img.height, dataUrl });
-        img.onerror = () => reject(new Error('Failed to decode image'));
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(blob);
-    });
+    return loadImageBlob(blob);
   }
 
-  /**
-   * Prepare an image for placement: upload as an asset if the editor is
-   * connected to a document store, otherwise keep as a data URL.
-   *
-   * @param {Blob} blob - Image data
-   * @param {string} filename - Original filename (e.g. "photo.png")
-   * @returns {Promise<{ imageUrl: string, assetRef?: string, assetExt?: string, width: number, height: number }>}
-   */
-  async _prepareImageAsset(blob, filename) {
-    const { width, height, dataUrl } = await this._loadImageBlob(blob);
-    const mime = blob.type || 'image/png';
-
-    if (this._docPath) {
-      try {
-        const name = assetNameFromFilename(filename || 'image');
-        const { assetRef, ext } = await uploadImageAsset(
-          this._docPath, name, blob, { mime, width, height },
-        );
-        // Build the URL to the uploaded file for rendering
-        const imageUrl = `/store/${this._docPath}/assets/${assetRef}/${assetRef}.${ext}`;
-        this._assets = await loadAssets(this._docPath);
-        this.shell?.updatePanels();
-        return { imageUrl, assetRef, assetExt: ext, width, height };
-      } catch (err) {
-        console.warn('Asset upload failed, falling back to data URL:', err);
-      }
-    }
-
-    return { imageUrl: dataUrl, width, height };
+  _prepareImageAsset(blob, filename) {
+    return prepareImageAsset(this, blob, filename);
   }
 
-  /** Place an image box on the pasteboard centered in the current view. */
-  async _placeImageBox(blob, filename) {
-    if (!this.currentSpread) return;
-    const asset = await this._prepareImageAsset(blob, filename);
-
-    const maxW = 300;
-    const scale = Math.min(1, maxW / asset.width);
-    const w = asset.width * scale;
-    const h = asset.height * scale;
-
-    const page = this.currentSpread.pageRects[0];
-    const x = page.x + (page.width - w) / 2;
-    const y = page.y + (page.height - h) / 2;
-
-    const boxId = `image-${++this._imageBoxCounter}`;
-    const imageBox = {
-      id: boxId,
-      x, y, width: w, height: h,
-      minWidth: 20, minHeight: 20,
-      imageUrl: asset.imageUrl,
-      imgWidth: asset.width,
-      imgHeight: asset.height,
-      ...(asset.assetRef ? { assetRef: asset.assetRef, assetExt: asset.assetExt } : {}),
-    };
-
-    this.submitAction('Paste Image Box', () => {
-      this.imageBoxes = [...this.imageBoxes, imageBox];
-      this.selectedBoxId = boxId;
-    });
+  _placeImageBox(blob, filename) {
+    return placeImageBox(this, blob, filename);
   }
 
-  /**
-   * Place an image box at a specific content-space position.
-   * Used by drag-and-drop to place images where the user drops them.
-   */
-  async _placeImageBoxAt(blob, filename, cx, cy) {
-    if (!this.currentSpread) return;
-    const asset = await this._prepareImageAsset(blob, filename);
-
-    const maxW = 300;
-    const scale = Math.min(1, maxW / asset.width);
-    const w = asset.width * scale;
-    const h = asset.height * scale;
-
-    const x = cx - w / 2;
-    const y = cy - h / 2;
-
-    const boxId = `image-${++this._imageBoxCounter}`;
-    const imageBox = {
-      id: boxId,
-      x, y, width: w, height: h,
-      minWidth: 20, minHeight: 20,
-      imageUrl: asset.imageUrl,
-      imgWidth: asset.width,
-      imgHeight: asset.height,
-      ...(asset.assetRef ? { assetRef: asset.assetRef, assetExt: asset.assetExt } : {}),
-    };
-
-    this.submitAction('Drop Image', () => {
-      this.imageBoxes = [...this.imageBoxes, imageBox];
-      this.selectedBoxId = boxId;
-    });
+  _placeImageBoxAt(blob, filename, cx, cy) {
+    return placeImageBoxAt(this, blob, filename, cx, cy);
   }
 
-  async _placeAssetBoxAt(assetRef, ext, cx, cy) {
-    if (!this.currentSpread) return;
-
-    const meta = this._assets?.[assetRef] || {};
-    const width = meta.width || 300;
-    const height = meta.height || 200;
-    const preview = meta.preview || `${assetRef}.${ext}`;
-    const imageUrl = `/store/${this._docPath}/assets/${assetRef}/${preview}`;
-
-    const maxW = 300;
-    const scale = Math.min(1, maxW / width);
-    const w = width * scale;
-    const h = height * scale;
-
-    const x = cx - w / 2;
-    const y = cy - h / 2;
-
-    const boxId = `image-${++this._imageBoxCounter}`;
-    const imageBox = {
-      id: boxId,
-      x, y, width: w, height: h,
-      minWidth: 20, minHeight: 20,
-      imageUrl,
-      imgWidth: width,
-      imgHeight: height,
-      assetRef,
-      assetExt: ext,
-    };
-
-    this.submitAction('Drop Asset', () => {
-      this.imageBoxes = [...this.imageBoxes, imageBox];
-      this.selectedBoxId = boxId;
-    });
+  _placeAssetBoxAt(assetRef, ext, cx, cy) {
+    return placeAssetBoxAt(this, assetRef, ext, cx, cy);
   }
 
-  /** Set up HTML5 drag-and-drop for image files and document assets on the container. */
   _initDragDrop() {
-    const container = this.container;
-    let dragCounter = 0;  // Track nested dragenter/dragleave
-
-    const isAcceptableDrag = (e) => {
-      return e.dataTransfer?.types?.includes('Files') || e.dataTransfer?.types?.includes('application/x-scribus-asset');
-    };
-
-    container.addEventListener('dragover', (e) => {
-      if (!isAcceptableDrag(e)) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-    });
-
-    container.addEventListener('dragenter', (e) => {
-      if (!isAcceptableDrag(e)) return;
-      e.preventDefault();
-      dragCounter++;
-      if (dragCounter === 1) {
-        this._showDropHighlight();
-      }
-    });
-
-    container.addEventListener('dragleave', (e) => {
-      if (!isAcceptableDrag(e)) return;
-      dragCounter--;
-      if (dragCounter <= 0) {
-        dragCounter = 0;
-        this._hideDropHighlight();
-      }
-    });
-
-    container.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      dragCounter = 0;
-      this._hideDropHighlight();
-
-      // Convert drop point to content-space coordinates
-      const svg = this._svg;
-      if (!svg) return;
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return;
-      const contentPt = new DOMPoint(e.clientX, e.clientY)
-        .matrixTransform(ctm.inverse());
-
-      // 1. Check for custom document asset drag & drop
-      if (e.dataTransfer?.types?.includes('application/x-scribus-asset')) {
-        const dataStr = e.dataTransfer.getData('application/x-scribus-asset');
-        if (dataStr) {
-          try {
-            const assetData = JSON.parse(dataStr);
-            const assetRef = assetData.assetRef;
-            const ext = assetData.ext || 'jpg';
-
-            // Check if dropped on an existing image frame
-            const hitImageBox = this.imageBoxes.find(b =>
-              contentPt.x >= b.x && contentPt.x <= b.x + b.width &&
-              contentPt.y >= b.y && contentPt.y <= b.y + b.height
-            );
-
-            if (hitImageBox) {
-              const meta = this._assets?.[assetRef] || {};
-              const preview = meta.preview || `${assetRef}.${ext}`;
-              const imageUrl = `/store/${this._docPath}/assets/${assetRef}/${preview}`;
-              this.submitAction('Replace Image in Frame', () => {
-                hitImageBox.imageUrl = imageUrl;
-                hitImageBox.assetRef = assetRef;
-                hitImageBox.assetExt = ext;
-              });
-            } else {
-              await this._placeAssetBoxAt(assetRef, ext, contentPt.x, contentPt.y);
-            }
-          } catch (err) {
-            console.error('Error parsing asset drop data:', err);
-          }
-        }
-        return;
-      }
-
-      // 2. Fallback to external files drag & drop
-      const files = e.dataTransfer?.files;
-      if (!files || files.length === 0) return;
-
-      // Process each image file
-      for (const file of files) {
-        if (!file.type.startsWith('image/')) continue;
-        if (this.mode === 'text') {
-          // Insert inline image at cursor position
-          const dataUrl = await this._blobToDataUrl(file);
-          this.submitAction('Drop Inline Image', () => {
-            const run = {
-              text: '\uFFFC',
-              style: { bold: false, italic: false, inlineImage: dataUrl },
-            };
-            this.editor.insertStory([[run]]);
-          });
-        } else {
-          // Place image box at drop coordinates (upload as asset if possible)
-          await this._placeImageBoxAt(file, file.name, contentPt.x, contentPt.y);
-        }
-      }
-    });
+    return initDragDrop(this);
   }
 
-  /** Show a drop-zone highlight in the overlay SVG. */
   _showDropHighlight() {
-    if (!this._overlaySvg || !this._svg) return;
-    // Remove any existing highlight
-    this._hideDropHighlight();
-
-    const overlay = this._overlaySvg;
-    const vw = parseFloat(overlay.getAttribute('width') || '0');
-    const vh = parseFloat(overlay.getAttribute('height') || '0');
-    if (!vw || !vh) return;
-
-    const rect = document.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', '0');
-    rect.setAttribute('y', '0');
-    rect.setAttribute('width', String(vw));
-    rect.setAttribute('height', String(vh));
-    rect.setAttribute('fill', 'rgba(47, 110, 164, 0.08)');
-    rect.setAttribute('stroke', '#2f6ea4');
-    rect.setAttribute('stroke-width', '2');
-    rect.setAttribute('stroke-dasharray', '8 4');
-    rect.setAttribute('rx', '4');
-    rect.setAttribute('data-drop-highlight', 'true');
-    rect.style.pointerEvents = 'none';
-    overlay.appendChild(rect);
+    return showDropHighlight(this);
   }
 
-  /** Remove the drop-zone highlight from the overlay SVG. */
   _hideDropHighlight() {
-    if (!this._overlaySvg) return;
-    const el = this._overlaySvg.querySelector('[data-drop-highlight]');
-    if (el) el.remove();
+    return hideDropHighlight(this);
   }
 
   /** Render all image boxes as SVG <image> elements inside the given SVG. */
@@ -2251,18 +1362,7 @@ export class SpreadEditorApp {
   }
 
   _initSelectionSync(shell) {
-    shell.selection.addEventListener('selectionchange', (e) => {
-      const primary = e.detail.primary;
-      if (primary && primary.id && primary.id !== this.selectedBoxId) {
-        // If it's a known box id in this app, select it
-        const isBox = this.boxes.some(b => b.id === primary.id) || 
-                      this.imageBoxes.some(b => b.id === primary.id);
-        if (isBox) {
-          this.selectedBoxId = primary.id;
-          this.update({ full: false });
-        }
-      }
-    });
+    return initSelectionSync(this, shell);
   }
 
   _syncDocumentModel() {

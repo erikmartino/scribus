@@ -41,6 +41,8 @@ test.describe('Image Asset Upload', () => {
   test.beforeEach(async ({ page, request }, testInfo) => {
     page.on('console', msg => console.log(`BROWSER [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', err => console.error(`BROWSER [error]: ${err.message}`));
+    page.on('requestfailed', request => console.log(`FAILED REQUEST: ${request.url()} - ${request.failure()?.errorText || 'Unknown'}`));
+    page.on('response', response => { if (!response.ok()) console.log(`FAILED RESPONSE: ${response.url()} - ${response.status()}`); });
 
     // Create a unique test document from the demo template
     testDocSlug = `test-asset-w${testInfo.workerIndex}-${Date.now()}`;

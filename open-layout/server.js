@@ -115,6 +115,7 @@ function safeResolvePath(requestPath) {
 function serveFile(filePath, res) {
   fs.readFile(filePath, (readErr, data) => {
     if (readErr) {
+      console.error(`[SERVEFILE] 404 Not Found: ${filePath} (${readErr.message})`);
       sendError(res, 404, 'Not Found');
       return;
     }
@@ -135,6 +136,7 @@ function handleVendorRequest(pathname, filePath, res) {
   }
 
   if (!cdnUrl) {
+    console.error(`[VENDOR] 404 Not Found for vendor request: ${pathname}`);
     sendError(res, 404, 'Not Found');
     return;
   }
@@ -711,6 +713,7 @@ const server = http.createServer((req, res) => {
           handleVendorRequest(pathname, filePath, res);
           return;
         }
+        console.error(`[SERVER] 404 Not Found: ${pathname}`);
         sendError(res, 404, 'Not Found');
         return;
       }

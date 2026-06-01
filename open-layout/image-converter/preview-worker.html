@@ -183,6 +183,8 @@
       }
 
       const fileSet = new Set(files);
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetDocPath = urlParams.get('docPath');
 
       // 2. Find all asset folders via their meta.json
       const queue = [];
@@ -190,6 +192,10 @@
         const match = f.match(/^([^/]+)\/([^/]+)\/assets\/([^/]+)\/meta\.json$/);
         if (!match) continue;
         const [, user, doc, name] = match;
+
+        // Skip if not for this document (prevents cross-test interference)
+        const docPath = `${user}/${doc}`;
+        if (targetDocPath && docPath !== targetDocPath) continue;
 
         // Skip if preview already exists
         const previewPath = `${user}/${doc}/assets/${name}/${name}-preview.jpg`;

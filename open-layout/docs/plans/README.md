@@ -6,15 +6,16 @@ All implementation planning should live under `docs/plans/`.
 
 ## Active plans
 
-- `2026-06-01-image-placement-scaling-plan.md` — Interactive image placement, fit modes, scaling, and clipping. (Proposed/Awaiting approval).
 - `story-editor-do-not-implement-yet-plan.md` — Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
 
-Reference specifications live in `../../specs/`.
+## Reference specifications live in `../../specs/`.
 
 ## Archived/cleaned up
 
 Completed plans are removed per convention. Previously completed:
 
+- `2026-06-01-image-placement-scaling-plan.md` — Interactive image placement, fit modes, scaling, and clipping (completed).
+- `2026-06-01-spread-editor-refactoring-plan.md` — Modulating and organizing spread-editor-app.js (completed).
 - `2026-05-25-spread-editor-pages-panel-plan.md` — Multi-Spread Editing and Pages Side Panel in Spread Editor (completed).
 - `pdf-exporter-detailed-progress-plan.md` — Detailed PDF generation progress logs and UI status updates (completed).
 - `2026-05-23-drag-drop-assets-plan.md` — Implement sidebar Assets panel and drag-and-drop of assets into the spread editor (completed).
