@@ -677,6 +677,8 @@ void ActionManager::initTableMenuActions()
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 	name = "tableAdjustTableToFrame";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "tableAdjustRowHeights";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 }
 
 void ActionManager::initViewMenuActions()
@@ -709,6 +711,8 @@ void ActionManager::initViewMenuActions()
 	name = "viewShowBleeds";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 	name = "viewShowFrames";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "viewShowTableCellFrames";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 	name = "viewShowLayerMarkers";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
@@ -758,6 +762,7 @@ void ActionManager::initViewMenuActions()
 	(*scrActions)["viewShowMargins"]->setToggleAction(true);
 	(*scrActions)["viewShowBleeds"]->setToggleAction(true);
 	(*scrActions)["viewShowFrames"]->setToggleAction(true);
+	(*scrActions)["viewShowTableCellFrames"]->setToggleAction(true);
 	(*scrActions)["viewShowLayerMarkers"]->setToggleAction(true);
 	(*scrActions)["viewShowImages"]->setToggleAction(true);
 	(*scrActions)["viewShowGrid"]->setToggleAction(true);
@@ -780,6 +785,7 @@ void ActionManager::initViewMenuActions()
 	(*scrActions)["viewShowMargins"]->setChecked(true);
 	(*scrActions)["viewShowBleeds"]->setChecked(true);
 	(*scrActions)["viewShowFrames"]->setChecked(true);
+	(*scrActions)["viewShowTableCellFrames"]->setChecked(false);
 	(*scrActions)["viewShowLayerMarkers"]->setChecked(false);
 	(*scrActions)["viewShowImages"]->setChecked(true);
 	(*scrActions)["viewShowGuides"]->setChecked(true);
@@ -798,6 +804,7 @@ void ActionManager::initViewMenuActions()
 	connect( (*scrActions)["viewShowMargins"], SIGNAL(triggered()), mainWindow, SLOT(toggleMarks()) );
 	connect( (*scrActions)["viewShowBleeds"], SIGNAL(triggered()), mainWindow, SLOT(toggleBleeds()) );
 	connect( (*scrActions)["viewShowFrames"], SIGNAL(triggered()), mainWindow, SLOT(toggleFrames()) );
+	connect( (*scrActions)["viewShowTableCellFrames"], SIGNAL(triggered()), mainWindow, SLOT(toggleTableCellFrames()) );
 	connect( (*scrActions)["viewShowLayerMarkers"], SIGNAL(triggered()), mainWindow, SLOT(toggleLayerMarkers()) );
 	connect( (*scrActions)["viewShowImages"], SIGNAL(triggered()), mainWindow, SLOT(toggleImageVisibility()) );
 	connect( (*scrActions)["viewShowGrid"], SIGNAL(triggered()), mainWindow, SLOT(toggleGrid()) );
@@ -1256,6 +1263,7 @@ void ActionManager::disconnectNewDocActions()
 	(*scrActions)["tableDistributeColumnsEvenly"]->disconnect();
 	(*scrActions)["tableAdjustFrameToTable"]->disconnect();
 	(*scrActions)["tableAdjustTableToFrame"]->disconnect();
+	(*scrActions)["tableAdjustRowHeights"]->disconnect();
 	(*scrActions)["itemAdjustFrameHeightToText"]->disconnect();
 	(*scrActions)["itemAdjustFrameToImage"]->disconnect();
 	(*scrActions)["itemAdjustImageToFrame"]->disconnect();
@@ -1315,6 +1323,7 @@ void ActionManager::connectNewDocActions(ScribusDoc *currDoc)
 	connect( (*scrActions)["tableDistributeColumnsEvenly"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_DistributeTableColumnsEvenly()));
 	connect( (*scrActions)["tableAdjustFrameToTable"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustFrameToTable()));
 	connect( (*scrActions)["tableAdjustTableToFrame"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustTableToFrame()));
+	connect( (*scrActions)["tableAdjustRowHeights"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustTableRowHeights()));
 	connect( (*scrActions)["itemAdjustFrameHeightToText"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustFrameHeightToText()) );
 	connect( (*scrActions)["itemAdjustFrameToImage"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustFrametoImageSize()) );
 	connect( (*scrActions)["itemAdjustImageToFrame"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustImagetoFrameSize()) );
@@ -1637,13 +1646,14 @@ void ActionManager::languageChange()
 	(*scrActions)["tableDeleteRows"]->setTexts(tr("Delete Rows"));
 	(*scrActions)["tableDeleteColumns"]->setTexts(tr("Delete Columns"));
 	(*scrActions)["tableMergeCells"]->setTexts(tr("Merge Cells"));
-	(*scrActions)["tableSplitCells"]->setTexts(tr("Split Cells..."));
+	(*scrActions)["tableSplitCells"]->setTexts(tr("Unmerge Cells..."));
 	(*scrActions)["tableSetRowHeights"]->setTexts(tr("Set Row Heights..."));
 	(*scrActions)["tableSetColumnWidths"]->setTexts(tr("Set Column Widths..."));
 	(*scrActions)["tableDistributeRowsEvenly"]->setTexts(tr("Distribute Rows Evenly"));
 	(*scrActions)["tableDistributeColumnsEvenly"]->setTexts(tr("Distribute Columns Evenly"));
 	(*scrActions)["tableAdjustFrameToTable"]->setTexts(tr("Adjust Frame to Table"));
 	(*scrActions)["tableAdjustTableToFrame"]->setTexts(tr("Adjust Table to Frame"));
+	(*scrActions)["tableAdjustRowHeights"]->setTexts( tr("Adjust Row Height to Text"));
 	(*scrActions)["itemAdjustFrameHeightToText"]->setTexts( tr("Adjust Frame Height to Text"));
 	(*scrActions)["itemAdjustFrameToImage"]->setTexts( tr("Adjust Frame to Image"));
 	(*scrActions)["itemAdjustImageToFrame"]->setTexts( tr("Adjust Image to Frame"));
@@ -1716,6 +1726,7 @@ void ActionManager::languageChange()
 	(*scrActions)["viewShowMargins"]->setTexts( tr("Show &Margins"));
 	(*scrActions)["viewShowBleeds"]->setTexts( tr("Show Bleeds"));
 	(*scrActions)["viewShowFrames"]->setTexts( tr("Show &Frames"));
+	(*scrActions)["viewShowTableCellFrames"]->setTexts( tr("Show Table Cell &Outlines"));
 	(*scrActions)["viewShowLayerMarkers"]->setTexts( tr("Show Layer Indicators"));
 	(*scrActions)["viewShowImages"]->setTexts( tr("Show &Images"));
 	(*scrActions)["viewShowGrid"]->setTexts( tr("Show &Grid"));
@@ -2390,6 +2401,7 @@ void ActionManager::createDefaultMenus()
 		<< "viewShowMargins"
 		<< "viewShowBleeds"
 		<< "viewShowFrames"
+		<< "viewShowTableCellFrames"
 		<< "viewShowLayerMarkers"
 		<< "viewShowImages"
 		<< "viewShowGrid"
@@ -2414,7 +2426,8 @@ void ActionManager::createDefaultMenus()
 		<< "tableDistributeRowsEvenly"
 		<< "tableDistributeColumnsEvenly"
 		<< "tableAdjustFrameToTable"
-		<< "tableAdjustTableToFrame";
+		<< "tableAdjustTableToFrame"
+		<< "tableAdjustRowHeights";
 	//Extras
 	++itmenu;
 	itmenu->second

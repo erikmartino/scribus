@@ -75,6 +75,7 @@ void Prefs_Display::languageChange()
 	showTextChainsCheckBox->setToolTip( "<qt>" + tr("Enable or disable the display of linked frames") + "</qt>");
 	showControlCharsCheckBox->setToolTip( "<qt>" + tr("Display non-printing characters such as paragraph markers in text frames") + "</qt>");
 	showFramesCheckBox->setToolTip( "<qt>" + tr("Turns the display of frames on or off") + "</qt>");
+	showTableCellFramesCheckBox->setToolTip( "<qt>" + tr("Turns the display of table cell frames on or off") + "</qt>");
 	showLayerIndicatorsCheckBox->setToolTip( "<qt>" + tr("Turns the display of layer indicators on or off") + "</qt>");
 	showImagesCheckBox->setToolTip( "<qt>" + tr("Turns the display of images on or off") + "</qt>");
 	showPageShadowCheckBox->setToolTip( "<qt>" + tr("Turns the page shadow on or off") + "</qt>");
@@ -114,6 +115,7 @@ void Prefs_Display::restoreDefaults(struct ApplicationPrefs *prefsData)
 	showRulersRelativeToPageCheckBox->setChecked(prefsData->guidesPrefs.rulerMode);
 	showTextChainsCheckBox->setChecked(prefsData->guidesPrefs.linkShown);
 	showFramesCheckBox->setChecked(prefsData->guidesPrefs.framesShown);
+	showTableCellFramesCheckBox->setChecked(prefsData->guidesPrefs.tableCellFramesShown);
 	showLayerIndicatorsCheckBox->setChecked(prefsData->guidesPrefs.layerMarkersShown);
 	showUnprintableAreaInMarginColorCheckBox->setChecked(prefsData->displayPrefs.marginColored);
 	showBleedAreaCheckBox->setChecked(prefsData->guidesPrefs.showBleed);
@@ -407,6 +409,7 @@ void Prefs_Display::saveGuiToPrefs(struct ApplicationPrefs *prefsData) const
 	prefsData->guidesPrefs.rulerMode = showRulersRelativeToPageCheckBox->isChecked();
 	prefsData->guidesPrefs.linkShown = showTextChainsCheckBox->isChecked();
 	prefsData->guidesPrefs.framesShown = showFramesCheckBox->isChecked();
+	prefsData->guidesPrefs.tableCellFramesShown = showTableCellFramesCheckBox->isChecked();
 	prefsData->guidesPrefs.layerMarkersShown = showLayerIndicatorsCheckBox->isChecked();
 	prefsData->displayPrefs.marginColored = showUnprintableAreaInMarginColorCheckBox->isChecked();
 	prefsData->guidesPrefs.showBleed = showBleedAreaCheckBox->isChecked();

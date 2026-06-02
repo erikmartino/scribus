@@ -12,9 +12,11 @@ for which a new license (GPL+exception) is in place.
 
 #include <QList>
 
+#include "scribusstructs.h"
 #include "styleitem.h"
 #include "styles/styleset.h"
 #include "styles/cellstyle.h"
+#include "tableborder.h"
 
 class SMCellStyleWidget;
 class QTabWidget;
@@ -94,6 +96,8 @@ private slots:
 	void slotFillColor();
 	void slotFillShade();
 	void slotParentChanged(const QString &parent);
+	void slotCellPaddingChanged(const MarginStruct &padding);
+	void slotBordersChanged(TableSides sides, const TableBorder& border);
 };
 
 #endif // SMCELLSTYLES_H

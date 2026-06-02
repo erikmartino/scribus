@@ -56,6 +56,7 @@ for which a new license (GPL+exception) is in place.
 #include "filewatcher.h"
 #include "fpoint.h"
 #include "hyphenator.h"
+#include "manager/pagepreset_manager.h"
 #include "notesstyles.h"
 #include "numeration.h"
 #include "pageitem.h"
@@ -234,7 +235,7 @@ ScribusDoc::ScribusDoc() : UndoObject( tr("Document")), Observable<ScribusDoc>(n
 }
 
 
-ScribusDoc::ScribusDoc(const QString& docName, int unitindex, const PageSize& pagesize, const MarginStruct& margins, const DocPagesSetup& pagesSetup) : UndoObject( tr("Document")),
+ScribusDoc::ScribusDoc(const QString& docName, int unitindex, const PageSizeInfo& pagesize, const MarginStruct& margins, const DocPagesSetup& pagesSetup) : UndoObject( tr("Document")),
 	m_appPrefsData(PrefsManager::instance().appPrefs),
 	m_docPrefsData(PrefsManager::instance().appPrefs),
 	m_undoManager(UndoManager::instance()),
@@ -254,9 +255,9 @@ ScribusDoc::ScribusDoc(const QString& docName, int unitindex, const PageSize& pa
 	m_alignTransaction(nullptr)
 {
 	m_docPrefsData.docSetupPrefs.docUnitIndex = unitindex;
-	m_docPrefsData.docSetupPrefs.pageHeight = pagesize.height();
-	m_docPrefsData.docSetupPrefs.pageWidth = pagesize.width();
-	m_docPrefsData.docSetupPrefs.pageSize = pagesize.name();
+	m_docPrefsData.docSetupPrefs.pageHeight = pagesize.height;
+	m_docPrefsData.docSetupPrefs.pageWidth = pagesize.width;
+	m_docPrefsData.docSetupPrefs.pageSize = pagesize.id;
 	m_docPrefsData.docSetupPrefs.margins = margins;
 	maxCanvasCoordinate = FPoint(m_docPrefsData.displayPrefs.scratch.left() + m_docPrefsData.displayPrefs.scratch.right(), m_docPrefsData.displayPrefs.scratch.top() + m_docPrefsData.displayPrefs.scratch.bottom());
 	setPageSetFirstPage(pagesSetup.pageArrangement, pagesSetup.firstPageLocation);
@@ -681,14 +682,17 @@ QList<PageItem*> *ScribusDoc::parentGroup(PageItem* item, QList<PageItem*> *list
 	return retList;
 }
 
-void ScribusDoc::setup(int unitIndex, int fp, int firstLeft, int orientation, int firstPageNumber, const QString& defaultPageSize, const QString& documentName)
+void ScribusDoc::setup(int unitIndex, int fp, int firstLeft, int orientation, int firstPageNumber, QSizeF pageSize, const QString& documentName, int bindingDirection)
 {
 	m_docPrefsData.docSetupPrefs.docUnitIndex = unitIndex;
 	setPageSetFirstPage(fp, firstLeft);
 	m_docPrefsData.docSetupPrefs.pageOrientation = orientation;
-	m_docPrefsData.docSetupPrefs.pageSize = defaultPageSize;
+	PageSizeInfo psi = PagePresetManager::instance().pageInfoByDimensions(pageSize.width(), pageSize.height());
+	m_docPrefsData.docSetupPrefs.pageSize = psi.id;
 	FirstPnum = firstPageNumber;
 	m_docPrefsData.docSetupPrefs.pagePositioning = fp;
+	m_docPrefsData.docSetupPrefs.bindingDirection = bindingDirection;
+	m_docPrefsData.pdfPrefs.Binding = bindingDirection;
 	setDocumentFileName(documentName);
 	HasCMS = false;
 	if (!pdfOptions().UseLPI)
@@ -1575,6 +1579,19 @@ void ScribusDoc::redefineTableStyles(const StyleSet<TableStyle>& newStyles, bool
 			replaceTableStyles(deletion);
 	}
 	m_docTableStyles.invalidate();
+
+	// Register synthetic conditional cell styles for all tables BEFORE
+	// refreshing, so updateCells() resolves them with the styles present.
+	auto syncItems = [](const QList<PageItem*>& items)
+	{
+		for (PageItem *item : items)
+			if (item && item->isTable())
+				item->asTable()->syncConditionalStylesToContext();
+	};
+	syncItems(DocItems);
+	syncItems(MasterItems);
+	invalidateCellStyles();
+	refreshTableItems();
 }
 
 void ScribusDoc::redefineCellStyles(const StyleSet<CellStyle>& newStyles, bool removeUnused)
@@ -1596,6 +1613,7 @@ void ScribusDoc::redefineCellStyles(const StyleSet<CellStyle>& newStyles, bool r
 			replaceCellStyles(deletion);
 	}
 	m_docCellStyles.invalidate();
+	refreshTableItems();
 }
 
 /*
@@ -6203,11 +6221,22 @@ void ScribusDoc::reformPages(bool moveObjects)
 	int rowcounter = 0;
 	double maxXPos = 0.0;
 	double maxYPos = 0.0;
-	double currentXPos = m_docPrefsData.displayPrefs.scratch.left();
-	double currentYPos = m_docPrefsData.displayPrefs.scratch.top();
 	double lastYPos = Pages->at(0)->initialHeight();
-	currentXPos += (Pages->at(0)->initialWidth() + m_docPrefsData.displayPrefs.pageGapHorizontal) * counter;
-	// currentXPos += (m_docPrefsData.docSetupPrefs.pageWidth + m_docPrefsData.displayPrefs.pageGapHorizontal) * counter;
+
+	bool rtlBinding = m_docPrefsData.docSetupPrefs.bindingDirection == 1;
+
+	double currentXPos = m_docPrefsData.displayPrefs.scratch.left();
+	int columns = pageSets()[m_docPrefsData.docSetupPrefs.pagePositioning].Columns;
+	if (rtlBinding && columns > 1)
+	{
+		counter = counter == 1 ? 0 : 1;
+		currentXPos +=  m_docPrefsData.docSetupPrefs.pageWidth
+			- (m_docPrefsData.docSetupPrefs.pageWidth + m_docPrefsData.displayPrefs.pageGapHorizontal) * counter;
+	}
+	else
+		currentXPos += (Pages->at(0)->initialWidth() + m_docPrefsData.displayPrefs.pageGapHorizontal) * counter;
+
+	double currentYPos = m_docPrefsData.displayPrefs.scratch.top();
 
 	ScPage* page;
 	int docPageCount = Pages->count();
@@ -6247,29 +6276,63 @@ void ScribusDoc::reformPages(bool moveObjects)
 			page->setYOffset(currentYPos);
 			if (counter < pageSets()[m_docPrefsData.docSetupPrefs.pagePositioning].Columns-1)
 			{
-				currentXPos += page->width() + m_docPrefsData.displayPrefs.pageGapHorizontal;
+				if (rtlBinding)
+				{
+					// check width of next page for correct offset
+					int w = i < Pages->size() - 1 ? Pages->at(i+1)->width() : page->width();
+					currentXPos -= w + m_docPrefsData.displayPrefs.pageGapHorizontal;
+				}
+				else
+					currentXPos += page->width() + m_docPrefsData.displayPrefs.pageGapHorizontal;
 				lastYPos = qMax(lastYPos, page->height());
 				if (counter == 0)
 				{
-					page->Margins.setLeft(page->initialMargins.right());
-					page->Margins.setRight(page->initialMargins.left());
+					if (rtlBinding)
+					{
+						page->Margins.setLeft(page->initialMargins.left());
+						page->Margins.setRight(page->initialMargins.right());
+					}
+					else
+					{
+						page->Margins.setLeft(page->initialMargins.right());
+						page->Margins.setRight(page->initialMargins.left());
+					}
 				}
 				else
 				{
-					page->Margins.setLeft(page->initialMargins.left());
-					page->Margins.setRight(page->initialMargins.left());
+					if (rtlBinding)
+					{
+						page->Margins.setLeft(page->initialMargins.right());
+						page->Margins.setRight(page->initialMargins.right());
+					}
+					else
+					{
+						page->Margins.setLeft(page->initialMargins.left());
+						page->Margins.setRight(page->initialMargins.left());
+					}
 				}
 			}
 			else
 			{
-				currentXPos = m_docPrefsData.displayPrefs.scratch.left();
+				if (rtlBinding && columns > 1)
+					currentXPos = m_docPrefsData.displayPrefs.scratch.left() + m_docPrefsData.docSetupPrefs.pageWidth;
+				else
+					currentXPos = m_docPrefsData.displayPrefs.scratch.left();
 				if (pageSets()[m_docPrefsData.docSetupPrefs.pagePositioning].Columns > 1)
 					currentYPos += qMax(lastYPos, page->height())+m_docPrefsData.displayPrefs.pageGapVertical;
 				else
 					currentYPos += page->height()+m_docPrefsData.displayPrefs.pageGapVertical;
 				lastYPos = 0;
-				page->Margins.setRight(page->initialMargins.right());
-				page->Margins.setLeft(page->initialMargins.left());
+				if (rtlBinding)
+				{
+					page->Margins.setRight(page->initialMargins.left());
+					page->Margins.setLeft(page->initialMargins.right());
+				}
+				else
+				{
+					page->Margins.setRight(page->initialMargins.right());
+					page->Margins.setLeft(page->initialMargins.left());
+				}
 			}
 			counter++;
 			if (counter > pageSets()[m_docPrefsData.docSetupPrefs.pagePositioning].Columns-1)
@@ -8913,9 +8976,19 @@ void ScribusDoc::itemSelection_InsertTableRows()
 		index = appMode == modeEditTable ? cell.row() + cell.rowSpan() : table->rows();
 
 	// Insert the rows.
-	table->insertRows(index, dialog->numberOfRows());
-	table->clearSelection();
-	table->adjustTable();
+	if (index == table->rows())
+	{
+		// Inserting after the last row: append and grow the table rather
+		// than rescaling existing rows to a fixed size.
+		table->appendRows(dialog->numberOfRows());
+		table->clearSelection();
+	}
+	else
+	{
+		table->insertRows(index, dialog->numberOfRows());
+		table->clearSelection();
+		table->adjustTable();
+	}
 	table->update();
 
 	m_ScMW->updateTableMenuActions();
@@ -8951,9 +9024,19 @@ void ScribusDoc::itemSelection_InsertTableColumns()
 		index = appMode == modeEditTable ? cell.column() + cell.columnSpan() : table->columns();
 
 	// Insert the columns.
-	table->insertColumns(index, dialog->numberOfColumns());
-	table->clearSelection();
-	table->adjustTable();
+	if (index == table->columns())
+	{
+		// Inserting after the last column: append and grow the table rather
+		// than rescaling existing columns to a fixed size.
+		table->appendColumns(dialog->numberOfColumns());
+		table->clearSelection();
+	}
+	else
+	{
+		table->insertColumns(index, dialog->numberOfColumns());
+		table->clearSelection();
+		table->adjustTable();
+	}
 	table->update();
 
 	m_ScMW->updateTableMenuActions();
@@ -9010,8 +9093,11 @@ void ScribusDoc::itemSelection_DeleteTableRows()
 		table->removeRows(index, numRows);
 	}
 
-	m_View->stopGesture(); // FIXME: Don't use m_View.
-	table->adjustTable();
+	m_View->stopGesture();
+	{
+		UndoBlocker ub;
+		table->adjustTable();
+	}
 	table->update();
 
 	m_ScMW->updateTableMenuActions();
@@ -9068,8 +9154,11 @@ void ScribusDoc::itemSelection_DeleteTableColumns()
 		table->removeColumns(index, numColumns);
 	}
 
-	m_View->stopGesture(); // FIXME: Don't use m_View.
-	table->adjustTable();
+	m_View->stopGesture();
+	{
+		UndoBlocker ub;
+		table->adjustTable();
+	}
 	table->update();
 
 	m_ScMW->updateTableMenuActions();
@@ -9103,12 +9192,52 @@ void ScribusDoc::itemSelection_MergeTableCells()
 	const int numRows = selectedRows.last() - row + 1;
 	const int numColumns = selectedColumns.last() - column + 1;
 
+	UndoTransaction transaction;
+	if (UndoManager::undoEnabled())
+		transaction = m_undoManager->beginTransaction(table->getUName(), Um::ITable, Um::TableMergeCells, "", Um::ITable);
+
 	QScopedValueRollback<bool> dontResizeRb(dontResize, true);
 	table->mergeCells(row, column, numRows, numColumns);
 
 	m_View->stopGesture(); // FIXME: Don't use m_View.
 	table->adjustTable();
 	table->update();
+
+	if (transaction)
+			transaction.commit();
+
+	m_ScMW->updateTableMenuActions();
+	changed();
+	changedPagePreview();
+}
+
+void ScribusDoc::itemSelection_SplitTableCells()
+{
+	PageItem* item = m_Selection->itemAt(0);
+	if (!item || !item->isTable())
+		return;
+	PageItem_Table* table = item->asTable();
+	if (!table)
+		return;
+	if (appMode != modeEditTable)
+		return;
+
+	// Split applies to the active cell when it's a merged cell.
+	TableCell active = table->activeCell();
+	if (!active.isValid() || (active.rowSpan() == 1 && active.columnSpan() == 1))
+		return;
+
+	UndoTransaction transaction;
+	if (UndoManager::undoEnabled())
+		transaction = m_undoManager->beginTransaction(table->getUName(), Um::ITable, Um::TableUnmergeCells, "", Um::ITable);
+
+	QScopedValueRollback<bool> dontResizeRb(dontResize, true);
+	table->splitCell(active.row(), active.column(), 1, 1);
+	table->adjustTable();
+	table->update();
+
+	if (transaction)
+			transaction.commit();
 
 	m_ScMW->updateTableMenuActions();
 	changed();
@@ -9125,12 +9254,21 @@ void ScribusDoc::itemSelection_SetTableRowHeights()
 	if (!table)
 		return;
 
+	double rowHeight {PageItem_Table::MinimumRowHeight};
+	if (appMode == modeEditTable)
+	{
+		if (table->selectedCells().isEmpty())
+			rowHeight = table->rowHeight(table->activeCell().row());
+		else
+			rowHeight = table->rowHeight(table->selectedRows().values()[0]);
+	}
+
 	using TableRowHeightsDialogDeleter = QScopedPointerObjectDeleteLater<TableRowHeightsDialog>;
-	QScopedPointer<TableRowHeightsDialog, TableRowHeightsDialogDeleter> dialog(new TableRowHeightsDialog(this, m_ScMW));
+	QScopedPointer<TableRowHeightsDialog, TableRowHeightsDialogDeleter> dialog(new TableRowHeightsDialog(unitIndex(), rowHeight, m_ScMW));
 	if (dialog->exec() != QDialog::Accepted)
 		return;
+	rowHeight = dialog->rowHeight();
 
-	const qreal rowHeight = dialog->rowHeight();
 	QScopedValueRollback<bool> dontResizeRb(dontResize, true);
 
 	UndoTransaction activeTransaction;
@@ -9161,7 +9299,20 @@ void ScribusDoc::itemSelection_SetTableRowHeights()
 		for (int row = 0; row < table->rows(); ++row)
 			table->resizeRow(row, rowHeight / unitRatio());
 	}
-	table->adjustTable();
+	// If every row was resized, there is no sibling row to absorb the change,
+	// so adjustTable() would rescale them back to the current frame height and
+	// revert the edit. In that case grow/shrink the frame to the new table
+	// height instead. Otherwise keep the table size fixed and let adjustTable()
+	// redistribute.
+	bool allRowsResized =
+		(appMode != modeEditTable) ||                                                           // "all rows" branch
+		(table->selectedCells().isEmpty() && table->activeCell().rowSpan() == table->rows()) || // active span covers all
+		(!table->selectedCells().isEmpty() && table->selectedRows().count() == table->rows());  // selection covers all
+
+	if (allRowsResized)
+		table->adjustFrameToTable();
+	else
+		table->adjustTable();
 	table->update();
 	if (activeTransaction)
 		activeTransaction.commit();
@@ -9180,12 +9331,22 @@ void ScribusDoc::itemSelection_SetTableColumnWidths()
 	if (!table)
 		return;
 
+
+	double columnWidth {PageItem_Table::MinimumColumnWidth};
+	if (appMode == modeEditTable)
+	{
+		if (table->selectedCells().isEmpty())
+			columnWidth = table->columnWidth(table->activeCell().column());
+		else
+			columnWidth = table->columnWidth(table->selectedColumns().values()[0]);
+	}
+
 	using TableColumnWidthsDialogDeleter = QScopedPointerObjectDeleteLater<TableColumnWidthsDialog>;
-	QScopedPointer<TableColumnWidthsDialog, TableColumnWidthsDialogDeleter> dialog(new TableColumnWidthsDialog(this, m_ScMW));
+	QScopedPointer<TableColumnWidthsDialog, TableColumnWidthsDialogDeleter> dialog(new TableColumnWidthsDialog(unitIndex(), columnWidth, m_ScMW));
 	if (dialog->exec() != QDialog::Accepted)
 		return;
+	columnWidth = dialog->columnWidth();
 
-	const qreal columnWidth = dialog->columnWidth();
 	QScopedValueRollback<bool> dontResizeRb(dontResize, true);
 
 	UndoTransaction activeTransaction;
@@ -9218,7 +9379,19 @@ void ScribusDoc::itemSelection_SetTableColumnWidths()
 			table->resizeColumn(column, columnWidth / unitRatio());
 	}
 
-	table->adjustTable();
+	// If every column was resized, there is no sibling column to absorb the
+	// change, so adjustTable() would just rescale them back to the current
+	// frame width and revert the edit. In that case grow/shrink the frame to
+	// the new table width instead. Otherwise keep the table size fixed and
+	// let adjustTable() redistribute.
+	bool allColumnsResized = (appMode != modeEditTable) ||                                            // "all columns" branch
+		(table->selectedCells().isEmpty() && table->activeCell().columnSpan() == table->columns()) || // active span covers all
+		(!table->selectedCells().isEmpty() && table->selectedColumns().count() == table->columns());  // selection covers all
+
+	if (allColumnsResized)
+		table->adjustFrameToTable();
+	else
+		table->adjustTable();
 	table->update();
 	if (activeTransaction)
 		activeTransaction.commit();
@@ -16642,6 +16815,42 @@ void ScribusDoc::itemSelection_AdjustFrameHeightToText( Selection *customSelecti
 	itemSelection->itemAt(0)->emitAllToGUI();
 }
 
+void ScribusDoc::itemSelection_AdjustTableRowHeights()
+{
+	PageItem* item = m_Selection->itemAt(0);
+	if (!item || !item->isTable())
+		return;
+	PageItem_Table* table = item->asTable();
+	if (!table)
+		return;
+
+	QScopedValueRollback<bool> dontResizeRb(dontResize, true);
+
+	UndoTransaction transaction;
+	if (UndoManager::undoEnabled())
+		transaction = m_undoManager->beginTransaction(table->getUName(), Um::ITable, Um::TableRowHeight, "", Um::IResize);
+
+	if (appMode == modeEditTable && !table->selectedRows().isEmpty())
+	{
+		// Adjust only the selected rows.
+		for (int row : table->selectedRows())
+			table->adjustRowHeight(row);
+	}
+	else
+	{
+		// No row selection -- adjust all rows.
+		table->adjustAllRowHeights();
+	}
+
+	table->adjustFrameToTable();
+	table->update();
+	changed();
+	changedPagePreview();
+
+	if (transaction)
+		transaction.commit();
+}
+
 void ScribusDoc::itemSelection_AdjustFrameToTable()
 {
 	// TODO: Do this in an undo transaction?
@@ -17887,6 +18096,8 @@ bool ScribusDoc::invalidateVariableTextFrames(const Mark* mrk, bool forceUpdate)
 //and update marks list in Marks Manager
 bool ScribusDoc::updateMarks(bool updateNotesMarks)
 {
+	if (masterPageMode())
+		return false;
 	if (updateNotesMarks && !notesList().isEmpty())
 	{
 		for (PageItem* item : std::as_const(DocItems))
@@ -18803,6 +19014,7 @@ void ScribusDoc::invalidateMasterFrames(const NotesStyle *nStyle)
 		toInvalidate.takeFirst()->invalid = true;
 }
 
+
 PageItem_NoteFrame *ScribusDoc::endNoteFrame(const NotesStyle *nStyle, PageItem_TextFrame *master)
 {
 	if (nStyle->range() == NSRdocument)
@@ -18866,4 +19078,53 @@ void ScribusDoc::ResetFormFields()
 
 	changed();
 	regionsChanged()->update(QRect());
+}
+
+
+void ScribusDoc::refreshTableItems()
+{
+	auto refresh = [](const QList<PageItem*>& items)
+	{
+		for (PageItem *item : items)
+		{
+			if (item && item->isTable())
+			{
+				PageItem_Table *table = item->asTable();
+				table->adjustTable();
+				table->updateClip();
+				table->update();
+			}
+		}
+	};
+	refresh(DocItems);
+	refresh(MasterItems);
+}
+
+void ScribusDoc::registerSyntheticCellStyle(const CellStyle& style)
+{
+	// Lightweight insert/update of a (synthetic) cell style without the
+	// invalidate-and-refresh cascade that redefineCellStyles triggers. Used
+	// by table conditional-formatting sync, which runs during refresh and
+	// must not re-enter it.
+	int idx = m_docCellStyles.find(style.name());
+	if (idx >= 0)
+		m_docCellStyles[idx] = style;   // update in place
+	else
+		m_docCellStyles.create(style);  // add new
+}
+
+
+void ScribusDoc::syncAllTableConditionalStyles()
+{
+	auto sync = [](const QList<PageItem*>& items)
+	{
+		for (PageItem *item : items)
+		{
+			if (item && item->isTable())
+				item->asTable()->syncConditionalStylesToContext();
+		}
+	};
+	sync(DocItems);
+	sync(MasterItems);
+	refreshTableItems();
 }

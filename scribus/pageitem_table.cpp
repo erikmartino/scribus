@@ -14,6 +14,7 @@ for which a new license (GPL+exception) is in place.
 #include <QMutableSetIterator>
 #include <QPointF>
 #include <QRectF>
+#include <QScopedValueRollback>
 #include <QSet>
 #include <QString>
 #include <QTransform>
@@ -23,16 +24,17 @@ for which a new license (GPL+exception) is in place.
 #include "cellarea.h"
 #include "collapsedtablepainter.h"
 #include "pageitem.h"
+#include "pageitem_table.h"
 #include "pageitem_textframe.h"
 #include "scpainter.h"
 #include "scribusdoc.h"
+#include "styles/styleset.h"
 #include "styles/tablestyle.h"
 #include "tablehandle.h"
 #include "tableutils.h"
 #include "undomanager.h"
 #include "undostate.h"
-
-#include "pageitem_table.h"
+#include "util_text.h"
 
 #ifdef WANT_DEBUG
 	#define ASSERT_VALID() assertValid(); qt_noop()
@@ -540,9 +542,26 @@ void PageItem_Table::insertRows(int index, int numRows)
 	if (index < 0 || index > rows() || numRows < 1)
 		return;
 
+	if (UndoManager::undoEnabled())
+	{
+		SimpleState *ss = new SimpleState(Um::TableRowInsert, QString(), Um::ITable);
+		ss->set("TABLE_INSERT_ROWS");
+		ss->set("INDEX", index);
+		ss->set("NUM_ROWS", numRows);
+		undoManager->action(this, ss);
+	}
+
 	double rowHeight = m_rowHeights.at(qMax(index - 1, 0));
 	double rowPosition = index == 0 ? 0.0 : m_rowPositions.at(index - 1) + rowHeight;
 
+	// Inherit borders from the adjacent existing row (the row above the
+	// insertion point, or row 0 if inserting at the top). Table styles don't
+	// yet define borders; when they do, this should defer to the style's
+	// border definitions.
+	// const int templateRow = (index > 0) ? index - 1 : 0;
+	const bool haveTemplate = (rows() > 0);
+
+	UndoManager::instance()->setUndoEnabled(false);
 	for (int row = index; row < index + numRows; ++row)
 	{
 		// Insert row height and position.
@@ -554,7 +573,9 @@ void PageItem_Table::insertRows(int index, int numRows)
 		QList<TableCell> cellRow;
 		cellRow.reserve(columns());
 		for (int col = 0; col < columns(); ++col)
+		{
 			cellRow.append(TableCell(row, col, this));
+		}
 		m_cellRows.insert(row, cellRow);
 	}
 
@@ -578,6 +599,39 @@ void PageItem_Table::insertRows(int index, int numRows)
 
 	// Update cells. TODO: Not for entire table.
 	updateCells();
+	UndoManager::instance()->setUndoEnabled(true);
+
+	emit changed();
+
+	ASSERT_VALID();
+}
+
+void PageItem_Table::appendRows(int numRows)
+{
+	ASSERT_VALID();
+
+	if (numRows < 1)
+		return;
+
+	const int index = rows();
+
+	if (UndoManager::undoEnabled())
+	{
+		SimpleState *ss = new SimpleState(Um::TableRowInsert, QString(), Um::ITable);
+		ss->set("TABLE_APPEND_ROWS");
+		ss->set("INDEX", index);
+		ss->set("NUM_ROWS", numRows);
+		ss->set("OLD_WIDTH", width());
+		ss->set("OLD_HEIGHT", height());
+		undoManager->action(this, ss);
+	}
+
+	UndoBlocker ub;
+
+	// New rows inherit the last row's height (insertRows uses the row at
+	// index-1). Grow the frame to fit rather than rescaling existing rows.
+	insertRows(index, numRows);
+	adjustFrameToTable();
 
 	emit changed();
 
@@ -590,6 +644,19 @@ void PageItem_Table::removeRows(int index, int numRows)
 
 	if (!validRow(index) || numRows < 1 || numRows >= rows() || index + numRows > rows())
 		return;
+
+	// Snapshot before destroying anything. The snapshot reads from live
+	// state, so it must happen while everything is still intact.
+	if (UndoManager::undoEnabled())
+	{
+		auto *is = new ScItemState<TableRowsSnapshot>(
+			Um::TableRowRemove, QString(), Um::ITable);
+		is->set("TABLE_REMOVE_ROWS");
+		is->setItem(snapshotRows(index, numRows));
+		undoManager->action(this, is);
+	}
+
+	UndoManager::instance()->setUndoEnabled(false);
 
 	// Remove row heights, row positions and rows of cells.
 	double removedHeight = 0.0;
@@ -618,23 +685,18 @@ void PageItem_Table::removeRows(int index, int numRows)
 			cell.moveUp(numRows);
 	}
 
-	// Update row spans.
 	updateSpans(index, numRows, RowsRemoved);
-
-	// Decrease number of rows.
 	m_rows -= numRows;
-
-	// Update cells. TODO: Not for entire table.
 	updateCells();
 
-	// Remove any invalid cells from selection.
 	QMutableSetIterator<TableCell> cellIt(m_selection);
 	while (cellIt.hasNext())
 		if (!cellIt.next().isValid())
 			cellIt.remove();
 
-	// Move to cell below.
 	moveTo(cellAt(qMin(index + 1, rows() - 1), m_activeColumn));
+
+	UndoManager::instance()->setUndoEnabled(true);
 
 	emit changed();
 
@@ -648,9 +710,26 @@ void PageItem_Table::insertColumns(int index, int numColumns)
 	if (index < 0 || index > columns() || numColumns < 1)
 		return;
 
+	if (UndoManager::undoEnabled())
+	{
+		SimpleState *ss = new SimpleState(Um::TableColumnInsert, QString(), Um::ITable);
+		ss->set("TABLE_INSERT_COLUMNS");
+		ss->set("INDEX", index);
+		ss->set("NUM_COLUMNS", numColumns);
+		undoManager->action(this, ss);
+	}
+
 	double columnWidth = m_columnWidths.at(qMax(index - 1, 0));
 	double columnPosition = index == 0 ? 0.0 : m_columnPositions.at(index - 1) + columnWidth;
 
+	// Inherit borders from the adjacent existing column (the column to the
+	// left of the insertion point, or column 0 if inserting at the start).
+	// Table styles don't yet define borders; when they do, this should defer
+	// to the style's border definitions.
+	// const int templateCol = (index > 0) ? index - 1 : 0;
+	const bool haveTemplate = (columns() > 0);
+
+	UndoManager::instance()->setUndoEnabled(false);
 	for (int col = index; col < index + numColumns; ++col)
 	{
 		// Insert column width and position.
@@ -660,7 +739,9 @@ void PageItem_Table::insertColumns(int index, int numColumns)
 
 		// Insert a column of cells.
 		for (int row = 0; row < rows(); ++row)
+		{
 			m_cellRows[row].insert(col, TableCell(row, col, this));
+		}
 	}
 
 	// Adjust following columns.
@@ -683,6 +764,40 @@ void PageItem_Table::insertColumns(int index, int numColumns)
 
 	// Update cells. TODO: Not for entire table.
 	updateCells();
+	UndoManager::instance()->setUndoEnabled(true);
+
+	emit changed();
+
+	ASSERT_VALID();
+}
+
+void PageItem_Table::appendColumns(int numColumns)
+{
+	ASSERT_VALID();
+
+	if (numColumns < 1)
+		return;
+
+	const int index = columns();
+
+	if (UndoManager::undoEnabled())
+	{
+		SimpleState *ss = new SimpleState(Um::TableColumnInsert, QString(), Um::ITable);
+		ss->set("TABLE_APPEND_COLUMNS");
+		ss->set("INDEX", index);
+		ss->set("NUM_COLUMNS", numColumns);
+		ss->set("OLD_WIDTH", width());
+		ss->set("OLD_HEIGHT", height());
+		undoManager->action(this, ss);
+	}
+
+	UndoBlocker ub;
+
+	// New columns inherit the last column's width (insertColumns uses the
+	// column at index-1). Grow the frame to fit rather than rescaling
+	// existing columns.
+	insertColumns(index, numColumns);
+	adjustFrameToTable();
 
 	emit changed();
 
@@ -696,7 +811,17 @@ void PageItem_Table::removeColumns(int index, int numColumns)
 	if (!validColumn(index) || numColumns < 1 || numColumns >= columns() || index + numColumns > columns())
 		return;
 
-	// Remove column widths, column positions and columns of cells.
+	if (UndoManager::undoEnabled())
+	{
+		auto *is = new ScItemState<TableColumnsSnapshot>(
+			Um::TableColumnRemove, QString(), Um::ITable);
+		is->set("TABLE_REMOVE_COLUMNS");
+		is->setItem(snapshotColumns(index, numColumns));
+		undoManager->action(this, is);
+	}
+
+	UndoManager::instance()->setUndoEnabled(false);
+
 	double removedWidth = 0.0;
 	for (int i = 0; i < numColumns; ++i)
 	{
@@ -727,7 +852,7 @@ void PageItem_Table::removeColumns(int index, int numColumns)
 	// Decrease number of columns.
 	m_columns -= numColumns;
 
-	// Update cells. TODO: Not for entire table.
+	// Update cells.
 	updateCells();
 
 	// Remove any invalid cells from selection.
@@ -738,6 +863,8 @@ void PageItem_Table::removeColumns(int index, int numColumns)
 
 	// Move to cell to the right.
 	moveTo(cellAt(m_activeRow, qMin(m_activeColumn + 1, columns() - 1)));
+
+	UndoManager::instance()->setUndoEnabled(true);
 
 	emit changed();
 
@@ -788,11 +915,17 @@ void PageItem_Table::distributeRows(int startRow, int endRow)
 	if (startRow < 0 || endRow > rows() - 1 || startRow > endRow)
 		return;
 
+	UndoTransaction trans;
+	if (UndoManager::undoEnabled())
+		trans = undoManager->beginTransaction(getUName(), getUPixmap(), Um::TableDistributeRows, QString(), Um::IResize);
+
 	const int numRows = endRow - startRow + 1;
 	const double newHeight = (rowPosition(endRow) + rowHeight(endRow) - rowPosition(startRow)) / numRows;
-
 	for (int row = startRow; row <= endRow; ++row)
 		resizeRow(row, newHeight);
+
+	if (trans)
+		trans.commit();
 }
 
 void PageItem_Table::distributeColumns(int startColumn, int endColumn)
@@ -800,11 +933,17 @@ void PageItem_Table::distributeColumns(int startColumn, int endColumn)
 	if (startColumn < 0 || endColumn > columns() - 1 || startColumn > endColumn)
 		return;
 
+	UndoTransaction trans;
+	if (UndoManager::undoEnabled())
+		trans = undoManager->beginTransaction(getUName(), getUPixmap(), Um::TableDistributeColumns, QString(), Um::IResize);
+
 	const int numColumns = endColumn - startColumn + 1;
 	const double newWidth = (columnPosition(endColumn) + columnWidth(endColumn) - columnPosition(startColumn)) / numColumns;
-
 	for (int column = startColumn; column <= endColumn; ++column)
 		resizeColumn(column, newWidth);
+
+	if (trans)
+		trans.commit();
 }
 
 double PageItem_Table::rowPosition(int row) const
@@ -813,6 +952,66 @@ double PageItem_Table::rowPosition(int row) const
 		return 0.0;
 
 	return m_rowPositions.at(row);
+}
+
+double PageItem_Table::naturalRowHeight(int row, bool* hasContent)
+{
+	if (!validRow(row))
+	{
+		if (hasContent)
+			*hasContent = false;
+		return rowHeight(row);
+	}
+
+	double maxHeight = 0.0;
+	bool anyContent = false;
+	const int columnCount = columns();
+
+	for (int i = 0; i < columnCount; ++i)
+	{
+		TableCell cell = cellAt(row, i);
+		if (cell.row() != row)
+			continue;
+		if (cell.rowSpan() > 1)
+			continue;
+
+		if (cell.textFrame()->itemText.length() > 0)
+			anyContent = true;
+
+		double frameHeight = cell.textFrame()->naturalContentHeight();
+		double cellOverhead = cell.topPadding() + cell.bottomPadding() + cell.maxTopBorderWidth() / 2.0 + cell.maxBottomBorderWidth() / 2.0;
+		double cellHeight = frameHeight + cellOverhead;
+		maxHeight = qMax(maxHeight, cellHeight);
+	}
+
+	if (hasContent)
+		*hasContent = anyContent;
+
+	const double minHeight = 8.0;
+	return qMax(maxHeight, minHeight);
+}
+
+void PageItem_Table::adjustRowHeight(int row)
+{
+	bool hasContent = false;
+	double natural = naturalRowHeight(row, &hasContent);
+
+	// Don't shrink rows that have no content -- the user's manual sizing
+	// should be preserved when there's nothing to fit.
+	if (!hasContent)
+		return;
+
+	if (qFuzzyCompare(natural, rowHeight(row)))
+		return;
+
+	resizeRow(row, natural, MoveFollowing);
+}
+
+void PageItem_Table::adjustAllRowHeights()
+{
+	const int rowCount = rows();
+	for (int i = 0; i < rowCount; ++i)
+		adjustRowHeight(i);
 }
 
 double PageItem_Table::columnWidth(int column) const
@@ -869,6 +1068,17 @@ void PageItem_Table::mergeCells(int row, int column, int numRows, int numCols)
 	if (!validCell(row, column) || !validCell(row + numRows - 1, column + numCols - 1))
 		return;
 
+	if (UndoManager::undoEnabled())
+	{
+		SimpleState *ss = new SimpleState(Um::TableMergeCells, QString(), Um::ITable);
+		ss->set("TABLE_MERGE_CELLS");
+		ss->set("ROW", row);
+		ss->set("COLUMN", column);
+		ss->set("NUM_ROWS", numRows);
+		ss->set("NUM_COLS", numCols);
+		undoManager->action(this, ss);
+	}
+
 	CellArea newArea(row, column, numCols, numRows);
 
 	// Unite intersecting areas.
@@ -919,8 +1129,67 @@ void PageItem_Table::mergeCells(int row, int column, int numRows, int numCols)
 
 void PageItem_Table::splitCell(int row, int column, int numRows, int numCols)
 {
-	// Not implemented.
+	// The menu label for this operation is "Unmerge Cells", but the
+	// code keeps the "split" name. The numRows/numCols parameters are unused.
+	// This only unmerges to the original cells. Word-style subdivision into
+	// row x column split cells is not possible in Scribus's grid table model.
+
+	Q_UNUSED(numRows);
+	Q_UNUSED(numCols);
+
+	ASSERT_VALID();
+
+	if (!validCell(row, column))
+		return;
+
+	// Find the merged area to record what we're undoing.
+	CellArea targetArea;
+	bool foundArea = false;
+	for (const CellArea& area : m_cellAreas)
+	{
+		if (area.contains(row, column))
+		{
+			targetArea = area;
+			foundArea = true;
+			break;
+		}
+	}
+	if (!foundArea)
+		return;
+
+	if (UndoManager::undoEnabled())
+	{
+		SimpleState *ss = new SimpleState(Um::TableUnmergeCells, QString(), Um::ITable);
+		ss->set("TABLE_UNMERGE_CELLS");
+		ss->set("ROW", targetArea.row());
+		ss->set("COLUMN", targetArea.column());
+		ss->set("NUM_ROWS", targetArea.height());
+		ss->set("NUM_COLS", targetArea.width());
+		undoManager->action(this, ss);
+	}
+
+	// Now do the actual split (unchanged from before, using targetArea).
+
+	// Find the merged area containing the target cell, if any.
+	QMutableListIterator<CellArea> areaIt(m_cellAreas);
+	while (areaIt.hasNext())
+	{
+		CellArea area = areaIt.next();
+		if (area.row() == targetArea.row() && area.column() == targetArea.column())
+		{
+			TableCell spanningCell = cellAt(area.row(), area.column());
+			spanningCell.setRowSpan(1);
+			spanningCell.setColumnSpan(1);
+			areaIt.remove();
+			break;
+		}
+	}
+
+	updateCells();
+
 	emit changed();
+
+	ASSERT_VALID();
 }
 
 QSet<int> PageItem_Table::selectedRows() const
@@ -1127,32 +1396,63 @@ TableHandle PageItem_Table::hitTest(const QPointF& point, double threshold) cons
 	const double x = gridPoint.x();
 	const double y = gridPoint.y();
 
-	// Test if hit is on left edge of table.
-	if (x <= threshold)
-		return TableHandle(TableHandle::RowSelect);
-
-	// Test if hit is on top edge of table.
-	if (y <= threshold)
-		return TableHandle(TableHandle::ColumnSelect);
-
-	// Test if hit is on bottom right corner of table.
+	// Test if hit is in the bottom-right table-resize corner.
+	// (Checked early because it can overlap with row/column resize on the right and bottom edges.)
 	if (x >= tableWidth - threshold && y >= tableHeight - threshold)
 		return TableHandle(TableHandle::TableResize);
 
-	// Test if hit is on right edge of table.
-	if (y >= tableHeight - threshold && y <= tableHeight + threshold)
-		return TableHandle(TableHandle::RowResize, rows() - 1);
+	// Test if hit is in the row-select strip (inside left edge of grid).
+	if (x >= 0.0 && x <= threshold)
+	{
+		int row = -1;
+		for (int r = 0; r < rows(); ++r)
+		{
+			double rowTop = rowPosition(r);
+			double rowBottom = rowTop + rowHeight(r);
+			if (y >= rowTop && y < rowBottom)
+			{
+				row = r;
+				break;
+			}
+		}
+		if (row < 0)
+			return TableHandle(TableHandle::None);
+		return TableHandle(TableHandle::RowSelect, row);
+	}
 
-	// Test if hit is on bottom edge of table.
-	if (x >= tableWidth - threshold && x <= tableWidth + threshold)
+	// Test if hit is in the column-select strip (inside top edge of grid).
+	if (y >= 0.0 && y <= threshold)
+	{
+		int col = -1;
+		for (int c = 0; c < columns(); ++c)
+		{
+			double colLeft = columnPosition(c);
+			double colRight = colLeft + columnWidth(c);
+			if (x >= colLeft && x < colRight)
+			{
+				col = c;
+				break;
+			}
+		}
+		if (col < 0)
+			return TableHandle(TableHandle::None);
+		return TableHandle(TableHandle::ColumnSelect, col);
+	}
+
+	// Test if hit is on right edge of table (resize last column).
+	if (x >= tableWidth - threshold)
 		return TableHandle(TableHandle::ColumnResize, columns() - 1);
+
+	// Test if hit is on bottom edge of table (resize last row).
+	if (y >= tableHeight - threshold)
+		return TableHandle(TableHandle::RowResize, rows() - 1);
 
 	const TableCell hitCell = cellAt(point);
 	const QRectF hitRect = hitCell.boundingRect();
 
 	// Test if hit is on cell interior.
 	if (hitRect.adjusted(threshold, threshold, -threshold, -threshold).contains(gridPoint))
-		return TableHandle(TableHandle::CellSelect); // Hit interior of cell.
+		return TableHandle(TableHandle::CellSelect);
 
 	const double toLeft = x - hitRect.left();
 	const double toRight = hitRect.right() - x;
@@ -1163,13 +1463,21 @@ TableHandle PageItem_Table::hitTest(const QPointF& point, double threshold) cons
 	// Test which side of the cell was hit.
 	if (qMin(toLeft, toRight) < qMin(toTop, toBottom))
 	{
+		// Closer to a vertical edge: column resize.
+		int colIndex = (toLeft < toRight ? hitCell.column() : hitCell.column() + hitCell.columnSpan()) - 1;
+		if (colIndex < 0 || colIndex >= columns())
+			return TableHandle(TableHandle::CellSelect);
 		handle.setType(TableHandle::ColumnResize);
-		handle.setIndex((toLeft < toRight ? hitCell.column() : hitCell.column() + hitCell.columnSpan()) - 1);
+		handle.setIndex(colIndex);
 	}
 	else
 	{
+		// Closer to a horizontal edge: row resize.
+		int rowIndex = (toTop < toBottom ? hitCell.row() : hitCell.row() + hitCell.rowSpan()) - 1;
+		if (rowIndex < 0 || rowIndex >= rows())
+			return TableHandle(TableHandle::CellSelect);
 		handle.setType(TableHandle::RowResize);
-		handle.setIndex((toTop < toBottom ? hitCell.row() : hitCell.row() + hitCell.rowSpan()) - 1);
+		handle.setIndex(rowIndex);
 	}
 	return handle;
 }
@@ -1184,7 +1492,6 @@ void PageItem_Table::adjustFrameToTable()
 {
 	if (!m_Doc)
 		return;
-
 	m_Doc->sizeItem(effectiveWidth(), effectiveHeight(), this);
 }
 
@@ -1617,9 +1924,9 @@ void PageItem_Table::setStyle(const QString& style)
 		ss->set("NEW_STYLE", style);
 		undoManager->action(this, ss);
 	}
-
 	doc()->dontResize = true;
 	m_style.setParent(style);
+	syncConditionalStylesToContext();
 	updateCells();
 	doc()->dontResize = false;
 	emit changed();
@@ -1638,6 +1945,7 @@ void PageItem_Table::unsetStyle()
 
 	doc()->dontResize = true;
 	m_style.setParent("");
+	syncConditionalStylesToContext();
 	updateCells();
 	doc()->dontResize = false;
 	emit changed();
@@ -1650,6 +1958,7 @@ void PageItem_Table::unsetDirectFormatting()
 	m_style.setParent("");
 	m_style.erase();
 	m_style.setParent(parentStyle);
+	m_style.update(m_style.context());
 	adjustTableToFrame();
 	adjustFrameToTable();
 	updateCells();
@@ -1666,6 +1975,94 @@ QString PageItem_Table::styleName() const
 {
 	return m_style.parent();
 }
+
+TableArea PageItem_Table::areaAt(int row, int column) const
+{
+	const int headerRows = m_style.headerRows();
+	const int totalRows = m_style.totalRows();
+
+	const int lastRowIndex = rows() - 1;
+	const int lastColIndex = columns() - 1;
+
+	const bool headerRow = (row < headerRows);
+	const bool totalRow  = (totalRows > 0) && (row > lastRowIndex - totalRows);
+	const bool firstCol  = m_style.firstColumn() && (column == 0);
+	const bool lastCol   = m_style.lastColumn() && (column == lastColIndex);
+
+	// Corners — highest priority.
+	if (headerRow && firstCol)
+		return TableArea::TopLeftCell;
+	if (headerRow && lastCol)
+		return TableArea::TopRightCell;
+	if (totalRow && firstCol)
+		return TableArea::BottomLeftCell;
+	if (totalRow && lastCol)
+		return TableArea::BottomRightCell;
+
+	// Edges.
+	if (lastCol)
+		return TableArea::LastColumn;
+	if (firstCol)
+		return TableArea::FirstColumn;
+	if (totalRow)
+		return TableArea::TotalRow;
+	if (headerRow)
+		return TableArea::HeaderRow;
+
+	// Banding — count body rows/columns past the header so the first body row/column is the
+	// odd band regardless of how many header rows/columns precede it.
+	if (m_style.bandedRows())
+	{
+		const int bodyRow = row - headerRows;
+		const TableArea rowArea = (bodyRow % 2 == 0)
+				? TableArea::BandedRowOdd : TableArea::BandedRowEven;
+		// If row banding is enabled but the resolved row-band fill is None,
+		// and column banding is also on, fall through to column banding.
+		// Matches Word's layered behaviour.
+		if (m_style.bandedColumns() && m_style.conditionalStyleResolved(rowArea).fillColor() == CommonStrings::None)
+		{
+			const int bodyCol = column - (m_style.firstColumn() ? 1 : 0);
+			return (bodyCol % 2 == 0) ? TableArea::BandedColOdd : TableArea::BandedColEven;
+		}
+		return rowArea;
+	}
+	if (m_style.bandedColumns())
+	{
+		const int bodyCol = column - (m_style.firstColumn() ? 1 : 0);
+		return (bodyCol % 2 == 0) ? TableArea::BandedColOdd : TableArea::BandedColEven;
+	}
+
+	return TableArea::WholeTable;
+}
+
+QString PageItem_Table::areaStyleName(TableArea area) const
+{
+	if (!m_style.hasConditionalStyleResolved(area))
+		return QString();
+	return conditionalSyntheticName(area);
+}
+
+QString PageItem_Table::conditionalSyntheticName(TableArea area) const
+{
+	// Synthetic, non-user-visible name. Keyed on the owning table style's name
+	// so that all tables using the same style share one set of synthetic
+	// conditional cell styles (rather than one set per table instance, which
+	// proliferates). The conditionals live on the named parent style, so for a
+	// direct (unnamed) m_style we key on its parent's name. Only a direct style
+	// with no parent at all falls back to the item pointer.
+	//
+	// NOTE: this synthetic-name bridge reuses the existing name-based parent
+	// resolution. Switching to a by-proxy parent (so a user-assigned cell style
+	// can sit between the cell and the conditional) is a potential later step.
+	QString owner = m_style.name();
+	if (owner.isEmpty())
+		owner = m_style.parent();
+	if (owner.isEmpty())
+		owner = QString::number(reinterpret_cast<quintptr>(this), 16);
+	return QStringLiteral("__cond_") + owner + QStringLiteral("_") + tableAreaToString(area);
+}
+
+
 
 void PageItem_Table::handleStyleChanged()
 {
@@ -1684,15 +2081,28 @@ void PageItem_Table::applicableActions(QStringList& actionList)
 	const int selectedCells = tableEdit ? this->selectedCells().size() : 0;
 
 	if (!tableEdit || selectedCells<1)
+	{
 		actionList << "tableInsertRows";
-	if (!tableEdit || selectedCells<1)
 		actionList << "tableInsertColumns";
+		actionList << "fileImportText";
+		actionList << "fileImportAppendText";
+		actionList << "toolsEditWithStoryEditor";
+		actionList << "insertSampleText";
+	}
 	if (tableEdit && ((selectedRows < 1 && tableRows > 1) || (selectedRows > 0 && selectedRows < tableRows)))
 		actionList << "tableDeleteRows";
 	if ((selectedColumns < 1 && tableColumns > 1) || (selectedColumns > 0 && selectedColumns < tableColumns))
 		actionList << "tableDeleteColumns";
 	if (selectedCells > 1)
 		actionList << "tableMergeCells";
+	// Split is the inverse of merge: enabled when the active cell is merged
+	// (spans more than one row or column).
+	if (tableEdit && selectedCells == 1)
+	{
+		const TableCell active = activeCell();
+		if (active.isValid() && (active.rowSpan() > 1 || active.columnSpan() > 1))
+			actionList << "tableSplitCells";
+	}
 	if (tableEdit)
 		actionList << "tableSetRowHeights";
 	if (tableEdit)
@@ -1703,6 +2113,7 @@ void PageItem_Table::applicableActions(QStringList& actionList)
 		actionList << "tableDistributeColumnsEvenly";
 	actionList << "tableAdjustFrameToTable";
 	actionList << "tableAdjustTableToFrame";
+	actionList << "tableAdjustRowHeights";
 }
 
 void PageItem_Table::DrawObj_Item(ScPainter *p, const QRectF& /*e*/)
@@ -1734,6 +2145,14 @@ void PageItem_Table::initialize(int numRows, int numColumns)
 
 	// Internal style is in document-wide style context.
 	m_style.setContext(&m_Doc->tableStyles());
+
+	// A new table inherits its fill/shade from its table style rather than the
+	// construction fill parameter. Parent to the default style and reset the
+	// base-class-pinned fill so the style drives styling.
+	if (m_style.parent().isEmpty())
+		m_style.setParent(CommonStrings::DefaultTableStyle);
+	m_style.resetFillColor();
+	m_style.resetFillShade();
 
 	// Reserve space in lists.
 	m_cellRows.reserve(numRows);
@@ -1938,6 +2357,19 @@ void PageItem_Table::updateCells(int startRow, int startColumn, int endRow, int 
 	if (!validCell(startRow, startColumn) || !validCell(endRow, endColumn))
 		return; // Invalid area.
 
+	// Re-derive each cell's structural area and splice the matching conditional
+	// style as its transient parent. Done here, before the content pass, so
+	// that row/column insertion and removal (which all route through
+	// updateCells) reflow conditional styling automatically.
+	for (int row = 0; row < m_rows; ++row)
+	{
+		for (int column = 0; column < m_columns; ++column)
+		{
+			QString an = areaStyleName(areaAt(row, column));
+			m_cellRows[row][column].applyAreaStyle(an);
+		}
+	}
+
 	foreach (const QList<TableCell>& cellRow, m_cellRows)
 		foreach (TableCell cell, cellRow)
 			cell.updateContent();
@@ -2001,6 +2433,209 @@ void PageItem_Table::updateSpans(int index, int number, ChangeType changeType)
 			}
 		}
 	}
+}
+
+TableRowsSnapshot PageItem_Table::snapshotRows(int index, int numRows) const
+{
+	TableRowsSnapshot snap;
+	snap.index = index;
+	snap.numRows = numRows;
+	snap.numColumns = columns();
+	snap.frameWidth = width();
+	snap.frameHeight = height();
+	snap.rowHeights = m_rowHeights;
+	snap.cells.reserve(numRows * columns());
+
+	for (int r = 0; r < numRows; ++r)
+	{
+		const int row = index + r;
+
+		for (int col = 0; col < columns(); ++col)
+		{
+			TableCell cell = cellAt(row, col);
+			TableRowsSnapshot::CellSnapshot cs;
+			PageItem_TextFrame *tf = cell.textFrame();
+			if (tf)
+				cs.storyTextXml = saxedText(&tf->itemText);
+			cs.style = cell.styleName();
+			cs.fillColor = cell.fillColor();
+			cs.fillShade = cell.fillShade();
+			cs.leftBorder = cell.leftBorder();
+			cs.rightBorder = cell.rightBorder();
+			cs.topBorder = cell.topBorder();
+			cs.bottomBorder = cell.bottomBorder();
+			snap.cells.append(cs);
+		}
+	}
+
+	// Capture every CellArea that intersects the row range [index, index+numRows).
+	// We need the original areas, before updateSpans mutates them.
+	for (const CellArea& area : m_cellAreas)
+	{
+		const int areaTop = area.row();
+		const int areaBottom = area.row() + area.height() - 1;
+		const int removeTop = index;
+		const int removeBottom = index + numRows - 1;
+		if (areaBottom < removeTop || areaTop > removeBottom)
+			continue;
+		snap.areas.append(area);
+	}
+
+	return snap;
+}
+
+void PageItem_Table::restoreRowsFromSnapshot(const TableRowsSnapshot& snap)
+{
+	// Caller has already re-inserted snap.numRows blank rows at snap.index.
+	// We're called with undo disabled, so any setters here are quiet.
+
+	m_rowHeights = snap.rowHeights;
+
+	for (int r = 0; r < snap.numRows; ++r)
+	{
+		const int row = snap.index + r;
+
+		for (int col = 0; col < snap.numColumns; ++col)
+		{
+			TableCell cell = cellAt(row, col);
+			const auto& cs = snap.cells.at(r * snap.numColumns + col);
+
+			PageItem_TextFrame *tf = cell.textFrame();
+			if (tf && !cs.storyTextXml.isEmpty())
+			{
+				StoryText restored = desaxeString(m_Doc, cs.storyTextXml);
+				tf->itemText.clear();
+				tf->itemText.insert(0, restored, false);
+			}
+
+			cell.setStyle(cs.style);
+			cell.setFillColor(cs.fillColor);
+			cell.setFillShade(cs.fillShade);
+			cell.setLeftBorder(cs.leftBorder);
+			cell.setRightBorder(cs.rightBorder);
+			cell.setTopBorder(cs.topBorder);
+			cell.setBottomBorder(cs.bottomBorder);
+		}
+	}
+
+	// Recompute row positions from the now-correct row heights.
+	double pos = 0.0;
+	for (int row = 0; row < rows(); ++row)
+	{
+		m_rowPositions[row] = pos;
+		pos += m_rowHeights[row];
+	}
+
+	// Restore any merged areas that intersected the removed range.
+	// mergeCells preserves the top-left cell's content:
+	//   - if the merge's top-left was inside the removed range, we just
+	//     restored that cell's content from the snapshot above;
+	//   - if the merge's top-left was above the removed range, that content
+	//     was never destroyed and is still in the table.
+	for (const CellArea& area : snap.areas)
+		mergeCells(area.row(), area.column(), area.height(), area.width());
+
+	updateCells();
+}
+
+TableColumnsSnapshot PageItem_Table::snapshotColumns(int index, int numColumns) const
+{
+	TableColumnsSnapshot snap;
+	snap.index = index;
+	snap.numColumns = numColumns;
+	snap.numRows = rows();
+	snap.frameWidth = width();
+	snap.frameHeight = height();
+	snap.columnWidths = m_columnWidths;
+	snap.cells.reserve(rows() * numColumns);
+
+	for (int row = 0; row < rows(); ++row)
+	{
+		for (int c = 0; c < numColumns; ++c)
+		{
+			TableCell cell = cellAt(row, index + c);
+			TableColumnsSnapshot::CellSnapshot cs;
+			PageItem_TextFrame *tf = cell.textFrame();
+			if (tf)
+				cs.storyTextXml = saxedText(&tf->itemText);
+			cs.style = cell.styleName();
+			cs.fillColor = cell.fillColor();
+			cs.fillShade = cell.fillShade();
+			cs.leftBorder = cell.leftBorder();
+			cs.rightBorder = cell.rightBorder();
+			cs.topBorder = cell.topBorder();
+			cs.bottomBorder = cell.bottomBorder();
+			snap.cells.append(cs);
+		}
+	}
+
+	// Capture every CellArea that intersects the column range [index, index+numColumns).
+	// We need the original areas, before updateSpans mutates them.
+	for (const CellArea& area : m_cellAreas)
+	{
+		const int areaLeft = area.column();
+		const int areaRight = area.column() + area.width() - 1;
+		const int removeLeft = index;
+		const int removeRight = index + numColumns - 1;
+		if (areaRight < removeLeft || areaLeft > removeRight)
+			continue;
+		snap.areas.append(area);
+	}
+
+	return snap;
+}
+
+void PageItem_Table::restoreColumnsFromSnapshot(const TableColumnsSnapshot& snap)
+{
+	// Caller has already re-inserted snap.numColumns blank columns at snap.index.
+	// We're called with undo disabled, so any setters here are quiet.
+
+	m_columnWidths = snap.columnWidths;
+
+	for (int row = 0; row < snap.numRows; ++row)
+	{
+		for (int c = 0; c < snap.numColumns; ++c)
+		{
+			const int col = snap.index + c;
+			TableCell cell = cellAt(row, col);
+			const auto& cs = snap.cells.at(row * snap.numColumns + c);
+
+			PageItem_TextFrame *tf = cell.textFrame();
+			if (tf && !cs.storyTextXml.isEmpty())
+			{
+				StoryText restored = desaxeString(m_Doc, cs.storyTextXml);
+				tf->itemText.clear();
+				tf->itemText.insert(0, restored, false);
+			}
+
+			cell.setStyle(cs.style);
+			cell.setFillColor(cs.fillColor);
+			cell.setFillShade(cs.fillShade);
+			cell.setLeftBorder(cs.leftBorder);
+			cell.setRightBorder(cs.rightBorder);
+			cell.setTopBorder(cs.topBorder);
+			cell.setBottomBorder(cs.bottomBorder);
+		}
+	}
+
+	// Recompute column positions from the now-correct column widths.
+	double pos = 0.0;
+	for (int col = 0; col < columns(); ++col)
+	{
+		m_columnPositions[col] = pos;
+		pos += m_columnWidths[col];
+	}
+
+	// Restore any merged areas that intersected the removed range.
+	// mergeCells preserves the top-left cell's content:
+	//   - if the merge's top-left was inside the removed range, we just
+	//     restored that cell's content from the snapshot above;
+	//   - if the merge's top-left was above the removed range, that content
+	//     was never destroyed and is still in the table.
+	for (const CellArea& area : snap.areas)
+		mergeCells(area.row(), area.column(), area.height(), area.width());
+
+	updateCells();
 }
 
 void PageItem_Table::debug() const
@@ -2197,6 +2832,46 @@ void PageItem_Table::restore(UndoState *state, bool isUndo)
 		restoreTableColumnWidth(simpleState, isUndo);
 		doUpdate = true;
 	}
+	else if (simpleState->contains("TABLE_MERGE_CELLS"))
+	{
+		restoreTableMergeCells(simpleState, isUndo);
+		doUpdate = true;
+	}
+	else if (simpleState->contains("TABLE_UNMERGE_CELLS"))
+	{
+		restoreTableUnmergeCells(simpleState, isUndo);
+		doUpdate = true;
+	}
+	else if (simpleState->contains("TABLE_INSERT_ROWS"))
+	{
+		restoreTableInsertRows(simpleState, isUndo);
+		doUpdate = true;
+	}
+	else if (simpleState->contains("TABLE_INSERT_COLUMNS"))
+	{
+		restoreTableInsertColumns(simpleState, isUndo);
+		doUpdate = true;
+	}
+	else if (simpleState->contains("TABLE_APPEND_ROWS"))
+	{
+		restoreTableAppendRows(simpleState, isUndo);
+		doUpdate = true;
+	}
+	else if (simpleState->contains("TABLE_APPEND_COLUMNS"))
+	{
+		restoreTableAppendColumns(simpleState, isUndo);
+		doUpdate = true;
+	}
+	else if (simpleState->contains("TABLE_REMOVE_ROWS"))
+	{
+		restoreTableRemoveRows(simpleState, isUndo);
+		doUpdate = true;
+	}
+	else if (simpleState->contains("TABLE_REMOVE_COLUMNS"))
+	{
+		restoreTableRemoveColumns(simpleState, isUndo);
+		doUpdate = true;
+	}
 	else
 	{
 		PageItem::restore(state, isUndo);
@@ -2207,6 +2882,24 @@ void PageItem_Table::restore(UndoState *state, bool isUndo)
 		if (state->transactionCode == 0 || state->transactionCode == 2)
 			this->update();
 	}
+}
+
+void PageItem_Table::syncConditionalStylesToContext()
+{
+	const QList<TableArea> areas = m_style.conditionalAreasResolved();
+	for (TableArea area : areas)
+	{
+		CellStyle cs = m_style.conditionalStyleResolved(area);
+		for (TableArea area : areas)
+		{
+			CellStyle cs = m_style.conditionalStyleResolved(area);
+			cs.setName(conditionalSyntheticName(area));
+			m_Doc->registerSyntheticCellStyle(cs);
+		}
+		cs.setName(conditionalSyntheticName(area));
+		m_Doc->registerSyntheticCellStyle(cs);
+	}
+	m_Doc->invalidateCellStyles();
 }
 
 void PageItem_Table::restoreCellBorders(SimpleState *state, bool isUndo)
@@ -2534,4 +3227,199 @@ void PageItem_Table::restoreTableColumnWidth(SimpleState *state, bool isUndo)
 		double newWidth = state->getDouble("NEW_COLUMN_WIDTH");
 		resizeColumn(column, newWidth, strategy);
 	}
+}
+
+void PageItem_Table::restoreTableMergeCells(SimpleState *state, bool isUndo)
+{
+	int row = state->getInt("ROW");
+	int column = state->getInt("COLUMN");
+	int numRows = state->getInt("NUM_ROWS");
+	int numCols = state->getInt("NUM_COLS");
+
+	QScopedValueRollback<bool> rb(m_Doc->dontResize, true);
+	UndoManager::instance()->setUndoEnabled(false);
+
+	if (isUndo)
+	{
+		// Undo merge = split the merged cell back to its constituents.
+		splitCell(row, column, numRows, numCols);
+	}
+	else
+	{
+		// Redo merge = merge again.
+		mergeCells(row, column, numRows, numCols);
+	}
+
+	UndoManager::instance()->setUndoEnabled(true);
+}
+
+void PageItem_Table::restoreTableUnmergeCells(SimpleState *state, bool isUndo)
+{
+	int row = state->getInt("ROW");
+	int column = state->getInt("COLUMN");
+	int numRows = state->getInt("NUM_ROWS");
+	int numCols = state->getInt("NUM_COLS");
+
+	QScopedValueRollback<bool> rb(m_Doc->dontResize, true);
+	UndoManager::instance()->setUndoEnabled(false);
+
+	if (isUndo)
+	{
+		// Undo split = re-merge.
+		mergeCells(row, column, numRows, numCols);
+	}
+	else
+	{
+		// Redo split = split again.
+		splitCell(row, column, numRows, numCols);
+	}
+
+	UndoManager::instance()->setUndoEnabled(true);
+}
+
+void PageItem_Table::restoreTableInsertRows(SimpleState *state, bool isUndo)
+{
+	int index = state->getInt("INDEX");
+	int numRows = state->getInt("NUM_ROWS");
+
+	QScopedValueRollback<bool> rb(m_Doc->dontResize, true);
+	UndoManager::instance()->setUndoEnabled(false);
+
+	if (isUndo)
+		removeRows(index, numRows);
+	else
+		insertRows(index, numRows);
+
+	adjustTable();
+	updateClip();
+
+	UndoManager::instance()->setUndoEnabled(true);
+}
+
+void PageItem_Table::restoreTableInsertColumns(SimpleState *state, bool isUndo)
+{
+	int index = state->getInt("INDEX");
+	int numColumns = state->getInt("NUM_COLUMNS");
+
+	QScopedValueRollback<bool> rb(m_Doc->dontResize, true);
+	UndoManager::instance()->setUndoEnabled(false);
+
+	if (isUndo)
+		removeColumns(index, numColumns);
+	else
+		insertColumns(index, numColumns);
+
+	adjustTable();
+	updateClip();
+
+	UndoManager::instance()->setUndoEnabled(true);
+}
+
+void PageItem_Table::restoreTableAppendRows(SimpleState *state, bool isUndo)
+{
+	const int index = state->getInt("INDEX");
+	const int numRows = state->getInt("NUM_ROWS");
+	const double oldWidth = state->getDouble("OLD_WIDTH");
+	const double oldHeight = state->getDouble("OLD_HEIGHT");
+
+	UndoBlocker ub;
+
+	if (isUndo)
+	{
+		// Remove the appended rows and shrink the frame back to its
+		// pre-append size.
+		removeRows(index, numRows);
+		setWidthHeight(oldWidth, oldHeight);
+	}
+	else
+	{
+		// Re-append the rows (at the last row's height) and grow the frame
+		// to fit — mirroring appendRows, not the squash-to-fit adjustTable.
+		insertRows(index, numRows);
+		adjustFrameToTable();
+	}
+
+	updateClip();
+}
+
+void PageItem_Table::restoreTableAppendColumns(SimpleState *state, bool isUndo)
+{
+	const int index = state->getInt("INDEX");
+	const int numColumns = state->getInt("NUM_COLUMNS");
+	const double oldWidth = state->getDouble("OLD_WIDTH");
+	const double oldHeight = state->getDouble("OLD_HEIGHT");
+
+	UndoBlocker ub;
+
+	if (isUndo)
+	{
+		// Remove the appended columns and shrink the frame back to its
+		// pre-append size.
+		removeColumns(index, numColumns);
+		setWidthHeight(oldWidth, oldHeight);
+	}
+	else
+	{
+		// Re-append the columns (at the last column's width) and grow the
+		// frame to fit — mirroring appendColumns, not the squash-to-fit
+		// adjustTable.
+		insertColumns(index, numColumns);
+		adjustFrameToTable();
+	}
+
+	updateClip();
+}
+
+// Note on undo-flag management: insertRows/insertColumns/removeRows/
+// removeColumns all set UndoEnabled to false during their body and then
+// unconditionally set it back to true at the end. To keep undo silenced
+// across multiple of these calls in a single restore, we re-disable
+// after each one.
+
+void PageItem_Table::restoreTableRemoveRows(SimpleState *state, bool isUndo)
+{
+	auto *is = dynamic_cast<ScItemState<TableRowsSnapshot>*>(state);
+	if (!is)
+		return;
+	const TableRowsSnapshot& snap = is->getItem();
+	QScopedValueRollback<bool> rb(m_Doc->dontResize, true);
+	UndoBlocker ub;
+
+	if (isUndo)
+	{
+		insertRows(snap.index, snap.numRows);
+		restoreRowsFromSnapshot(snap);
+		m_Doc->sizeItem(snap.frameWidth, snap.frameHeight, this);
+	}
+	else
+	{
+		removeRows(snap.index, snap.numRows);
+		adjustTable();
+	}
+
+	updateClip();
+}
+
+void PageItem_Table::restoreTableRemoveColumns(SimpleState *state, bool isUndo)
+{
+	auto *is = dynamic_cast<ScItemState<TableColumnsSnapshot>*>(state);
+	if (!is)
+		return;
+	const TableColumnsSnapshot& snap = is->getItem();
+	QScopedValueRollback<bool> rb(m_Doc->dontResize, true);
+	UndoBlocker ub;
+
+	if (isUndo)
+	{
+		insertColumns(snap.index, snap.numColumns);
+		restoreColumnsFromSnapshot(snap);
+		m_Doc->sizeItem(snap.frameWidth, snap.frameHeight, this);
+	}
+	else
+	{
+		removeColumns(snap.index, snap.numColumns);
+		adjustTable();
+	}
+
+	updateClip();
 }

@@ -113,6 +113,7 @@ for which a new license (GPL+exception) is in place.
 #include "langmgr.h"
 #include "localemgr.h"
 #include "loadsaveplugin.h"
+#include "manager/pagepreset_manager.h"
 #include "marks.h"
 #include "nfttemplate.h"
 #include "notesstyles.h"
@@ -121,7 +122,6 @@ for which a new license (GPL+exception) is in place.
 #include "pageitem_latexframe.h"
 #include "pageitem_table.h"
 #include "pageitem_textframe.h"
-#include "pagesize.h"
 #include "pdflib.h"
 #include "pdfoptions.h"
 #include "pluginmanager.h"
@@ -340,7 +340,7 @@ int ScribusMainWindow::initScMW(bool primaryMainWindow)
 	internalCopy = false;
 	internalCopyBuffer.clear();
 	m_doc = new ScribusDoc();
-	m_doc->setup(0, 1, 1, 1, 1, "Custom", "Custom");
+	m_doc->setup(0, 1, 1, 1, 1, QSizeF(), "Custom", 0);
 	m_doc->setPage(100, 100, 0, 0, 0, 0, 0, 0, false, false);
 	m_doc->addPage(0);
 	m_doc->setGUI(false, this, nullptr);
@@ -415,6 +415,11 @@ int ScribusMainWindow::initScMW(bool primaryMainWindow)
 	if (primaryMainWindow)
 		ScCore->setSplashStatus( tr("Reading Scrapbook") );
 	initScrapbook();
+
+	if (primaryMainWindow)
+		ScCore->setSplashStatus( tr("Initializing Page Presets") );
+	PagePresetManager::instance();
+
 	scrActions["helpTooltips"]->setChecked(m_prefsManager.appPrefs.displayPrefs.showToolTips);
 	scrActions["showMouseCoordinates"]->setChecked(m_prefsManager.appPrefs.displayPrefs.showMouseCoordinates);
 	scrActions["stickyTools"]->setChecked(m_prefsManager.appPrefs.uiPrefs.stickyTools);
@@ -1277,6 +1282,7 @@ void ScribusMainWindow::initMenuBar()
 	scrMenuMgr->addMenuItemString("viewShowMargins", "ViewDocument");
 	scrMenuMgr->addMenuItemString("viewShowBleeds", "ViewDocument");
 	scrMenuMgr->addMenuItemString("viewShowFrames", "ViewDocument");
+	scrMenuMgr->addMenuItemString("viewShowTableCellFrames", "ViewDocument");
 	scrMenuMgr->addMenuItemString("viewShowLayerMarkers", "ViewDocument");
 	scrMenuMgr->createMenu("ViewGrids", tr("Grids and Guides"), "View");
 	scrMenuMgr->addMenuItemString("ViewGrids", "View");
@@ -1429,7 +1435,7 @@ void ScribusMainWindow::initStatusBar()
 	zoomSpinBox->setValue( 100 );
 	zoomSpinBox->setSingleStep(10);
 	zoomSpinBox->setFocusPolicy(Qt::ClickFocus);
-	zoomSpinBox->setSuffix( tr( " %" ) );
+	updateZoomSuffix();
 	layerMenu = new QComboBox( this );
 	layerMenu->setObjectName("layerMenu");
 	layerMenu->setEditable(false);
@@ -2035,11 +2041,12 @@ void ScribusMainWindow::startUpDialog()
 		{
 			int facingPages = dia->choosenLayout();
 			int firstPage = dia->layoutFirstPage();
+			int bindingDirection = dia->bindingDirection();
 			docSet = dia->startDocSetup->isChecked();
-			double topMargin = dia->marginGroup->margins().top();
-			double bottomMargin = dia->marginGroup->margins().bottom();
-			double leftMargin = dia->marginGroup->margins().left();
-			double rightMargin = dia->marginGroup->margins().right();
+			double topMargin = dia->margins().top();
+			double bottomMargin = dia->margins().bottom();
+			double leftMargin = dia->margins().left();
+			double rightMargin = dia->margins().right();
 			double columnDistance = dia->distance();
 			double pageWidth = dia->pageWidth();
 			double pageHeight = dia->pageHeight();
@@ -2047,10 +2054,14 @@ void ScribusMainWindow::startUpDialog()
 			bool autoframes = dia->autoTextFrame->isChecked();
 			int orientation = dia->orientation();
 			int pageCount = dia->pageCountSpinBox->value();
-			QString pagesize = dia->pageSizeName();
-			doFileNew(pageWidth, pageHeight, topMargin, leftMargin, rightMargin, bottomMargin, columnDistance, numberCols, autoframes, facingPages, dia->unitOfMeasureComboBox->currentIndex(), firstPage, orientation, 1, pagesize, true, pageCount, true, dia->marginGroup->marginPreset());
+			QSizeF pagesize(dia->pageWidth(), dia->pageHeight());
+			doFileNew(pageWidth, pageHeight, topMargin, leftMargin, rightMargin, bottomMargin,
+				columnDistance, numberCols, autoframes, facingPages, dia->unitOfMeasureComboBox->currentIndex(),
+				firstPage, orientation, 1, pagesize, true, pageCount, true, dia->marginGroup->marginPreset(),
+				bindingDirection
+			);
 			doc->setPageSetFirstPage(facingPages, firstPage);
-			doc->bleeds()->set(dia->bleedTop(), dia->bleedLeft(), dia->bleedBottom(), dia->bleedRight());
+			doc->bleeds()->set(dia->bleeds().top(), dia->bleeds().left(), dia->bleeds().bottom(), dia->bleeds().right());
 			HaveNewDoc();
 			doc->reformPages(true);
 			// Don's disturb user with "save?" dialog just after new doc
@@ -2111,11 +2122,12 @@ bool ScribusMainWindow::slotFileNew()
 
 	int facingPages = dia->choosenLayout();
 	int firstPage = dia->layoutFirstPage();
+	int bindingDirection = dia->bindingDirection();
 	bool docSet = dia->startDocSetup->isChecked();
-	double topMargin = dia->marginGroup->margins().top();
-	double bottomMargin = dia->marginGroup->margins().bottom();
-	double leftMargin = dia->marginGroup->margins().left();
-	double rightMargin = dia->marginGroup->margins().right();
+	double topMargin = dia->margins().top();
+	double bottomMargin = dia->margins().bottom();
+	double leftMargin = dia->margins().left();
+	double rightMargin = dia->margins().right();
 	double columnDistance = dia->distance();
 	double pageWidth = dia->pageWidth();
 	double pageHeight = dia->pageHeight();
@@ -2123,12 +2135,14 @@ bool ScribusMainWindow::slotFileNew()
 	bool autoframes = dia->autoTextFrame->isChecked();
 	int orientation = dia->orientation();
 	int pageCount = dia->pageCountSpinBox->value();
-	QString pagesize = dia->pageSizeName();
+	QSizeF pagesize(dia->pageWidth(), dia->pageHeight());
 
-	if (doFileNew(pageWidth, pageHeight, topMargin, leftMargin, rightMargin, bottomMargin, columnDistance, numberCols, autoframes, facingPages, dia->unitOfMeasureComboBox->currentIndex(), firstPage, orientation, 1, pagesize, true, pageCount, true, dia->marginGroup->marginPreset()))
+	if (doFileNew(pageWidth, pageHeight, topMargin, leftMargin, rightMargin, bottomMargin, columnDistance, numberCols,
+			autoframes, facingPages, dia->unitOfMeasureComboBox->currentIndex(), firstPage, orientation, 1,
+			pagesize, true, pageCount, true, dia->marginGroup->marginPreset(), bindingDirection))
 	{
 		doc->setPageSetFirstPage(facingPages, firstPage);
-		doc->bleeds()->set(dia->bleedTop(), dia->bleedLeft(), dia->bleedBottom(), dia->bleedRight());
+		doc->bleeds()->set(dia->bleeds().top(), dia->bleeds().left(), dia->bleeds().bottom(), dia->bleeds().right());
 		m_mainWindowStatusLabel->setText( tr("Ready"));
 		HaveNewDoc();
 		doc->reformPages(true);
@@ -2144,13 +2158,9 @@ bool ScribusMainWindow::slotFileNew()
 	return retVal;
 }
 
-//TODO move to core, assign doc to doc list, optionally create gui for it
-ScribusDoc *ScribusMainWindow::newDoc(double width, double height, double topMargin, double leftMargin, double rightMargin, double bottomMargin, double columnDistance, double columnCount, bool autoTextFrames, int pageArrangement, int unitIndex, int firstPageLocation, int orientation, int firstPageNumber, const QString& defaultPageSize, bool requiresGUI, int pageCount, bool showView, int marginPreset)
-{
-	return doFileNew(width, height, topMargin, leftMargin, rightMargin, bottomMargin, columnDistance, columnCount, autoTextFrames, pageArrangement, unitIndex, firstPageLocation, orientation, firstPageNumber, defaultPageSize, requiresGUI, pageCount, showView, marginPreset);
-}
-
-ScribusDoc *ScribusMainWindow::doFileNew(double width, double height, double topMargin, double leftMargin, double rightMargin, double bottomMargin, double columnDistance, double columnCount, bool autoTextFrames, int pageArrangement, int unitIndex, int firstPageLocation, int orientation, int firstPageNumber, const QString& defaultPageSize, bool requiresGUI, int pageCount, bool showView, int marginPreset)
+ScribusDoc *ScribusMainWindow::doFileNew(double width, double height, double topMargin, double leftMargin, double rightMargin, double bottomMargin,
+	double columnDistance, double columnCount, bool autoTextFrames, int pageArrangement, int unitIndex, int firstPageLocation, int orientation,
+	int firstPageNumber, QSizeF defaultPageSize, bool requiresGUI, int pageCount, bool showView, int marginPreset, int bindingDirection)
 {
 	if (HaveDoc)
 		outlinePalette->buildReopenVals();
@@ -2198,7 +2208,7 @@ ScribusDoc *ScribusMainWindow::doFileNew(double width, double height, double top
 			doc->PageColors = m_prefsManager.appPrefs.colorPrefs.DColors;
 	}
 	tempDoc->PageColors.ensureDefaultColors();
-	tempDoc->setup(unitIndex, pageArrangement, firstPageLocation, orientation, firstPageNumber, defaultPageSize, newDocName);
+	tempDoc->setup(unitIndex, pageArrangement, firstPageLocation, orientation, firstPageNumber, defaultPageSize, newDocName, bindingDirection);
 	if (requiresGUI)
 	{
 		HaveDoc++;
@@ -2507,6 +2517,7 @@ void ScribusMainWindow::newActWin(QMdiSubWindow *w)
 	scrActions["viewShowMargins"]->setChecked(doc->guidesPrefs().marginsShown);
 	scrActions["viewShowBleeds"]->setChecked(doc->guidesPrefs().showBleed);
 	scrActions["viewShowFrames"]->setChecked(doc->guidesPrefs().framesShown);
+	scrActions["viewShowTableCellFrames"]->setChecked(doc->guidesPrefs().tableCellFramesShown);
 	scrActions["viewShowLayerMarkers"]->setChecked(doc->guidesPrefs().layerMarkersShown);
 	scrActions["viewShowGrid"]->setChecked(doc->guidesPrefs().gridShown);
 	scrActions["viewShowGuides"]->setChecked(doc->guidesPrefs().guidesShown);
@@ -2725,6 +2736,8 @@ void ScribusMainWindow::HaveNewSel()
 			PageItem *cellItem = currItem->asTable()->activeCell().textFrame();
 			setTBvals(cellItem);
 			appModeHelper->enableTextActions(true, cellItem->currentCharStyle().font().scName());
+			view->horizRuler->setItem(cellItem);
+			view->horizRuler->update();
 		}
 		break;
 	case PageItem::PathText: //Path Text
@@ -3373,6 +3386,7 @@ bool ScribusMainWindow::loadDoc(const QString& fileName)
 			return true;
 		}
 	}
+	SpellCheckerBlocker spellBlocker;
 	UndoBlocker undoBlocker;
 	if (!fileName.isEmpty())
 	{
@@ -4133,6 +4147,8 @@ bool ScribusMainWindow::slotFileSaveAs()
 
 bool ScribusMainWindow::DoFileSave(const QString& fileName, QString* savedFileName, uint formatID)
 {
+	SpellCheckerBlocker spellBlocker;
+	UndoBlocker undoBlocker;
 	ScCore->fileWatcher->forceScan();
 	ScCore->fileWatcher->stop();
 	doc->reorganiseFonts();
@@ -4163,6 +4179,8 @@ bool ScribusMainWindow::slotFileClose()
 
 bool ScribusMainWindow::DoFileClose()
 {
+	// TextFrameSpellChecker::instance()->dumpStats();
+	TextFrameSpellChecker::instance()->documentClosed();
 	slotEndSpecialEdit();
 	view->deselectItems(false);
 	if (doc == storyEditor->currentDocument())
@@ -4726,6 +4744,8 @@ void ScribusMainWindow::slotEditPaste(bool forcePlainText)
 		else if (ScMimeData::clipboardHasHTML() && !forcePlainText)
 		{
 			ScClipboardProcessor scclipproc(doc, currItem);
+			if (doc->appMode == modeEditTable)
+				scclipproc.setDestTable(selItem->asTable());
 			QString clipContent = QApplication::clipboard()->mimeData()->html();
 			scclipproc.setContent(clipContent, ScClipboardProcessor::ContentType::HTML);
 			scclipproc.process();
@@ -5567,6 +5587,7 @@ void ScribusMainWindow::ToggleAllGuides()
 		doc->guidesPrefs().showBleed = m_guidesStatus[GS_BLEED];
 		toggleMarks();
 		toggleFrames();
+		toggleTableCellFrames();
 		toggleLayerMarkers();
 		toggleGrid();
 		toggleGuides();
@@ -5610,6 +5631,7 @@ void ScribusMainWindow::ToggleAllGuides()
 	scrActions["viewShowMargins"]->setChecked(doc->guidesPrefs().marginsShown);
 	scrActions["viewShowBleeds"]->setChecked(doc->guidesPrefs().showBleed);
 	scrActions["viewShowFrames"]->setChecked(doc->guidesPrefs().framesShown);
+	scrActions["viewShowTableCellFrames"]->setChecked(doc->guidesPrefs().tableCellFramesShown);
 	scrActions["viewShowLayerMarkers"]->setChecked(doc->guidesPrefs().layerMarkersShown);
 	scrActions["viewShowGrid"]->setChecked(doc->guidesPrefs().gridShown);
 	scrActions["viewShowGuides"]->setChecked(doc->guidesPrefs().guidesShown);
@@ -5646,6 +5668,15 @@ void ScribusMainWindow::toggleFrames()
 		return;
 	m_guidesStatus[GS_ALL] = false;
 	doc->guidesPrefs().framesShown = !doc->guidesPrefs().framesShown;
+	view->DrawNew();
+}
+
+void ScribusMainWindow::toggleTableCellFrames()
+{
+	if (!doc)
+		return;
+	doc->guidesPrefs().tableCellFramesShown = !doc->guidesPrefs().tableCellFramesShown;
+	scrActions["viewShowTableCellFrames"]->setChecked(doc->guidesPrefs().tableCellFramesShown);
 	view->DrawNew();
 }
 
@@ -6653,6 +6684,7 @@ void ScribusMainWindow::slotDocSetup()
 	scrActions["viewShowMargins"]->setChecked(doc->guidesPrefs().marginsShown);
 	scrActions["viewShowBleeds"]->setChecked(doc->guidesPrefs().showBleed);
 	scrActions["viewShowFrames"]->setChecked(doc->guidesPrefs().framesShown);
+	scrActions["viewShowTableCellFrames"]->setChecked(doc->guidesPrefs().tableCellFramesShown);
 	scrActions["viewShowLayerMarkers"]->setChecked(doc->guidesPrefs().layerMarkersShown);
 	scrActions["viewShowGrid"]->setChecked(doc->guidesPrefs().gridShown);
 	scrActions["viewShowGuides"]->setChecked(doc->guidesPrefs().guidesShown);
@@ -7372,6 +7404,20 @@ void ScribusMainWindow::updateLayerMenu()
 		QString layerName = doc->activeLayerName();
 		setCurrentComboItem(layerMenu, layerName);
 	}
+}
+
+void ScribusMainWindow::updateZoomSuffix()
+{
+	// Determine the current text direction based on the GUI language setting
+	const auto direction = QLocale(ScCore->getGuiLanguage()).textDirection();
+	// Use RLM (\u200F) in RTL mode to anchor the '%' symbol,
+	// ensuring correct placement regardless of Latin or Arabic numeral types.
+	const auto suffix = (direction == Qt::RightToLeft) ? QStringLiteral("\u200F %") : QStringLiteral(" %");
+	zoomSpinBox->setSuffix(suffix);
+	if (direction == Qt::RightToLeft)
+		zoomSpinBox->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+	else
+		zoomSpinBox->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 }
 
 
@@ -8549,6 +8595,7 @@ void ScribusMainWindow::localeChange()
 
 void ScribusMainWindow::statusBarLanguageChange()
 {
+	updateZoomSuffix();
 	zoomSpinBox->setToolTip( tr("Current zoom level"));
 	zoomDefaultToolbarButton->setToolTip( tr("Zoom to 100%"));
 	zoomOutToolbarButton->setToolTip( tr("Zoom out by the stepping value in Tools preferences"));
@@ -8664,7 +8711,7 @@ void ScribusMainWindow::dropEvent ( QDropEvent * e)
 					ScriXmlDoc ss;
 					if (ss.readElemHeader(data, false, &gx, &gy, &gw, &gh))
 					{
-						doFileNew(gw, gh, 0, 0, 0, 0, 0, 0, false, false, 0, false, 0, 1, "Custom", true);
+						doFileNew(gw, gh, 0, 0, 0, 0, 0, 0, false, false, 0, false, 0, 1, QSizeF(), true);
 						HaveNewDoc();
 						doc->reformPages(true);
 						slotElemRead(data, doc->currentPage()->xOffset(), doc->currentPage()->yOffset(), false, false, doc, view);
@@ -8702,7 +8749,7 @@ void ScribusMainWindow::dropEvent ( QDropEvent * e)
 				ScriXmlDoc ss;
 				if (ss.readElemHeader(text, false, &gx, &gy, &gw, &gh))
 				{
-					doFileNew(gw, gh, 0, 0, 0, 0, 0, 0, false, false, 0, false, 0, 1, "Custom", true);
+					doFileNew(gw, gh, 0, 0, 0, 0, 0, 0, false, false, 0, false, 0, 1, QSizeF(), true);
 					HaveNewDoc();
 					doc->reformPages(true);
 					slotElemRead(text, doc->currentPage()->xOffset(), doc->currentPage()->yOffset(), false, false, doc, view);
@@ -9216,7 +9263,7 @@ void ScribusMainWindow::manageColorsAndFills()
 			if (fmt)
 			{
 				ScribusDoc *s_doc = new ScribusDoc();
-				s_doc->setup(0, 1, 1, 1, 1, "Custom", "Custom");
+				s_doc->setup(0, 1, 1, 1, 1, QSizeF(), "Custom", 0);
 				s_doc->setPage(100, 100, 0, 0, 0, 0, 0, 0, false, false);
 				s_doc->addPage(0);
 				s_doc->setGUI(false, this, nullptr);

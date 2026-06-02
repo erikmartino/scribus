@@ -32,7 +32,6 @@ PropertyWidget_Distance::PropertyWidget_Distance(QWidget* parent) : QFrame(paren
 	columns->setSuffix("");
 
 	MarginStruct distances;
-	distances.resetToZero();
 
 	distanceWidget->setup(distances, 0, m_unitIndex, NewMarginWidget::DistanceWidgetFlags);
 	distanceWidget->toggleLabelVisibility(false);

@@ -131,6 +131,11 @@ public:
 	/// Returns <code>true</code> if this border has no border lines.
 	bool isNull() const { return m_borderLines.empty(); }
 
+	/// Returns true if this border has at least one line that will actually paint.
+	/// A border with only zero-width or None-colored lines is not visible and
+	/// is treated as absent during border collapse.
+	bool isVisible() const;
+
 	/// Returns a string representation of the border.
 	QString asString() const;
 

@@ -42,6 +42,7 @@ for which a new license (GPL+exception) is in place.
 #include "latexhelpers.h"
 #include "langmgr.h"
 #include "localemgr.h"
+#include "manager/pagepreset_manager.h"
 #include "pagesize.h"
 #include "pagestructs.h"
 #include "pdfoptions.h"
@@ -192,6 +193,7 @@ void PrefsManager::initDefaults()
 	appPrefs.uiPrefs.iconSet = "1_7_0";
 	appPrefs.guidesPrefs.marginsShown = true;
 	appPrefs.guidesPrefs.framesShown = true;
+	appPrefs.guidesPrefs.tableCellFramesShown = false;
 	appPrefs.guidesPrefs.layerMarkersShown = false;
 	appPrefs.guidesPrefs.gridShown = false;
 	appPrefs.guidesPrefs.guidesShown = true;
@@ -325,9 +327,9 @@ void PrefsManager::initDefaults()
 		appPrefs.docSetupPrefs.language = "en_GB";
 	appPrefs.docSetupPrefs.pageSize = LocaleManager::instance().pageSizeForLocale(ScQApp->currGUILanguage());
 	appPrefs.docSetupPrefs.pageOrientation = 0;
-	PageSize defaultPageSize(appPrefs.docSetupPrefs.pageSize);
-	appPrefs.docSetupPrefs.pageWidth = defaultPageSize.width();
-	appPrefs.docSetupPrefs.pageHeight = defaultPageSize.height();
+	PageSizeInfo psi = PagePresetManager::instance().pageInfoByName(appPrefs.docSetupPrefs.pageSize);
+	appPrefs.docSetupPrefs.pageWidth = psi.width;
+	appPrefs.docSetupPrefs.pageHeight = psi.height;
 	appPrefs.docSetupPrefs.margins.set(40, 40, 40, 40);
 	appPrefs.docSetupPrefs.marginPreset = 0;
 	appPrefs.docSetupPrefs.bleeds.set(0, 0, 0, 0);
@@ -459,12 +461,13 @@ void PrefsManager::initDefaults()
 	pageS.pageNames.append(CommonStrings::pageLocRight);
 	appPrefs.pageSets.append(pageS);
 	appPrefs.docSetupPrefs.pagePositioning = singlePage;
+	appPrefs.docSetupPrefs.bindingDirection = 0;
 	appPrefs.fontPrefs.askBeforeSubstitute = true;
 	appPrefs.miscPrefs.haveStylePreview = true;
 	appPrefs.miscPrefs.saveEmergencyFile = true;
 	// lorem ipsum defaults
 	appPrefs.miscPrefs.useStandardLI = false;
-	appPrefs.miscPrefs.paragraphsLI = 10;
+	appPrefs.miscPrefs.paragraphsLI = 1;
 	initDefaultCheckerPrefs(appPrefs.verifierPrefs.checkerPrefsList);
 	appPrefs.verifierPrefs.curCheckProfile = CommonStrings::PDF_1_4;
 	appPrefs.verifierPrefs.showPagesWithoutErrors = false;
@@ -537,7 +540,7 @@ void PrefsManager::initDefaults()
 	appPrefs.imageCachePrefs.maxCacheEntries = 1000;
 	appPrefs.imageCachePrefs.compressionLevel = 1;
 	appPrefs.activePageSizes.clear();
-	appPrefs.activePageSizes = PageSize::defaultSizesList();
+	appPrefs.activePageSizes = PagePresetManager::defaultSizesList();
 
 	//Attribute setup
 	appPrefs.itemAttrPrefs.defaultItemAttributes.clear();
@@ -1382,14 +1385,15 @@ bool PrefsManager::writePref(const QString& filePath)
 	deDocumentSetup.setAttribute("UnitIndex", appPrefs.docSetupPrefs.docUnitIndex);
 	deDocumentSetup.setAttribute("PageSize", appPrefs.docSetupPrefs.pageSize);
 	deDocumentSetup.setAttribute("PageOrientation", appPrefs.docSetupPrefs.pageOrientation);
-	deDocumentSetup.setAttribute("PageWidth", ScCLocale::toQStringC(appPrefs.docSetupPrefs.pageWidth));
-	deDocumentSetup.setAttribute("PageHeight", ScCLocale::toQStringC(appPrefs.docSetupPrefs.pageHeight));
+	deDocumentSetup.setAttribute("PageWidth", appPrefs.docSetupPrefs.pageWidth);
+	deDocumentSetup.setAttribute("PageHeight", appPrefs.docSetupPrefs.pageHeight);
 	deDocumentSetup.setAttribute("MarginTop", ScCLocale::toQStringC(appPrefs.docSetupPrefs.margins.top()));
 	deDocumentSetup.setAttribute("MarginBottom", ScCLocale::toQStringC(appPrefs.docSetupPrefs.margins.bottom()));
 	deDocumentSetup.setAttribute("MarginLeft", ScCLocale::toQStringC(appPrefs.docSetupPrefs.margins.left()));
 	deDocumentSetup.setAttribute("MarginRight", ScCLocale::toQStringC(appPrefs.docSetupPrefs.margins.right()));
 	deDocumentSetup.setAttribute("MarginPreset", appPrefs.docSetupPrefs.marginPreset);
 	deDocumentSetup.setAttribute("PagePositioning", appPrefs.docSetupPrefs.pagePositioning);
+	deDocumentSetup.setAttribute("BindingDirection", appPrefs.docSetupPrefs.bindingDirection);
 	deDocumentSetup.setAttribute("AutoSave", static_cast<int>(appPrefs.docSetupPrefs.AutoSave));
 	deDocumentSetup.setAttribute("AutoSaveTime", appPrefs.docSetupPrefs.AutoSaveTime);
 	deDocumentSetup.setAttribute("AutoSaveCount", appPrefs.docSetupPrefs.AutoSaveCount);
@@ -1415,6 +1419,7 @@ bool PrefsManager::writePref(const QString& filePath)
 	deGuides.setAttribute("ShowGuides", static_cast<int>(appPrefs.guidesPrefs.guidesShown));
 	deGuides.setAttribute("ShowColumnBorders", static_cast<int>(appPrefs.guidesPrefs.colBordersShown));
 	deGuides.setAttribute("ShowFrames", static_cast<int>(appPrefs.guidesPrefs.framesShown));
+	deGuides.setAttribute("ShowTableCellFrames", static_cast<int>(appPrefs.guidesPrefs.tableCellFramesShown));
 	deGuides.setAttribute("ShowLayerMarkers", static_cast<int>(appPrefs.guidesPrefs.layerMarkersShown));
 	deGuides.setAttribute("ShowMargins", static_cast<int>(appPrefs.guidesPrefs.marginsShown));
 	deGuides.setAttribute("ShowBaselineGrid", static_cast<int>(appPrefs.guidesPrefs.baselineGridShown));
@@ -2081,17 +2086,18 @@ bool PrefsManager::readPref(const QString& filePath)
 			if (appPrefs.docSetupPrefs.language.isEmpty())
 				appPrefs.docSetupPrefs.language = "en_GB";
 			appPrefs.docSetupPrefs.docUnitIndex = dc.attribute("UnitIndex", "0").toInt();
-			PageSize ps( dc.attribute("PageSize", PageSize::defaultSizesList().at(1)) );
-			appPrefs.docSetupPrefs.pageSize = (ps.name() == CommonStrings::customPageSize ) ? PageSize::defaultSizesList().at(1) : ps.name();
+			PageSizeInfo psi = PagePresetManager::instance().pageInfoByName(dc.attribute("PageSize", PagePresetManager::defaultSizesList().at(1)));
+			appPrefs.docSetupPrefs.pageSize = (psi.id.isEmpty() || psi.id == CommonStrings::customPageSize ) ? CommonStrings::customPageSize : psi.id;
 			appPrefs.docSetupPrefs.pageOrientation = dc.attribute("PageOrientation", "0").toInt();
-			appPrefs.docSetupPrefs.pageWidth   = ScCLocale::toDoubleC(dc.attribute("PageWidth"), 595.0);
-			appPrefs.docSetupPrefs.pageHeight  = ScCLocale::toDoubleC(dc.attribute("PageHeight"), 842.0);
+			appPrefs.docSetupPrefs.pageWidth   = ScCLocale::toDoubleC(dc.attribute("PageWidth"), mm2pts(210));
+			appPrefs.docSetupPrefs.pageHeight  = ScCLocale::toDoubleC(dc.attribute("PageHeight"), mm2pts(297));
 			appPrefs.docSetupPrefs.margins.setTop(ScCLocale::toDoubleC(dc.attribute("MarginTop"), 9.0));
 			appPrefs.docSetupPrefs.margins.setBottom(ScCLocale::toDoubleC(dc.attribute("MarginBottom"), 40.0));
 			appPrefs.docSetupPrefs.margins.setLeft(ScCLocale::toDoubleC(dc.attribute("MarginLeft"), 9.0));
 			appPrefs.docSetupPrefs.margins.setRight(ScCLocale::toDoubleC(dc.attribute("MarginRight"), 9.0));
 			appPrefs.docSetupPrefs.marginPreset   = dc.attribute("MarginPreset", "0").toInt();
 			appPrefs.docSetupPrefs.pagePositioning	= dc.attribute("PagePositioning", "0").toInt();
+			appPrefs.docSetupPrefs.bindingDirection	= dc.attribute("BindingDirection", "0").toInt();
 			appPrefs.docSetupPrefs.AutoSave	  = static_cast<bool>(dc.attribute("AutoSave", "0").toInt());
 			appPrefs.docSetupPrefs.AutoSaveTime  = dc.attribute("AutoSaveTime", "600000").toInt();
 			appPrefs.docSetupPrefs.AutoSaveCount  = dc.attribute("AutoSaveCount", "1").toInt();
@@ -2109,7 +2115,7 @@ bool PrefsManager::readPref(const QString& filePath)
 		{
 			appPrefs.miscPrefs.haveStylePreview = static_cast<bool>(dc.attribute("ShowStylePreview", "1").toInt());
 			appPrefs.miscPrefs.useStandardLI = static_cast<bool>(dc.attribute("LoremIpsumUseStandard", "0").toInt());
-			appPrefs.miscPrefs.paragraphsLI = dc.attribute("LoremIpsumParagraphs", "10").toInt();
+			appPrefs.miscPrefs.paragraphsLI = dc.attribute("LoremIpsumParagraphs", "1").toInt();
 			appPrefs.miscPrefs.saveEmergencyFile = static_cast<bool>(dc.attribute("saveEmergencyFile", "1").toInt());
 		}
 
@@ -2155,6 +2161,7 @@ bool PrefsManager::readPref(const QString& filePath)
 			appPrefs.guidesPrefs.guidesShown = static_cast<bool>(dc.attribute("ShowGuides", "1").toInt());
 			appPrefs.guidesPrefs.colBordersShown = static_cast<bool>(dc.attribute("ShowColumnBorders", "0").toInt());
 			appPrefs.guidesPrefs.framesShown = static_cast<bool>(dc.attribute("ShowFrames", "1").toInt());
+			appPrefs.guidesPrefs.tableCellFramesShown = static_cast<bool>(dc.attribute("ShowTableCellFrames", "0").toInt());
 			appPrefs.guidesPrefs.layerMarkersShown = static_cast<bool>(dc.attribute("ShowLayerMarkers", "0").toInt());
 			appPrefs.guidesPrefs.marginsShown = static_cast<bool>(dc.attribute("ShowMargins", "1").toInt());
 			appPrefs.guidesPrefs.baselineGridShown = static_cast<bool>(dc.attribute("ShowBaselineGrid", "1").toInt());
@@ -2816,12 +2823,12 @@ bool PrefsManager::readPref(const QString& filePath)
 			// check if page sizes existing
 			for (const auto& item : std::as_const(appPrefs.activePageSizes))
 			{
-				PageSize ps(item);
-				if (ps.name() != CommonStrings::customPageSize)
-					checkedPageSizes.append(ps.name());
+				PageSizeInfo psi = PagePresetManager::instance().pageInfoByName(item);
+				if (!psi.id.isEmpty() || psi.id != CommonStrings::customPageSize)
+					checkedPageSizes.append(psi.id);
 			}
 
-			appPrefs.activePageSizes = (checkedPageSizes.count() == 0) ? PageSize::defaultSizesList() : checkedPageSizes;
+			appPrefs.activePageSizes = (checkedPageSizes.count() == 0) ? PagePresetManager::defaultSizesList() : checkedPageSizes;
 
 		}
 		// experimental features

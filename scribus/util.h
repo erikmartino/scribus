@@ -43,7 +43,7 @@ QString cleanupLang(const QString& lang);
 /*! \brief Compare double values by pre-multiplying by 10000 and converting to long if possible.
 If premultiplication does not allow to store result in a long value, perform a standard comparison.
 */
-bool SCRIBUS_API compareDouble(double a, double b);
+bool SCRIBUS_API doubleIsEqual(double a, double b);
 
 /*! \brief Returns a sorted list of QStrings - sorted by locale specific rules!
 Uses compareQStrings() as rule. There is STL used!
@@ -213,5 +213,9 @@ void SCRIBUS_API getUniqueName(QString &name, const QStringList& list, const QSt
  * \param max
  */
 bool SCRIBUS_API inRange(unsigned min, unsigned value, unsigned max);
+
+
+QString SCRIBUS_API getShortUuidFromUuid(const QUuid &uuid);
+QUuid SCRIBUS_API getUuidFromShortUuid(const QString &shortId);
 
 #endif

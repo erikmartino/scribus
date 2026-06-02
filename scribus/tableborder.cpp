@@ -15,6 +15,7 @@ for which a new license (GPL+exception) is in place.
 #include <QStringList>
 #include <QtAlgorithms>
 
+#include "commonstrings.h"
 #include "tableborder.h"
 
 /*
@@ -79,6 +80,18 @@ void TableBorder::replaceBorderLine(int index, const TableBorderLine& borderLine
 
 	m_borderLines.replace(index, borderLine);
 	std::stable_sort(m_borderLines.begin(), m_borderLines.end(), std::greater<TableBorderLine>());
+}
+
+bool TableBorder::isVisible() const
+{
+	if (m_borderLines.empty())
+		return false;
+	for (const TableBorderLine& line : m_borderLines)
+	{
+		if (line.width() > 0.0 && line.color() != CommonStrings::None)
+			return true;
+	}
+	return false;
 }
 
 QString TableBorder::asString() const

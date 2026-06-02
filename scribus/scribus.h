@@ -154,8 +154,11 @@ public:
 	inline bool scriptIsRunning(void) const { return (m_ScriptRunning > 0); }
 	inline void setScriptRunning(bool value) { m_ScriptRunning += (value ? 1 : -1); }
 
-	ScribusDoc* doFileNew(double width, double height, double topMargin, double leftMargin, double rightMargin, double bottomMargin, double columnDistance, double columnCount, bool autoTextFrames, int pageArrangement, int unitIndex, int firstPageLocation, int orientation, int firstPageNumber, const QString& defaultPageSize, bool requiresGUI, int pageCount = 1, bool showView = true, int marginPreset = 0);
-	ScribusDoc* newDoc(double width, double height, double topMargin, double leftMargin, double rightMargin, double bottomMargin, double columnDistance, double columnCount, bool autoTextFrames, int pageArrangement, int unitIndex, int firstPageLocation, int orientation, int firstPageNumber, const QString& defaultPageSize, bool requiresGUI, int pageCount = 1, bool showView = true, int marginPreset = 0);
+	ScribusDoc* doFileNew(double width, double height, double topMargin, double leftMargin, double rightMargin,
+		double bottomMargin, double columnDistance, double columnCount, bool autoTextFrames, int pageArrangement,
+		int unitIndex, int firstPageLocation, int orientation, int firstPageNumber, QSizeF defaultPageSize,
+		bool requiresGUI, int pageCount = 1, bool showView = true, int marginPreset = 0, int bindingDirection = 0);
+
 	bool DoFileSave(const QString& fileName, QString* savedFileName = nullptr, uint formatID = FORMATID_CURRENTEXPORT);
 
 	void changeEvent(QEvent *e) override;
@@ -183,6 +186,7 @@ public:
 	void RestoreBookMarks();
 	QStringList  scrapbookNames() const;
 	void updateLayerMenu();
+	void updateZoomSuffix();
 	void emergencySave();
 	QStringList findRecoverableFile();
 	bool recoverFile(const QStringList& foundFiles);
@@ -462,6 +466,7 @@ public slots:
 	void toggleMarks();
 	void toggleBleeds();
 	void toggleFrames();
+	void toggleTableCellFrames();
 	void toggleLayerMarkers();
 	void toggleTextLinks();
 	void toggleTextControls();

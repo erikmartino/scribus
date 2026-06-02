@@ -190,7 +190,7 @@ void ContextMenu::createMenuItems_Selection()
 		menuEditContent->addAction(m_ScMW->scrActions["editClearContents"]);
 	if (m_actionList.contains("editTruncateContents"))
 		menuEditContent->addAction(m_ScMW->scrActions["editTruncateContents"]);
-	if (!menuEditContent->actions().isEmpty())
+	if (!menuEditContent->actions().isEmpty() && !currItem->isTable())
 	{
 		QAction *act = addMenu(menuEditContent);
 		act->setText( tr("Content"));
@@ -336,10 +336,18 @@ void ContextMenu::createMenuItems_Selection()
 			addAction(m_ScMW->scrActions["tableAdjustFrameToTable"]);
 		if (m_actionList.contains("tableAdjustTableToFrame"))
 			addAction(m_ScMW->scrActions["tableAdjustTableToFrame"]);
+		if (m_actionList.contains("tableAdjustRowHeights"))
+			addAction(m_ScMW->scrActions["tableAdjustRowHeights"]);
 		if (m_actionList.contains("itemAdjustFrameHeightToText"))
 			addAction(m_ScMW->scrActions["itemAdjustFrameHeightToText"]);
 
-		
+		if (!menuEditContent->actions().isEmpty() && currItem->isTable())
+		{
+			addSeparator();
+			QAction *act = addMenu(menuEditContent);
+			act->setText( tr("Content"));
+		}
+
 		if (m_actionList.contains("itemPreviewLow"))
 		{
 			if (m_actionList.contains("itemImageIsVisible"))

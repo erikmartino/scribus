@@ -436,6 +436,8 @@ public:
 	static QString CellFillColor;
 	static QString CellFillShade;
 	static QString CellStyle;
+	static QString TableDistributeColumns;
+	static QString TableDistributeRows;
 	static QString TableFillColor;
 	static QString TableFillColorRst;
 	static QString TableFillShade;
@@ -452,6 +454,12 @@ public:
 	static QString TableStyle;
 	static QString TableRowHeight;
 	static QString TableColumnWidth;
+	static QString TableMergeCells;
+	static QString TableUnmergeCells;
+	static QString TableRowInsert;
+	static QString TableRowRemove;
+	static QString TableColumnInsert;
+	static QString TableColumnRemove;
 	static QString SetFont;
 	static QString SetFontSize;
 	static QString SetFontWidth;

@@ -739,6 +739,9 @@
     <ClInclude Include="..\..\..\scribus\styles\styleset.h">
       <Filter>Source Files\styles</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\scribus\styles\tablearea.h">
+      <Filter>Source Files\styles</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\scribus\styles\tablestyle.h">
       <Filter>Source Files\styles</Filter>
     </ClInclude>
@@ -1354,6 +1357,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\scribus\manager\dock_manager.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\manager\pagepreset_manager.cpp">
       <Filter>Source Files\manager</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\scribus\manager\widget_manager.cpp">
@@ -3647,6 +3653,9 @@
       <Filter>Source Files</Filter>
     </moc>
     <moc Include="..\..\..\scribus\manager\dock_manager.h">
+      <Filter>Source Files\manager</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\manager\pagepreset_manager.h">
       <Filter>Source Files\manager</Filter>
     </moc>
     <moc Include="..\..\..\scribus\manager\widget_manager.h">

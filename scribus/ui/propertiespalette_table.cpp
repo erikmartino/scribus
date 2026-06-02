@@ -10,6 +10,7 @@ for which a new license (GPL+exception) is in place.
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QScopedValueRollback>
+#include <QSignalBlocker>
 #include <QWidget>
 
 #include "appmodehelper.h"
@@ -17,6 +18,7 @@ for which a new license (GPL+exception) is in place.
 #include "colorcombo.h"
 #include "commonstrings.h"
 #include "iconmanager.h"
+#include "newmarginwidget.h"
 #include "pageitem_table.h"
 #include "propertiespalette_table.h"
 #include "sccolorengine.h"
@@ -38,10 +40,14 @@ PropertiesPalette_Table::PropertiesPalette_Table(QWidget* parent) : QWidget(pare
 	setSizePolicy( QSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum));
 
 	iconSetChange();
-	labelTable->setBuddy(tableStyleCombo);
-	labelCells->setBuddy(cellStyleCombo);
+
+	MarginStruct distances;
+
+	cellPaddingWidget->setup(distances, 0, m_unitIndex, NewMarginWidget::DistanceWidgetFlags);
+	cellPaddingWidget->toggleLabelVisibility(false);
 
 	connect(ScQApp, SIGNAL(iconSetChanged()), this, SLOT(iconSetChange()));
+	connect(ScQApp, SIGNAL(labelVisibilityChanged(bool)), this, SLOT(toggleLabelVisibility(bool)));
 
 	connect(tableStyleCombo, SIGNAL(newStyle(QString)), this, SLOT(setTableStyle(QString)));
 	connect(cellStyleCombo, SIGNAL(newStyle(QString)), this, SLOT(setCellStyle(QString)));
@@ -53,8 +59,10 @@ void PropertiesPalette_Table::iconSetChange()
 
 	addBorderLineButton->setIcon(iconManager.loadIcon("stroke-add"));
 	removeBorderLineButton->setIcon(iconManager.loadIcon("stroke-remove"));
-	buttonClearTableStyle->setIcon(iconManager.loadIcon("edit-clear"));
-	buttonClearCellStyle->setIcon(iconManager.loadIcon("edit-clear"));
+	buttonClearTableStyle->setIcon(iconManager.loadIcon("reset"));
+	buttonClearCellStyle->setIcon(iconManager.loadIcon("reset"));
+	labelTable->setPixmap(iconManager.loadPixmap("table-style"));
+	labelCells->setPixmap(iconManager.loadPixmap("table-cell-style"));
 }
 
 void PropertiesPalette_Table::handleUpdateRequest(int updateFlags)
@@ -93,6 +101,9 @@ void PropertiesPalette_Table::setDocument(ScribusDoc *doc)
 
 	m_doc = doc;
 
+	m_unitRatio = m_doc->unitRatio();
+	m_unitIndex = m_doc->unitIndex();
+
 	tableStyleCombo->setDoc(m_doc);
 	cellStyleCombo->setDoc(m_doc);
 
@@ -117,6 +128,9 @@ void PropertiesPalette_Table::unsetDocument()
 void PropertiesPalette_Table::setItem(PageItem* item)
 {
 	m_item = item;
+
+	if (!m_item) return;
+
 	if (item->isTable())
 		connect(m_item->asTable(), SIGNAL(selectionChanged()), this, SLOT(handleCellSelectionChanged()), Qt::UniqueConnection);
 }
@@ -141,10 +155,11 @@ void PropertiesPalette_Table::handleSelectionChanged()
 	else
 		m_item = nullptr;
 
-	sideSelector->setSelection(TableSide::All);
+	syncSideSelectorToCells();
 
 	updateFillControls();
 	updateStyleControls();
+	updatePaddingControls();
 }
 
 void PropertiesPalette_Table::handleCellSelectionChanged()
@@ -155,6 +170,7 @@ void PropertiesPalette_Table::handleCellSelectionChanged()
 		return;
 	updateFillControls();
 	updateStyleControls();
+	syncSideSelectorToCells();
 	on_sideSelector_selectionChanged();
 }
 
@@ -203,6 +219,48 @@ void PropertiesPalette_Table::updateStyleControls()
 	}
 }
 
+void PropertiesPalette_Table::updatePaddingControls()
+{
+	if (!m_doc || !m_item || !m_item->isTable())
+		return;
+
+	QSet<TableCell> cells = effectiveCells();
+	if (cells.isEmpty())
+	{
+		PageItem_Table* table = m_item->asTable();
+		TableCell active = table->activeCell();
+		if (active.isValid())
+			cells.insert(active);
+	}
+	if (cells.isEmpty())
+		return;
+
+	// For multi-cell selections, show the first cell's values.
+	// (Mixed-value display could be added later.)
+	const TableCell& cell = *cells.cbegin();
+
+	// Set the widget's "page" dimensions to the cell's bounding rect so
+	// padding clamps stay sane.
+	QSignalBlocker blocker(cellPaddingWidget);
+	QRectF cellRect = cell.boundingRect();
+	cellPaddingWidget->setPageWidth(cellRect.width());
+	cellPaddingWidget->setPageHeight(cellRect.height());
+
+	MarginStruct padding;
+	padding.set(cell.topPadding(), cell.leftPadding(), cell.bottomPadding(), cell.rightPadding());
+	cellPaddingWidget->setNewValues(padding);
+}
+
+void PropertiesPalette_Table::toggleLabelVisibility(bool v)
+{
+	borderLineColorLabel->setLabelVisibility(v);
+	borderLineShadeLabel->setLabelVisibility(v);
+	borderLineStyleLabel->setLabelVisibility(v);
+	borderLineWidthLabel->setLabelVisibility(v);
+	fillColorLabel->setLabelVisibility(v);
+	fillShadeLabel->setLabelVisibility(v);
+}
+
 void PropertiesPalette_Table::setTableStyle(const QString &name)
 {
 	if (!m_item || !m_item->isTable())
@@ -229,20 +287,82 @@ void PropertiesPalette_Table::on_sideSelector_selectionChanged()
 	if (!m_item || !m_item->isTable())
 		return;
 
-	/*
-	 * Figure out the selection state. Either
-	 *
-	 * 1) Some sides are selected and they all have the same border, or
-	 * 2) Some sides are selected but they have different borders, or
-	 * 3) No sides are selected.
-	 */
+	TableSides newSelection = sideSelector->selection();
+	TableSides changedSides = newSelection ^ m_lastSelection;
+	bool turnedOn = (newSelection & changedSides) != 0;
+
+	m_lastSelection = newSelection;
+
+	TableSides outerChanged = changedSides & TableSide::AllOuter;
+	bool didChange = false;
+
+	PageItem_Table* table = m_item->asTable();
+	QScopedValueRollback<bool> dontResizeRb(m_doc->dontResize, true);
+
+	// Outer-side handling: only when outer bits changed.
+	if (outerChanged != TableSide::None)
+	{
+		didChange = true;
+		if (turnedOn)
+		{
+			if (m_currentBorder.isNull())
+				m_currentBorder = TableBorder(1.0, Qt::SolidLine, "Black", 100);
+
+			QSet<TableCell> cells = effectiveCells();
+			table->setCellBorders(cells, m_currentBorder, outerChanged);
+
+			if (m_doc->appMode != modeEditTable)
+				table->setBorders(m_currentBorder, outerChanged);
+		}
+		else
+		{
+			QSet<TableCell> cells = effectiveCells();
+			TableBorder nullBorder;
+			table->setCellBorders(cells, nullBorder, outerChanged);
+
+			if (m_doc->appMode != modeEditTable)
+				table->setBorders(nullBorder, outerChanged);
+		}
+	}
+
+	// Inner-horizontal handling: independent of outer changes.
+	if (changedSides & TableSide::InnerHorizontal)
+	{
+		didChange = true;
+		QSet<TableCell> cells = effectiveCells();
+		bool innerHOn = (newSelection & TableSide::InnerHorizontal) != 0;
+
+		if (innerHOn && m_currentBorder.isNull())
+			m_currentBorder = TableBorder(1.0, Qt::SolidLine, "Black", 100);
+
+		TableBorder borderToApply = innerHOn ? m_currentBorder : TableBorder();
+		applyToInnerHorizontal(cells, borderToApply);
+	}
+
+	// Inner-vertical handling: independent of outer changes.
+	if (changedSides & TableSide::InnerVertical)
+	{
+		didChange = true;
+		QSet<TableCell> cells = effectiveCells();
+		bool innerVOn = (newSelection & TableSide::InnerVertical) != 0;
+
+		if (innerVOn && m_currentBorder.isNull())
+			m_currentBorder = TableBorder(1.0, Qt::SolidLine, "Black", 100);
+
+		TableBorder borderToApply = innerVOn ? m_currentBorder : TableBorder();
+		applyToInnerVertical(cells, borderToApply);
+	}
+
+	if (didChange)
+		table->update();
+
+	// Now refresh the border-line list to show what's on the currently-bold sides.
+	// Reuse the existing logic that figures out borderState across selected sides.
 	State borderState = Unset;
 	m_currentBorder = TableBorder();
-	TableSides selectedSides = sideSelector->selection();
-	PageItem_Table* table = m_item->asTable();
 	bool tableEditMode = (m_doc->appMode == modeEditTable);
 
-	if (selectedSides & TableSide::Left)
+	if (newSelection & TableSide::Left)
 	{
 		TableBorder leftBorder = tableEditMode ? table->activeCell().leftBorder() : table->leftBorder();
 		if (borderState == Unset && !leftBorder.isNull())
@@ -253,8 +373,7 @@ void PropertiesPalette_Table::on_sideSelector_selectionChanged()
 		else if (m_currentBorder != leftBorder)
 			borderState = TriState;
 	}
-
-	if (selectedSides & TableSide::Right)
+	if (newSelection & TableSide::Right)
 	{
 		TableBorder rightBorder = tableEditMode ? table->activeCell().rightBorder() : table->rightBorder();
 		if (borderState == Unset && !rightBorder.isNull())
@@ -265,11 +384,10 @@ void PropertiesPalette_Table::on_sideSelector_selectionChanged()
 		else if (m_currentBorder != rightBorder)
 			borderState = TriState;
 	}
-
-	if (selectedSides & TableSide::Top)
+	if (newSelection & TableSide::Top)
 	{
 		TableBorder topBorder = tableEditMode ? table->activeCell().topBorder() : table->topBorder();
-		if (borderState == Unset && !table->topBorder().isNull())
+		if (borderState == Unset && !topBorder.isNull())
 		{
 			m_currentBorder = topBorder;
 			borderState = Set;
@@ -277,8 +395,7 @@ void PropertiesPalette_Table::on_sideSelector_selectionChanged()
 		else if (m_currentBorder != topBorder)
 			borderState = TriState;
 	}
-
-	if (selectedSides & TableSide::Bottom)
+	if (newSelection & TableSide::Bottom)
 	{
 		TableBorder bottomBorder = tableEditMode ? table->activeCell().bottomBorder() : table->bottomBorder();
 		if (borderState == Unset && !bottomBorder.isNull())
@@ -292,14 +409,12 @@ void PropertiesPalette_Table::on_sideSelector_selectionChanged()
 
 	if (borderState == Set)
 	{
-		/// Some sides selected and they have same border.
 		addBorderLineButton->setEnabled(true);
 		removeBorderLineButton->setEnabled(true);
 		borderLineList->setEnabled(true);
 	}
 	else if (borderState == TriState)
 	{
-		/// Some sides selected but they have different border.
 		m_currentBorder = TableBorder();
 		addBorderLineButton->setEnabled(true);
 		removeBorderLineButton->setEnabled(true);
@@ -307,14 +422,16 @@ void PropertiesPalette_Table::on_sideSelector_selectionChanged()
 	}
 	else
 	{
-		/// No sides selected.
 		m_currentBorder = TableBorder();
 		addBorderLineButton->setEnabled(false);
 		removeBorderLineButton->setEnabled(false);
 		borderLineList->setEnabled(false);
 	}
 
+	int previousRow = borderLineList->currentRow();
 	updateBorderLineList();
+	if (previousRow >= 0 && previousRow < borderLineList->count())
+		borderLineList->setCurrentRow(previousRow);
 }
 
 void PropertiesPalette_Table::updateBorderLineList()
@@ -414,6 +531,34 @@ QColor PropertiesPalette_Table::getColor(const QString& colorName, int shade) co
 		return QColor();
 
 	return ScColorEngine::getDisplayColor(m_doc->PageColors.value(colorName), m_doc, shade);
+}
+
+void PropertiesPalette_Table::applyToInnerHorizontal(const QSet<TableCell>& cells, const TableBorder& border)
+{
+	PageItem_Table* table = m_item->asTable();
+	for (TableCell cell : cells)
+	{
+		TableCell below = table->cellAt(cell.row() + cell.rowSpan(), cell.column());
+		if (cells.contains(below))
+		{
+			cell.setBottomBorder(border);
+			below.setTopBorder(border);
+		}
+	}
+}
+
+void PropertiesPalette_Table::applyToInnerVertical(const QSet<TableCell>& cells, const TableBorder& border)
+{
+	PageItem_Table* table = m_item->asTable();
+	for (TableCell cell : cells)
+	{
+		TableCell right = table->cellAt(cell.row(), cell.column() + cell.columnSpan());
+		if (cells.contains(right))
+		{
+			cell.setRightBorder(border);
+			right.setLeftBorder(border);
+		}
+	}
 }
 
 void PropertiesPalette_Table::on_borderLineList_currentRowChanged(int row)
@@ -618,6 +763,106 @@ void PropertiesPalette_Table::on_buttonClearCellStyle_clicked()
 	table->update();
 }
 
+void PropertiesPalette_Table::on_cellPaddingWidget_valuesChanged(const MarginStruct& padding)
+{
+	if (!m_doc || !m_item || !m_item->isTable())
+		return;
+
+	QScopedValueRollback<bool> dontResizeRb(m_doc->dontResize, true);
+
+	QSet<TableCell> cells = effectiveCells();
+	for (const TableCell& cell : cells)
+	{
+		TableCell c = cell;
+		c.setLeftPadding(padding.left());
+		c.setRightPadding(padding.right());
+		c.setTopPadding(padding.top());
+		c.setBottomPadding(padding.bottom());
+	}
+
+	m_item->asTable()->adjustTable();
+	m_item->asTable()->update();
+}
+
+void PropertiesPalette_Table::syncSideSelectorToCells()
+{
+	if (!m_item || !m_item->isTable())
+		return;
+
+	QSet<TableCell> cells = effectiveCells();
+	if (cells.isEmpty())
+		return;
+
+	PageItem_Table* table = m_item->asTable();
+
+	bool anyLeft = false, anyRight = false, anyTop = false, anyBottom = false;
+	bool anyInnerH = false, anyInnerV = false;
+	bool hasInteriorEdges = false;
+
+	for (const TableCell& cell : cells)
+	{
+		if (!cell.leftBorder().isNull())
+			anyLeft = true;
+		if (!cell.rightBorder().isNull())
+			anyRight = true;
+		if (!cell.topBorder().isNull())
+			anyTop = true;
+		if (!cell.bottomBorder().isNull())
+			anyBottom = true;
+
+		// Check vertical adjacency for inner-horizontal edges.
+		TableCell below = table->cellAt(cell.row() + cell.rowSpan(), cell.column());
+		if (cells.contains(below))
+		{
+			hasInteriorEdges = true;
+			if (!cell.bottomBorder().isNull() || !below.topBorder().isNull())
+				anyInnerH = true;
+		}
+		// Check horizontal adjacency for inner-vertical edges.
+		TableCell right = table->cellAt(cell.row(), cell.column() + cell.columnSpan());
+		if (cells.contains(right))
+		{
+			hasInteriorEdges = true;
+			if (!cell.rightBorder().isNull() || !right.leftBorder().isNull())
+				anyInnerV = true;
+		}
+	}
+
+	TableSides sides;
+	if (anyLeft)
+		sides |= TableSide::Left;
+	if (anyRight)
+		sides |= TableSide::Right;
+	if (anyTop)
+		sides |= TableSide::Top;
+	if (anyBottom)
+		sides |= TableSide::Bottom;
+	if (anyInnerH)
+		sides |= TableSide::InnerHorizontal;
+	if (anyInnerV)
+		sides |= TableSide::InnerVertical;
+
+	QSignalBlocker blocker(sideSelector);
+	sideSelector->setSelection(sides);
+	sideSelector->setInnerActive(hasInteriorEdges);
+	m_lastSelection = sides;
+}
+
+QSet<TableCell> PropertiesPalette_Table::effectiveCells() const
+{
+	PageItem_Table* table = m_item->asTable();
+	if (m_doc->appMode == modeEditTable)
+	{
+		const QSet<TableCell>& selected = table->selectedCells();
+		if (!selected.isEmpty())
+			return selected;
+		QSet<TableCell> single;
+		single.insert(table->activeCell());
+		return single;
+	}
+	return table->cells();
+}
+
 void PropertiesPalette_Table::updateBorders()
 {
 	if (!m_doc || !m_item || !m_item->isTable())
@@ -626,16 +871,21 @@ void PropertiesPalette_Table::updateBorders()
 
 	PageItem_Table* table = m_item->asTable();
 	TableSides selectedSides = sideSelector->selection();
-	if (m_doc->appMode != modeEditTable)
+
+	if (m_doc->appMode == modeEditTable)
 	{
-		table->setBorders(m_currentBorder, selectedSides);
+		// Edit mode: apply to selected cells. If no cells are selected,
+		// do nothing -- the user hasn't told us what to edit.
+		const QSet<TableCell>& selection = table->selectedCells();
+		if (!selection.isEmpty())
+			table->setCellBorders(selection, m_currentBorder, selectedSides);
 	}
 	else
 	{
-		QSet<TableCell> cells = table->selectedCells();
-		if (cells.isEmpty())
-			cells.insert(table->activeCell());
-		table->setCellBorders(cells, m_currentBorder, selectedSides);
+		// Normal mode: implicit whole-table selection. Apply to all cells
+		// and keep the table-level fallback in sync.
+		table->setBorders(m_currentBorder, selectedSides);
+		table->setCellBorders(table->cells(), m_currentBorder, selectedSides);
 	}
 	table->update();
 }
@@ -643,9 +893,23 @@ void PropertiesPalette_Table::updateBorders()
 void PropertiesPalette_Table::languageChange()
 {
 	retranslateUi(this);
+
+	scTableStyles->setText(tr("Styles"));
+	scTableFills->setText(tr("Fill"));
+	scTableBorders->setText(tr("Borders"));
+	scTableCellPadding->setText(tr("Cell Padding"));
+
+	borderLineColorLabel->setText(tr("C&olor"));
+	borderLineShadeLabel->setText(tr("S&hade"));
+	borderLineStyleLabel->setText(tr("&Type"));
+	borderLineWidthLabel->setText(tr("&Width"));
+	fillColorLabel->setText(tr("&Color"));
+	fillShadeLabel->setText(tr("&Shade"));
+
 }
 
 void PropertiesPalette_Table::unitChange()
 {
-	// Not implemented.
+	if (m_doc)
+		cellPaddingWidget->setNewUnit(m_doc->unitIndex());
 }

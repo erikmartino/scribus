@@ -168,6 +168,7 @@ struct DocumentSetupPrefs
 	bool AutoSaveLocation;
 	QString AutoSaveDir;
 	bool saveCompressed;
+	int bindingDirection; //! 0 = LTR, 1 = RTL
 };
 
 //Guides
@@ -191,6 +192,7 @@ struct GuidesPrefs
 	bool gridShown; //! Show the grid or not
 	bool baselineGridShown; //! Show the baseline grid or not
 	bool framesShown; //! Show frame borders or not
+	bool tableCellFramesShown; //! Show table cell text frame outlines or not
 	bool colBordersShown; //! Show text frame column borders or not
 	bool layerMarkersShown; //! Show a layer indicator when layers are active or not
 	bool linkShown; //! Show text frame links or not

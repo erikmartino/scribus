@@ -70,6 +70,14 @@ public:
 	/// Returns @a width, as the selector is supposed to be square shaped.
 	int heightForWidth(int width) const override { return width; }
 
+	/// Sets whether the inner-cross zone is interactive. When false (typically
+	/// when only one cell is selected), the inner cross renders muted and
+	/// clicks on it do nothing.
+	void setInnerActive(bool active);
+
+	/// Returns whether the inner-cross zone is currently interactive.
+	bool innerActive() const { return m_innerActive; }
+
 signals:
 	/// Emitted when the selections has changed.
 	void selectionChanged();
@@ -87,6 +95,8 @@ protected:
 private:
 	/// Utility function to return the side closest to @a point.
 	TableSide closestSide(const QPointF& point) const;
+	/// Returns the perpendicular distance from a point to a line segment.
+	static double distanceToSegment(const QPointF& point, const QLineF& line);
 
 private:
 	/// The current selection.
@@ -109,6 +119,16 @@ private:
 
 	/// The bottom side line.
 	QLineF m_bottom;
+
+	/// The inner horizontal line.
+	QLineF m_innerHorizontal;
+
+	/// The inner vertical line.
+	QLineF m_innerVertical;
+
+	/// Whether the inner-cross zone is currently interactive.
+	bool m_innerActive { false };
+
 };
 
 #endif // TABLESIDESELECTOR_H

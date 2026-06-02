@@ -293,6 +293,7 @@ void ContentPalette::unitChange()
 	groupPal->unitChange();
 	imagePal->unitChange();
 	textPal->unitChange();
+	tablePal->unitChange();
 
 	m_haveItem = tmp;
 }

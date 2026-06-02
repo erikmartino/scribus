@@ -10,595 +10,657 @@ for which a new license (GPL+exception) is in place.
 #include <QPointF>
 
 #include "pageitem_table.h"
+#include "styles/cellstyle.h"
 #include "tableborder.h"
 #include "tableutils.h"
 
 namespace TableUtils
 {
 
-void resolveBordersHorizontal(const TableCell& topLeftCell, const TableCell& topCell,
-	const TableCell& topRightCell, const TableCell& bottomLeftCell, const TableCell& bottomCell,
-	const TableCell& bottomRightCell, TableBorder* topLeft, TableBorder* left, TableBorder* bottomLeft,
-	TableBorder* center, TableBorder* topRight, TableBorder* right, TableBorder* bottomRight, PageItem_Table* table)
-{
-	// Resolve top left.
-	if (!topCell.isValid() && !bottomCell.isValid())
-		return;
-	if (topLeftCell.column() == topCell.column())
-		*topLeft = TableBorder();
-	else if (topLeftCell.isValid() && topCell.isValid())
-		*topLeft = collapseBorders(topCell.leftBorder(), topLeftCell.rightBorder());
-	else if (topLeftCell.isValid())
-		*topLeft = collapseBorders(table->rightBorder(), topLeftCell.rightBorder());
-	else if (topCell.isValid())
-		*topLeft = collapseBorders(topCell.leftBorder(), table->leftBorder());
-	else
-		*topLeft = TableBorder();
-	// Resolve left.
-	if (topLeftCell.row() == bottomLeftCell.row())
-		*left = TableBorder();
-	else if (topLeftCell.isValid() && bottomLeftCell.isValid())
-		*left = collapseBorders(bottomLeftCell.topBorder(), topLeftCell.bottomBorder());
-	else if (topLeftCell.isValid())
-		*left = collapseBorders(table->bottomBorder(), topLeftCell.bottomBorder());
-	else if (bottomLeftCell.isValid())
-		*left = collapseBorders(bottomLeftCell.topBorder(), table->topBorder());
-	else
-		*left = TableBorder();
-	// Resolve bottom left.
-	if (bottomLeftCell.column() == bottomCell.column())
-		*bottomLeft = TableBorder();
-	else if (bottomLeftCell.isValid() && bottomCell.isValid())
-		*bottomLeft = collapseBorders(bottomCell.leftBorder(), bottomLeftCell.rightBorder());
-	else if (bottomLeftCell.isValid())
-		*bottomLeft = collapseBorders(table->rightBorder(), bottomLeftCell.rightBorder());
-	else if (bottomCell.isValid())
-		*bottomLeft = collapseBorders(bottomCell.leftBorder(), table->leftBorder());
-	else
-		*bottomLeft = TableBorder();
-	// Resolve center.
-	if (topCell.row() == bottomCell.row())
-		*center = TableBorder();
-	else if (topCell.isValid() && bottomCell.isValid())
-		*center = collapseBorders(topCell.bottomBorder(), bottomCell.topBorder());
-	else if (topCell.isValid())
-		*center = collapseBorders(table->bottomBorder(), topCell.bottomBorder());
-	else if (bottomCell.isValid())
-		*center = collapseBorders(bottomCell.topBorder(), table->topBorder());
-	else
-		*center = TableBorder();
-	// Resolve top right.
-	if (topRightCell.column() == topCell.column())
-		*topRight = TableBorder();
-	else if (topRightCell.isValid() && topCell.isValid())
-		*topRight = collapseBorders(topRightCell.leftBorder(), topCell.rightBorder());
-	else if (topRightCell.isValid())
-		*topRight = collapseBorders(topRightCell.leftBorder(), table->leftBorder());
-	else if (topCell.isValid())
-		*topRight = collapseBorders(table->rightBorder(), topCell.rightBorder());
-	else
-		*topRight = TableBorder();
-	// Resolve right.
-	if (topRightCell.row() == bottomRightCell.row())
-		*right = TableBorder();
-	else if (topRightCell.isValid() && bottomRightCell.isValid())
-		*right = collapseBorders(bottomRightCell.topBorder(), topRightCell.bottomBorder());
-	else if (topRightCell.isValid())
-		*right = collapseBorders(table->bottomBorder(), topRightCell.bottomBorder());
-	else if (bottomRightCell.isValid())
-		*right = collapseBorders(bottomRightCell.topBorder(), table->topBorder());
-	else
-		*right = TableBorder();
-	// Resolve bottom right.
-	if (bottomRightCell.column() == bottomCell.column())
-		*bottomRight = TableBorder();
-	else if (bottomRightCell.isValid() && bottomCell.isValid())
-		*bottomRight = collapseBorders(bottomRightCell.leftBorder(), bottomCell.rightBorder());
-	else if (bottomRightCell.isValid())
-		*bottomRight = collapseBorders(bottomRightCell.leftBorder(), table->leftBorder());
-	else if (bottomCell.isValid())
-		*bottomRight = collapseBorders(table->rightBorder(), bottomCell.rightBorder());
-	else
-		*bottomRight = TableBorder();
-}
+	/**
+	 * Collapses two cell borders, preferring the explicitly-set border over an
+	 * inherited one when the borders would otherwise tie. The border that wins
+	 * the tie is the one that the user set, matching the
+	 * per-cell border model.
+	 */
+	TableBorder collapseBordersBetweenCells(
+			const TableBorder& firstBorder, bool firstInh,
+			const TableBorder& secondBorder, bool secondInh)
+	{
+		// If one side has been explicitly cleared (set to null but not inherited)
+		// and the other is inherited, the explicit clear wins -- the user has
+		// expressed intent to have no border there.
+		if (!firstInh && firstBorder.isNull() && secondInh)
+			return firstBorder;
+		if (!secondInh && secondBorder.isNull() && firstInh)
+			return secondBorder;
 
-void resolveBordersVertical(const TableCell& topLeftCell, const TableCell& topRightCell, const TableCell& leftCell, const TableCell& rightCell, const TableCell& bottomLeftCell,
-	const TableCell& bottomRightCell, TableBorder* topLeft, TableBorder* top, TableBorder* topRight, TableBorder* center, TableBorder* bottomLeft, TableBorder* bottom, TableBorder* bottomRight, PageItem_Table* table)
-{
-	if (!leftCell.isValid() && !rightCell.isValid())
-		return;
-	// Resolve top left.
-	if (topLeftCell.row() == leftCell.row())
-		*topLeft = TableBorder();
-	else if (topLeftCell.isValid() && leftCell.isValid())
-		*topLeft = collapseBorders(leftCell.topBorder(), topLeftCell.bottomBorder());
-	else if (topLeftCell.isValid())
-		*topLeft = collapseBorders(table->bottomBorder(), topLeftCell.bottomBorder());
-	else if (leftCell.isValid())
-		*topLeft = collapseBorders(leftCell.topBorder(), table->topBorder());
-	else
-		*topLeft = TableBorder();
-	// Resolve top.
-	if (topLeftCell.column() == topRightCell.column())
-		*top = TableBorder();
-	else if (topLeftCell.isValid() && topRightCell.isValid())
-		*top = collapseBorders(topRightCell.leftBorder(), topLeftCell.rightBorder());
-	else if (topLeftCell.isValid())
-		*top = collapseBorders(table->rightBorder(), topLeftCell.rightBorder());
-	else if (topRightCell.isValid())
-		*top = collapseBorders(topRightCell.leftBorder(), table->leftBorder());
-	else
-		*top = TableBorder();
-	// Resolve top right.
-	if (topRightCell.row() == rightCell.row())
-		*topRight = TableBorder();
-	else if (topRightCell.isValid() && rightCell.isValid())
-		*topRight = collapseBorders(rightCell.topBorder(), topRightCell.bottomBorder());
-	else if (topRightCell.isValid())
-		*topRight = collapseBorders(table->bottomBorder(), topRightCell.bottomBorder());
-	else if (rightCell.isValid())
-		*topRight = collapseBorders(rightCell.topBorder(), table->topBorder());
-	else
-		*topRight = TableBorder();
-	// Resolve center.
-	if (leftCell.column() == rightCell.column())
-		*center = TableBorder();
-	else if (leftCell.isValid() && rightCell.isValid())
-		*center = collapseBorders(rightCell.leftBorder(), leftCell.rightBorder());
-	else if (leftCell.isValid())
-		*center = collapseBorders(table->rightBorder(), leftCell.rightBorder());
-	else if (rightCell.isValid())
-		*center = collapseBorders(rightCell.leftBorder(), table->leftBorder());
-	else
-		*center = TableBorder();
-	// Resolve bottom left.
-	if (bottomLeftCell.row() == leftCell.row())
-		*bottomLeft = TableBorder();
-	else if (bottomLeftCell.isValid() && leftCell.isValid())
-		*bottomLeft = collapseBorders(bottomLeftCell.topBorder(), leftCell.bottomBorder());
-	else if (bottomLeftCell.isValid())
-		*bottomLeft = collapseBorders(bottomLeftCell.topBorder(), table->topBorder());
-	else if (leftCell.isValid())
-		*bottomLeft = collapseBorders(table->bottomBorder(), leftCell.bottomBorder());
-	else
-		*bottomLeft = TableBorder();
-	// Resolve bottom.
-	if (bottomLeftCell.column() == bottomRightCell.column())
-		*bottom = TableBorder();
-	else if (bottomLeftCell.isValid() && bottomRightCell.isValid())
-		*bottom = collapseBorders(bottomRightCell.leftBorder(), bottomLeftCell.rightBorder());
-	else if (bottomLeftCell.isValid())
-		*bottom = collapseBorders(table->rightBorder(), bottomLeftCell.rightBorder());
-	else if (bottomRightCell.isValid())
-		*bottom = collapseBorders(bottomRightCell.leftBorder(), table->leftBorder());
-	else
-		*bottom = TableBorder();
-	// Resolve bottom right.
-	if (bottomRightCell.row() == rightCell.row())
-		*bottomRight = TableBorder();
-	else if (bottomRightCell.isValid() && rightCell.isValid())
-		*bottomRight = collapseBorders(bottomRightCell.topBorder(), rightCell.bottomBorder());
-	else if (bottomRightCell.isValid())
-		*bottomRight = collapseBorders(bottomRightCell.topBorder(), table->topBorder());
-	else if (rightCell.isValid())
-		*bottomRight = collapseBorders(table->bottomBorder(), rightCell.bottomBorder());
-	else
-		*bottomRight = TableBorder();
-}
+		// Otherwise, prefer explicitly-set over inherited when widths tie.
+		if (firstInh && !secondInh)
+			return collapseBorders(secondBorder, firstBorder);
+		return collapseBorders(firstBorder, secondBorder);
+	}
 
-TableBorder collapseBorders(const TableBorder& firstBorder, const TableBorder& secondBorder)
-{
-	TableBorder collapsedBorder;
+	/**
+	 * Collapses a cell border against the table-level fallback border, preferring
+	 * the cell border when it was explicitly set. When the cell border is
+	 * inherited, the table border is preferred so explicit changes to the
+	 * table-level border are visible at the perimeter.
+	 */
+	TableBorder collapseBorderAgainstTable(
+			const TableBorder& cellBorder, bool cellInh,
+			const TableBorder& tableBorder)
+	{
+		// Explicit null cell border wins over the table fallback.
+		if (!cellInh && cellBorder.isNull())
+			return cellBorder;
 
-	if (firstBorder.isNull() && secondBorder.isNull())
-	{
-		// Both borders are null, so return a null border.
-		return collapsedBorder;
+		if (cellInh)
+			return collapseBorders(tableBorder, cellBorder);
+		return collapseBorders(cellBorder, tableBorder);
 	}
-	if (firstBorder.isNull())
+
+
+	void resolveBordersHorizontal(const TableCell& topLeftCell, const TableCell& topCell,
+								 const TableCell& topRightCell, const TableCell& bottomLeftCell, const TableCell& bottomCell,
+								 const TableCell& bottomRightCell, TableBorder* topLeft, TableBorder* left, TableBorder* bottomLeft,
+								 TableBorder* center, TableBorder* topRight, TableBorder* right, TableBorder* bottomRight, PageItem_Table* table)
 	{
-		// First border is null, so return second border.
-		collapsedBorder = secondBorder;
+		// Resolve top left
+		if (!topCell.isValid() && !bottomCell.isValid())
+			return;
+		if (topLeftCell.column() == topCell.column())
+			*topLeft = TableBorder();
+		else if (topLeftCell.isValid() && topCell.isValid())
+			*topLeft = collapseBordersBetweenCells( topCell.leftBorder(), topCell.style().isInhLeftBorder(), topLeftCell.rightBorder(), topLeftCell.style().isInhRightBorder());
+		else if (topLeftCell.isValid())
+			*topLeft = collapseBorderAgainstTable(topLeftCell.rightBorder(), topLeftCell.style().isInhRightBorder(), table->rightBorder());
+		else if (topCell.isValid())
+			*topLeft = collapseBorderAgainstTable(topCell.leftBorder(), topCell.style().isInhLeftBorder(), table->leftBorder());
+		else
+			*topLeft = TableBorder();
+
+		// Resolve left
+		if (topLeftCell.row() == bottomLeftCell.row())
+			*left = TableBorder();
+		else if (topLeftCell.isValid() && bottomLeftCell.isValid())
+			*left = collapseBordersBetweenCells(bottomLeftCell.topBorder(), bottomLeftCell.style().isInhTopBorder(), topLeftCell.bottomBorder(), topLeftCell.style().isInhBottomBorder());
+		else if (topLeftCell.isValid())
+			*left = collapseBorderAgainstTable(topLeftCell.bottomBorder(), topLeftCell.style().isInhBottomBorder(), table->bottomBorder());
+		else if (bottomLeftCell.isValid())
+			*left = collapseBorderAgainstTable(bottomLeftCell.topBorder(), bottomLeftCell.style().isInhTopBorder(), table->topBorder());
+		else
+			*left = TableBorder();
+
+		// Resolve bottom left
+		if (bottomLeftCell.column() == bottomCell.column())
+			*bottomLeft = TableBorder();
+		else if (bottomLeftCell.isValid() && bottomCell.isValid())
+			*bottomLeft = collapseBordersBetweenCells(bottomCell.leftBorder(), bottomCell.style().isInhLeftBorder(), bottomLeftCell.rightBorder(), bottomLeftCell.style().isInhRightBorder());
+		else if (bottomLeftCell.isValid())
+			*bottomLeft = collapseBorderAgainstTable(bottomLeftCell.rightBorder(), bottomLeftCell.style().isInhRightBorder(), table->rightBorder());
+		else if (bottomCell.isValid())
+			*bottomLeft = collapseBorderAgainstTable(bottomCell.leftBorder(), bottomCell.style().isInhLeftBorder(), table->leftBorder());
+		else
+			*bottomLeft = TableBorder();
+
+		// Resolve center
+		if (topCell.row() == bottomCell.row())
+			*center = TableBorder();
+		else if (topCell.isValid() && bottomCell.isValid())
+			*center = collapseBordersBetweenCells(topCell.bottomBorder(), topCell.style().isInhBottomBorder(), bottomCell.topBorder(), bottomCell.style().isInhTopBorder());
+		else if (topCell.isValid())
+			*center = collapseBorderAgainstTable(topCell.bottomBorder(), topCell.style().isInhBottomBorder(), table->bottomBorder());
+		else if (bottomCell.isValid())
+			*center = collapseBorderAgainstTable(bottomCell.topBorder(), bottomCell.style().isInhTopBorder(), table->topBorder());
+		else
+			*center = TableBorder();
+
+		// Resolve top right
+		if (topRightCell.column() == topCell.column())
+			*topRight = TableBorder();
+		else if (topRightCell.isValid() && topCell.isValid())
+			*topRight = collapseBordersBetweenCells(topRightCell.leftBorder(), topRightCell.style().isInhLeftBorder(), topCell.rightBorder(), topCell.style().isInhRightBorder());
+		else if (topRightCell.isValid())
+			*topRight = collapseBorderAgainstTable(topRightCell.leftBorder(), topRightCell.style().isInhLeftBorder(), table->leftBorder());
+		else if (topCell.isValid())
+			*topRight = collapseBorderAgainstTable(topCell.rightBorder(), topCell.style().isInhRightBorder(), table->rightBorder());
+		else
+			*topRight = TableBorder();
+
+		// Resolve right
+		if (topRightCell.row() == bottomRightCell.row())
+			*right = TableBorder();
+		else if (topRightCell.isValid() && bottomRightCell.isValid())
+			*right = collapseBordersBetweenCells(bottomRightCell.topBorder(), bottomRightCell.style().isInhTopBorder(), topRightCell.bottomBorder(), topRightCell.style().isInhBottomBorder());
+		else if (topRightCell.isValid())
+			*right = collapseBorderAgainstTable(topRightCell.bottomBorder(), topRightCell.style().isInhBottomBorder(), table->bottomBorder());
+		else if (bottomRightCell.isValid())
+			*right = collapseBorderAgainstTable(bottomRightCell.topBorder(), bottomRightCell.style().isInhTopBorder(), table->topBorder());
+		else
+			*right = TableBorder();
+
+		// Resolve bottom right
+		if (bottomRightCell.column() == bottomCell.column())
+			*bottomRight = TableBorder();
+		else if (bottomRightCell.isValid() && bottomCell.isValid())
+			*bottomRight = collapseBordersBetweenCells(bottomRightCell.leftBorder(), bottomRightCell.style().isInhLeftBorder(), bottomCell.rightBorder(), bottomCell.style().isInhRightBorder());
+		else if (bottomRightCell.isValid())
+			*bottomRight = collapseBorderAgainstTable(bottomRightCell.leftBorder(), bottomRightCell.style().isInhLeftBorder(), table->leftBorder());
+		else if (bottomCell.isValid())
+			*bottomRight = collapseBorderAgainstTable(bottomCell.rightBorder(), bottomCell.style().isInhRightBorder(), table->rightBorder());
+		else
+			*bottomRight = TableBorder();
 	}
-	else if (secondBorder.isNull())
+
+	void resolveBordersVertical(const TableCell& topLeftCell, const TableCell& topRightCell, const TableCell& leftCell, const TableCell& rightCell, const TableCell& bottomLeftCell,
+								const TableCell& bottomRightCell, TableBorder* topLeft, TableBorder* top, TableBorder* topRight, TableBorder* center, TableBorder* bottomLeft, TableBorder* bottom, TableBorder* bottomRight, PageItem_Table* table)
 	{
-		// Second border is null, so return first border.
-		collapsedBorder = firstBorder;
+		if (!leftCell.isValid() && !rightCell.isValid())
+			return;
+
+		// Resolve top left
+		if (topLeftCell.row() == leftCell.row())
+			*topLeft = TableBorder();
+		else if (topLeftCell.isValid() && leftCell.isValid())
+			*topLeft = collapseBordersBetweenCells(leftCell.topBorder(), leftCell.style().isInhTopBorder(), topLeftCell.bottomBorder(), topLeftCell.style().isInhBottomBorder());
+		else if (topLeftCell.isValid())
+			*topLeft = collapseBorderAgainstTable(topLeftCell.bottomBorder(), topLeftCell.style().isInhBottomBorder(), table->bottomBorder());
+		else if (leftCell.isValid())
+			*topLeft = collapseBorderAgainstTable(leftCell.topBorder(), leftCell.style().isInhTopBorder(), table->topBorder());
+		else
+			*topLeft = TableBorder();
+
+		// Resolve top
+		if (topLeftCell.column() == topRightCell.column())
+			*top = TableBorder();
+		else if (topLeftCell.isValid() && topRightCell.isValid())
+			*top = collapseBordersBetweenCells(topRightCell.leftBorder(), topRightCell.style().isInhLeftBorder(), topLeftCell.rightBorder(), topLeftCell.style().isInhRightBorder());
+		else if (topLeftCell.isValid())
+			*top = collapseBorderAgainstTable(topLeftCell.rightBorder(), topLeftCell.style().isInhRightBorder(), table->rightBorder());
+		else if (topRightCell.isValid())
+			*top = collapseBorderAgainstTable(topRightCell.leftBorder(), topRightCell.style().isInhLeftBorder(), table->leftBorder());
+		else
+			*top = TableBorder();
+
+		// Resolve top right
+		if (topRightCell.row() == rightCell.row())
+			*topRight = TableBorder();
+		else if (topRightCell.isValid() && rightCell.isValid())
+			*topRight = collapseBordersBetweenCells(rightCell.topBorder(), rightCell.style().isInhTopBorder(), topRightCell.bottomBorder(), topRightCell.style().isInhBottomBorder());
+		else if (topRightCell.isValid())
+			*topRight = collapseBorderAgainstTable(topRightCell.bottomBorder(), topRightCell.style().isInhBottomBorder(), table->bottomBorder());
+		else if (rightCell.isValid())
+			*topRight = collapseBorderAgainstTable(rightCell.topBorder(), rightCell.style().isInhTopBorder(), table->topBorder());
+		else
+			*topRight = TableBorder();
+
+		// Resolve center
+		if (leftCell.column() == rightCell.column())
+			*center = TableBorder();
+		else if (leftCell.isValid() && rightCell.isValid())
+			*center = collapseBordersBetweenCells(rightCell.leftBorder(), rightCell.style().isInhLeftBorder(), leftCell.rightBorder(), leftCell.style().isInhRightBorder());
+		else if (leftCell.isValid())
+			*center = collapseBorderAgainstTable(leftCell.rightBorder(), leftCell.style().isInhRightBorder(), table->rightBorder());
+		else if (rightCell.isValid())
+			*center = collapseBorderAgainstTable(rightCell.leftBorder(), rightCell.style().isInhLeftBorder(), table->leftBorder());
+		else
+			*center = TableBorder();
+
+		// Resolve bottom left
+		if (bottomLeftCell.row() == leftCell.row())
+			*bottomLeft = TableBorder();
+		else if (bottomLeftCell.isValid() && leftCell.isValid())
+			*bottomLeft = collapseBordersBetweenCells(bottomLeftCell.topBorder(), bottomLeftCell.style().isInhTopBorder(), leftCell.bottomBorder(), leftCell.style().isInhBottomBorder());
+		else if (bottomLeftCell.isValid())
+			*bottomLeft = collapseBorderAgainstTable(bottomLeftCell.topBorder(), bottomLeftCell.style().isInhTopBorder(), table->topBorder());
+		else if (leftCell.isValid())
+			*bottomLeft = collapseBorderAgainstTable(leftCell.bottomBorder(), leftCell.style().isInhBottomBorder(), table->bottomBorder());
+		else
+			*bottomLeft = TableBorder();
+
+		// Resolve bottom
+		if (bottomLeftCell.column() == bottomRightCell.column())
+			*bottom = TableBorder();
+		else if (bottomLeftCell.isValid() && bottomRightCell.isValid())
+			*bottom = collapseBordersBetweenCells(bottomRightCell.leftBorder(), bottomRightCell.style().isInhLeftBorder(), bottomLeftCell.rightBorder(), bottomLeftCell.style().isInhRightBorder());
+		else if (bottomLeftCell.isValid())
+			*bottom = collapseBorderAgainstTable(bottomLeftCell.rightBorder(), bottomLeftCell.style().isInhRightBorder(), table->rightBorder());
+		else if (bottomRightCell.isValid())
+			*bottom = collapseBorderAgainstTable(bottomRightCell.leftBorder(), bottomRightCell.style().isInhLeftBorder(), table->leftBorder());
+		else
+			*bottom = TableBorder();
+
+		// Resolve bottom right
+		if (bottomRightCell.row() == rightCell.row())
+			*bottomRight = TableBorder();
+		else if (bottomRightCell.isValid() && rightCell.isValid())
+			*bottomRight = collapseBordersBetweenCells(bottomRightCell.topBorder(), bottomRightCell.style().isInhTopBorder(), rightCell.bottomBorder(), rightCell.style().isInhBottomBorder());
+		else if (bottomRightCell.isValid())
+			*bottomRight = collapseBorderAgainstTable(bottomRightCell.topBorder(), bottomRightCell.style().isInhTopBorder(), table->topBorder());
+		else if (rightCell.isValid())
+			*bottomRight = collapseBorderAgainstTable(rightCell.bottomBorder(), rightCell.style().isInhBottomBorder(), table->bottomBorder());
+		else
+			*bottomRight = TableBorder();
 	}
-	else
+
+	TableBorder collapseBorders(const TableBorder& firstBorder, const TableBorder& secondBorder)
 	{
+		// A border is "visible" if it has at least one line that will actually paint.
+		// Borders that are null, zero-width, or colored "None" are treated as absent
+		// so they don't override visible borders during collapse.
+		const bool firstVisible = firstBorder.isVisible();
+		const bool secondVisible = secondBorder.isVisible();
+
+		if (!firstVisible && !secondVisible)
+		{
+			// Both borders are invisible, so return a null border.
+			return TableBorder();
+		}
+		if (!firstVisible)
+		{
+			// First border is invisible, so return second border.
+			return secondBorder;
+		}
+		if (!secondVisible)
+		{
+			// Second border is invisible, so return first border.
+			return firstBorder;
+		}
+
+		// Both borders are visible.
 		if (firstBorder.width() > secondBorder.width())
 		{
 			// First border is wider than second border, so return first border.
-			collapsedBorder = firstBorder; // (4)
+			return firstBorder;
 		}
-		else if (firstBorder.width() < secondBorder.width())
+		if (firstBorder.width() < secondBorder.width())
 		{
 			// Second border is wider than first border, so return second border.
-			collapsedBorder = secondBorder; // (5)
+			return secondBorder;
 		}
-		else
+
+		// Borders have equal width.
+		if (firstBorder.borderLines().size() > secondBorder.borderLines().size())
 		{
-			if (firstBorder.borderLines().size() > secondBorder.borderLines().size())
-			{
-				// First border has more border lines than second border, so return first border.
-				collapsedBorder = firstBorder;
-			}
-			else
-			{
-				// Second border has more or equal border lines than first border, so return second border.
-				collapsedBorder = secondBorder;
-			}
+			// First border has more border lines than second border, so return first border.
+			return firstBorder;
 		}
+		if (firstBorder.borderLines().size() < secondBorder.borderLines().size())
+		{
+			// Second border has more border lines than first border, so return second border.
+			return secondBorder;
+		}
+
+		// Borders are indistinguishable; return first border for deterministic results
+		// regardless of argument order.
+		return firstBorder;
 	}
 
-	return collapsedBorder;
-}
+	void joinVertical(const TableBorder& border, const TableBorder& topLeft, const TableBorder& top,
+					 const TableBorder& topRight, const TableBorder& bottomLeft, const TableBorder& bottom,
+					 const TableBorder& bottomRight, QPointF* start, QPointF* end, QPointF* startOffsetFactors,
+					 QPointF* endOffsetFactors)
+	{
+		Q_ASSERT(start);
+		Q_ASSERT(end);
+		Q_ASSERT(startOffsetFactors);
+		Q_ASSERT(endOffsetFactors);
 
-void joinVertical(const TableBorder& border, const TableBorder& topLeft, const TableBorder& top,
-				  const TableBorder& topRight, const TableBorder& bottomLeft, const TableBorder& bottom,
-				  const TableBorder& bottomRight, QPointF* start, QPointF* end, QPointF* startOffsetFactors,
-				  QPointF* endOffsetFactors)
-{
-	Q_ASSERT(start);
-	Q_ASSERT(end);
-	Q_ASSERT(startOffsetFactors);
-	Q_ASSERT(endOffsetFactors);
+		// Reset offset coefficients.
+		startOffsetFactors->setX(0.0);
+		startOffsetFactors->setY(0.0);
+		endOffsetFactors->setX(0.0);
+		endOffsetFactors->setY(0.0);
 
-	// Reset offset coefficients.
-	startOffsetFactors->setX(0.0);
-	startOffsetFactors->setY(0.0);
-	endOffsetFactors->setX(0.0);
-	endOffsetFactors->setY(0.0);
-
-	/*
+		/*
 	 * The numbered cases in the code below refers to the 45 possible join cases illustrated
 	 * in the picture at http://wiki.scribus.net/canvas/File:Table_border_join_cases.png
 	 */
 
-	/*
+		/*
 	 * Adjust start point(s). Possible cases are 1-20, 26-39.
 	 */
-	if (border.joinsWith(topLeft))
-	{
-		if (border.joinsWith(topRight))
+		if (border.joinsWith(topLeft))
+		{
+			if (border.joinsWith(topRight))
+			{
+				if (!border.joinsWith(top))
+				{
+					// Cases: 8, 19.
+					startOffsetFactors->setY(-0.5);
+				}
+			}
+			else if (!border.joinsWith(top))
+			{
+				if (top.joinsWith(topRight))
+				{
+					if (border.width() < top.width())
+					{
+						// Cases: 15A.
+						start->setY(start->y() + 0.5 * top.width());
+					}
+					else
+					{
+						// Cases: 15B.
+						startOffsetFactors->setY(-0.5);
+					}
+				}
+				else
+				{
+					// Cases: 5, 17, 27, 38.
+					startOffsetFactors->setY(-0.5);
+				}
+			}
+		}
+		else if (border.joinsWith(topRight))
 		{
 			if (!border.joinsWith(top))
 			{
-				// Cases: 8, 19.
-				startOffsetFactors->setY(-0.5);
-			}
-		}
-		else if (!border.joinsWith(top))
-		{
-			if (top.joinsWith(topRight))
-			{
-				if (border.width() < top.width())
+				if (top.joinsWith(topLeft))
 				{
-					// Cases: 15A.
-					start->setY(start->y() + 0.5 * top.width());
+					if (border.width() < top.width())
+					{
+						// Cases: 14A.
+						start->setY(start->y() + 0.5 * top.width());
+					}
+					else
+					{
+						// Cases: 14B.
+						startOffsetFactors->setY(-0.5);
+					}
 				}
 				else
 				{
-					// Cases: 15B.
+					// Cases: 4, 18, 32, 36.
 					startOffsetFactors->setY(-0.5);
 				}
 			}
-			else
-			{
-				// Cases: 5, 17, 27, 38.
-				startOffsetFactors->setY(-0.5);
-			}
 		}
-	}
-	else if (border.joinsWith(topRight))
-	{
-		if (!border.joinsWith(top))
+		else if (border.joinsWith(top))
 		{
-			if (top.joinsWith(topLeft))
+			if (topLeft.joinsWith(topRight))
 			{
-				if (border.width() < top.width())
-				{
-					// Cases: 14A.
-					start->setY(start->y() + 0.5 * top.width());
-				}
-				else
-				{
-					// Cases: 14B.
-					startOffsetFactors->setY(-0.5);
-				}
-			}
-			else
-			{
-				// Cases: 4, 18, 32, 36.
-				startOffsetFactors->setY(-0.5);
+				// Cases: 11.
+				start->setY(start->y() + 0.5 * topLeft.width());
 			}
 		}
-	}
-	else if (border.joinsWith(top))
-	{
-		if (topLeft.joinsWith(topRight))
+		else
 		{
-			// Cases: 11.
-			start->setY(start->y() + 0.5 * topLeft.width());
+			// Cases: 1, 2, 3, 6, 12, 16, 20, 26, 28, 31, 33, 37, 39.
+			start->setY(start->y() + 0.5 * qMax(topLeft.width(), topRight.width()));
 		}
-	}
-	else
-	{
-		// Cases: 1, 2, 3, 6, 12, 16, 20, 26, 28, 31, 33, 37, 39.
-		start->setY(start->y() + 0.5 * qMax(topLeft.width(), topRight.width()));
-	}
-	// Cases: 7, 9, 10, 13, 29, 30, 34, 35 - No adjustment to start point(s) needed.
+		// Cases: 7, 9, 10, 13, 29, 30, 34, 35 - No adjustment to start point(s) needed.
 
-	/*
+		/*
 	 * Adjust end point(s). Possible cases are 1-15, 21-35, 40-43.
 	 */
-	if (border.joinsWith(bottomLeft))
-	{
-		if (border.joinsWith(bottomRight))
+		if (border.joinsWith(bottomLeft))
+		{
+			if (border.joinsWith(bottomRight))
+			{
+				if (!border.joinsWith(bottom))
+				{
+					// Cases: 6, 24.
+					endOffsetFactors->setY(0.5);
+				}
+			}
+			else if (!border.joinsWith(bottom))
+			{
+				if (bottom.joinsWith(bottomRight))
+				{
+					if (bottom.width() < border.width())
+					{
+						// Cases: 14A.
+						endOffsetFactors->setY(0.5);
+					}
+					else
+					{
+						// Cases: 14B.
+						end->setY(end->y() - 0.5 * bottom.width());
+					}
+				}
+				else
+				{
+					// Cases: 2, 22, 28, 42.
+					endOffsetFactors->setY(0.5);
+				}
+			}
+		}
+		else if (border.joinsWith(bottomRight))
 		{
 			if (!border.joinsWith(bottom))
 			{
-				// Cases: 6, 24.
-				endOffsetFactors->setY(0.5);
-			}
-		}
-		else if (!border.joinsWith(bottom))
-		{
-			if (bottom.joinsWith(bottomRight))
-			{
-				if (bottom.width() < border.width())
+				if (bottom.joinsWith(bottomLeft))
 				{
-					// Cases: 14A.
-					endOffsetFactors->setY(0.5);
+					if (bottom.width() < border.width())
+					{
+						// Cases: 15A.
+						endOffsetFactors->setY(0.5);
+					}
+					else
+					{
+						// Cases: 15B.
+						end->setY(end->y() - 0.5 * bottom.width());
+					}
 				}
 				else
 				{
-					// Cases: 14B.
-					end->setY(end->y() - 0.5 * bottom.width());
-				}
-			}
-			else
-			{
-				// Cases: 2, 22, 28, 42.
-				endOffsetFactors->setY(0.5);
-			}
-		}
-	}
-	else if (border.joinsWith(bottomRight))
-	{
-		if (!border.joinsWith(bottom))
-		{
-			if (bottom.joinsWith(bottomLeft))
-			{
-				if (bottom.width() < border.width())
-				{
-					// Cases: 15A.
+					// Cases: 3, 23, 33, 40.
 					endOffsetFactors->setY(0.5);
 				}
-				else
-				{
-					// Cases: 15B.
-					end->setY(end->y() - 0.5 * bottom.width());
-				}
-			}
-			else
-			{
-				// Cases: 3, 23, 33, 40.
-				endOffsetFactors->setY(0.5);
 			}
 		}
-	}
-	else if (border.joinsWith(bottom))
-	{
-		if (bottomLeft.joinsWith(bottomRight))
+		else if (border.joinsWith(bottom))
 		{
-			// Cases: 11.
-			end->setY(end->y() - 0.5 * bottomLeft.width());
+			if (bottomLeft.joinsWith(bottomRight))
+			{
+				// Cases: 11.
+				end->setY(end->y() - 0.5 * bottomLeft.width());
+			}
 		}
+		else
+		{
+			// Cases: 1, 4, 5, 8, 12, 21, 25, 26, 27, 31, 32, 41, 43.
+			end->setY(end->y() - 0.5 * qMax(bottomLeft.width(), bottomRight.width()));
+		}
+		// Cases: 7, 9, 10, 13, 29, 30, 34, 35 - No adjustment to end point(s) needed.
 	}
-	else
+
+	void joinHorizontal(const TableBorder& border, const TableBorder& topLeft, const TableBorder& left,
+						const TableBorder& bottomLeft, const TableBorder& topRight, const TableBorder& right,
+						const TableBorder& bottomRight, QPointF* start, QPointF* end, QPointF* startOffsetFactors,
+						QPointF* endOffsetFactors)
 	{
-		// Cases: 1, 4, 5, 8, 12, 21, 25, 26, 27, 31, 32, 41, 43.
-		end->setY(end->y() - 0.5 * qMax(bottomLeft.width(), bottomRight.width()));
-	}
-	// Cases: 7, 9, 10, 13, 29, 30, 34, 35 - No adjustment to end point(s) needed.
-}
+		Q_ASSERT(start);
+		Q_ASSERT(end);
+		Q_ASSERT(startOffsetFactors);
+		Q_ASSERT(endOffsetFactors);
 
-void joinHorizontal(const TableBorder& border, const TableBorder& topLeft, const TableBorder& left,
-				  const TableBorder& bottomLeft, const TableBorder& topRight, const TableBorder& right,
-				  const TableBorder& bottomRight, QPointF* start, QPointF* end, QPointF* startOffsetFactors,
-				  QPointF* endOffsetFactors)
-{
-	Q_ASSERT(start);
-	Q_ASSERT(end);
-	Q_ASSERT(startOffsetFactors);
-	Q_ASSERT(endOffsetFactors);
+		// Reset offset coefficients.
+		startOffsetFactors->setX(0.0);
+		startOffsetFactors->setY(0.0);
+		endOffsetFactors->setX(0.0);
+		endOffsetFactors->setY(0.0);
 
-	// Reset offset coefficients.
-	startOffsetFactors->setX(0.0);
-	startOffsetFactors->setY(0.0);
-	endOffsetFactors->setX(0.0);
-	endOffsetFactors->setY(0.0);
-
-	/*
+		/*
 	 * The numbered cases in the code below refers to the 45 possible join cases illustrated
 	 * in the picture at http://wiki.scribus.net/canvas/File:Table_border_join_cases.png
 	 */
 
-	/*
+		/*
 	 * Adjust start point(s). Possible cases are 1-25, 31-37, 40-41.
 	 */
-	if (border.joinsWith(bottomLeft))
-	{
-		if (border.joinsWith(topLeft))
+		if (border.joinsWith(bottomLeft))
 		{
-			if (border.joinsWith(left))
+			if (border.joinsWith(topLeft))
 			{
-				// Cases: 10.
-				startOffsetFactors->setX(0.5);
-			}
-			else
-			{
-				// Cases: 7, 34.
-				startOffsetFactors->setX(0.5);
-			}
-		}
-		else
-		{
-			if (border.joinsWith(left))
-			{
-				// Cases: 8, 19.
-				startOffsetFactors->setX(0.5);
-			}
-			else if (left.joinsWith(topLeft))
-			{
-				if (border.width() < left.width())
+				if (border.joinsWith(left))
 				{
-					// Cases: 14A.
-					start->setX(start->x() + 0.5 * left.width());
+					// Cases: 10.
+					startOffsetFactors->setX(0.5);
 				}
 				else
 				{
-					// Cases: 14B.
+					// Cases: 7, 34.
 					startOffsetFactors->setX(0.5);
 				}
 			}
 			else
 			{
-				// Cases: 4, 18, 32, 36.
-				startOffsetFactors->setX(0.5);
-			}
-		}
-	}
-	else if (border.joinsWith(topLeft))
-	{
-		if (border.joinsWith(left))
-		{
-			// Cases: 6, 24.
-			startOffsetFactors->setX(0.5);
-		}
-		else
-		{
-			if (left.joinsWith(bottomLeft))
-			{
-				if (left.width() < border.width())
+				if (border.joinsWith(left))
 				{
-					// Cases: 15A.
+					// Cases: 8, 19.
 					startOffsetFactors->setX(0.5);
+				}
+				else if (left.joinsWith(topLeft))
+				{
+					if (border.width() < left.width())
+					{
+						// Cases: 14A.
+						start->setX(start->x() + 0.5 * left.width());
+					}
+					else
+					{
+						// Cases: 14B.
+						startOffsetFactors->setX(0.5);
+					}
 				}
 				else
 				{
-					// Cases: 15B.
-					start->setX(start->x() + 0.5 * left.width());
+					// Cases: 4, 18, 32, 36.
+					startOffsetFactors->setX(0.5);
 				}
+			}
+		}
+		else if (border.joinsWith(topLeft))
+		{
+			if (border.joinsWith(left))
+			{
+				// Cases: 6, 24.
+				startOffsetFactors->setX(0.5);
 			}
 			else
 			{
-				// Cases: 3, 23, 33, 40.
-				startOffsetFactors->setX(0.5);
+				if (left.joinsWith(bottomLeft))
+				{
+					if (left.width() < border.width())
+					{
+						// Cases: 15A.
+						startOffsetFactors->setX(0.5);
+					}
+					else
+					{
+						// Cases: 15B.
+						start->setX(start->x() + 0.5 * left.width());
+					}
+				}
+				else
+				{
+					// Cases: 3, 23, 33, 40.
+					startOffsetFactors->setX(0.5);
+				}
 			}
 		}
-	}
-	else if (!border.joinsWith(left) &&
-			 (topLeft.joinsWith(bottomLeft) || topLeft.joinsWith(left) || bottomLeft.joinsWith(left)))
-	{
-		// Cases: 2, 5, 9, 13, 17, 22, 35.
-		start->setX(start->x() + 0.5 * qMax(topLeft.width(), bottomLeft.width()));
-	}
-	else if (left.isNull())
-	{
-		// Cases: 31, 37, 41.
-		start->setX(start->x() - 0.5 * qMax(topLeft.width(), bottomLeft.width()));
-	}
-	// Cases: 1, 11, 12, 16, 20, 21, 25 - No adjustment to start point(s) needed.
+		else if (!border.joinsWith(left) &&
+				 (topLeft.joinsWith(bottomLeft) || topLeft.joinsWith(left) || bottomLeft.joinsWith(left)))
+		{
+			// Cases: 2, 5, 9, 13, 17, 22, 35.
+			start->setX(start->x() + 0.5 * qMax(topLeft.width(), bottomLeft.width()));
+		}
+		else if (left.isNull())
+		{
+			// Cases: 31, 37, 41.
+			start->setX(start->x() - 0.5 * qMax(topLeft.width(), bottomLeft.width()));
+		}
+		// Cases: 1, 11, 12, 16, 20, 21, 25 - No adjustment to start point(s) needed.
 
-	/*
+		/*
 	 * Adjust end point(s). Possible cases are 1-30, 38-39, 42-43.
 	 */
-	if (border.joinsWith(bottomRight))
-	{
-		if (border.joinsWith(topRight))
+		if (border.joinsWith(bottomRight))
+		{
+			if (border.joinsWith(topRight))
+			{
+				if (border.joinsWith(right))
+				{
+					// Cases: 10.
+					endOffsetFactors->setX(-0.5);
+				}
+				else
+				{
+					// Cases: 9, 29.
+					endOffsetFactors->setX(-0.5);
+				}
+			}
+			else if (border.joinsWith(right))
+			{
+				// Cases: 6, 24.
+				endOffsetFactors->setX(-0.5);
+			}
+			else
+			{
+				if (right.joinsWith(topRight))
+				{
+					if (border.width() < right.width())
+					{
+						// Cases: 15A.
+						end->setX(end->x() - 0.5 * right.width());
+					}
+					else
+					{
+						// Cases: 15B.
+						endOffsetFactors->setX(-0.5);
+					}
+				}
+				else
+				{
+					// Cases: 5, 17, 27, 38.
+					endOffsetFactors->setX(-0.5);
+				}
+			}
+		}
+		else if (border.joinsWith(topRight))
 		{
 			if (border.joinsWith(right))
 			{
-				// Cases: 10.
+				// Cases: 6, 24.
 				endOffsetFactors->setX(-0.5);
 			}
 			else
 			{
-				// Cases: 9, 29.
-				endOffsetFactors->setX(-0.5);
-			}
-		}
-		else if (border.joinsWith(right))
-		{
-			// Cases: 6, 24.
-			endOffsetFactors->setX(-0.5);
-		}
-		else
-		{
-			if (right.joinsWith(topRight))
-			{
-				if (border.width() < right.width())
+				if (right.joinsWith(bottomRight))
 				{
-					// Cases: 15A.
-					end->setX(end->x() - 0.5 * right.width());
+					if (right.width() < border.width())
+					{
+						// Cases: 14A.
+						endOffsetFactors->setX(-0.5);
+					}
+					else
+					{
+						// Cases: 14B.
+						end->setX(end->x() - 0.5 * right.width());
+					}
 				}
 				else
 				{
-					// Cases: 15B.
+					// Cases: 2, 22, 28, 42.
 					endOffsetFactors->setX(-0.5);
 				}
 			}
-			else
-			{
-				// Cases: 5, 17, 27, 38.
-				endOffsetFactors->setX(-0.5);
-			}
 		}
-	}
-	else if (border.joinsWith(topRight))
-	{
-		if (border.joinsWith(right))
+		else if (!border.joinsWith(right) &&
+				 (topRight.joinsWith(bottomRight) || topRight.joinsWith(right) || bottomRight.joinsWith(right)))
 		{
-			// Cases: 6, 24.
-			endOffsetFactors->setX(-0.5);
+			// Cases: 3, 4, 7, 13, 18, 23, 30.
+			end->setX(end->x() - 0.5 * qMax(topRight.width(), bottomRight.width()));
 		}
-		else
+		else if (right.isNull())
 		{
-			if (right.joinsWith(bottomRight))
-			{
-				if (right.width() < border.width())
-				{
-					// Cases: 14A.
-					endOffsetFactors->setX(-0.5);
-				}
-				else
-				{
-					// Cases: 14B.
-					end->setX(end->x() - 0.5 * right.width());
-				}
-			}
-			else
-			{
-				// Cases: 2, 22, 28, 42.
-				endOffsetFactors->setX(-0.5);
-			}
+			// Cases: 26, 39, 43.
+			end->setX(end->x() + 0.5 * qMax(topRight.width(), bottomRight.width()));
 		}
+		// Cases: 1, 11, 12, 16, 20, 21, 25 - No adjustment to end point(s) needed.
 	}
-	else if (!border.joinsWith(right) &&
-			 (topRight.joinsWith(bottomRight) || topRight.joinsWith(right) || bottomRight.joinsWith(right)))
-	{
-		// Cases: 3, 4, 7, 13, 18, 23, 30.
-		end->setX(end->x() - 0.5 * qMax(topRight.width(), bottomRight.width()));
-	}
-	else if (right.isNull())
-	{
-		// Cases: 26, 39, 43.
-		end->setX(end->x() + 0.5 * qMax(topRight.width(), bottomRight.width()));
-	}
-	// Cases: 1, 11, 12, 16, 20, 21, 25 - No adjustment to end point(s) needed.
-}
 
 } // namespace TableUtils

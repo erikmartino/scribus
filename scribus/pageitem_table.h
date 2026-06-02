@@ -22,6 +22,7 @@ for which a new license (GPL+exception) is in place.
 #include "pageitem.h"
 #include "scribusapi.h"
 #include "scribusstructs.h"
+#include "styles/tablearea.h"
 #include "styles/tablestyle.h"
 #include "tablecell.h"
 #include "tablehandle.h"
@@ -29,6 +30,56 @@ for which a new license (GPL+exception) is in place.
 class ScPainter;
 class ScribusDoc;
 class TablePainter;
+
+/**
+ * Snapshot of a contiguous range of rows for undo of row removal.
+ *
+ * Captures everything needed to reconstruct the destroyed cells: their text
+ * content (serialised via SaxXML), cell style name, fill colour/shade, and
+ * the four direct borders. Also captures any merged areas that intersected
+ * the removed range so merges can be restored on undo.
+ */
+struct TableRowsSnapshot
+{
+	struct CellSnapshot
+	{
+		QString     storyTextXml;
+		QString     style;
+		QString     fillColor;
+		double      fillShade { 100.0 };
+		TableBorder leftBorder;
+		TableBorder rightBorder;
+		TableBorder topBorder;
+		TableBorder bottomBorder;
+	};
+
+	int index { 0 };               // start of the removed range
+	int numRows { 0 };             // number of rows removed
+	int numColumns { 0 };          // columns() at snapshot time
+	QVector<double> rowHeights;    // full pre-removal m_rowHeights (length == rows() before removal)
+	QVector<CellSnapshot> cells;   // length == numRows * numColumns; indexed r*numColumns + c
+	QVector<CellArea> areas;       // original CellAreas that intersected the removed range
+	double frameWidth { 0.0 };
+	double frameHeight { 0.0 };
+};
+
+/**
+ * Snapshot of a contiguous range of columns for undo of column removal.
+ * Mirrors TableRowsSnapshot.
+ */
+struct TableColumnsSnapshot
+{
+	using CellSnapshot = TableRowsSnapshot::CellSnapshot;
+
+	int index { 0 };               // start of the removed range
+	int numColumns { 0 };          // number of columns removed
+	int numRows { 0 };             // rows() at snapshot time
+	QVector<double> columnWidths;  // full pre-removal m_columnWidths (length == columns() before removal)
+	QVector<CellSnapshot> cells;   // length == numRows * numColumns; indexed r*numColumns + c
+	QVector<CellArea> areas;       // original CellAreas that intersected the removed range
+	double frameWidth { 0.0 };
+	double frameHeight { 0.0 };
+};
 
 /**
  * The PageItem_Table class represents a table.
@@ -166,6 +217,14 @@ public:
 	void insertRows(int index, int numRows);
 
 	/**
+	 * Appends @a numRows rows to the end of the table, each at the height of
+	 * the current last row, and grows the frame to fit. Unlike insertRows
+	 * followed by adjustTable(), this does not rescale existing rows — the
+	 * table grows rather than keeping a fixed size.
+	 */
+	void appendRows(int numRows);
+
+	/**
 	 * Removes @a numRows rows from the table, starting with the row at @a index.
 	 *
 	 * If the specified range falls outside the table or the number of rows is
@@ -210,6 +269,21 @@ public:
 	 */
 	const QList<double>& rowPositions() const { return m_rowPositions; }
 
+	/// Returns the natural row height -- the height needed to display the
+	/// content of all cells starting in this row at their current widths,
+	/// honoring text distance padding. Returns the row's current height
+	/// if no cells contribute to the calculation (e.g. row only contains
+	/// cells merged from earlier rows).
+	double naturalRowHeight(int row, bool* hasContent = nullptr);
+
+	/// Resizes the row to its natural content height, leaving the row
+	/// untouched if no cells contribute to the calculation. See
+	/// naturalRowHeight().
+	void adjustRowHeight(int row);
+
+	/// Calls adjustRowHeight() on every row.
+	void adjustAllRowHeights();
+
 	/**
 	 * Inserts @a numColumns columns before the column at @a index.
 	 *
@@ -219,6 +293,14 @@ public:
 	 * this method does nothing.
 	 */
 	void insertColumns(int index, int numColumns);
+
+	/**
+	 * Appends @a numColumns columns to the end of the table, each at the width
+	 * of the current last column, and grows the frame to fit. Unlike
+	 * insertColumns followed by adjustTable(), this does not rescale existing
+	 * columns — the table grows rather than keeping a fixed size.
+	 */
+	void appendColumns(int numColumns);
 
 	/**
 	 * Removes @a numColumns columns from the table, starting with the column at @a index.
@@ -503,6 +585,14 @@ public:
 	/// Returns the style name of this table.
 	QString styleName() const;
 
+	/**
+	 * Returns the structural area the cell at @a row, @a column occupies, used
+	 * to select its conditional cell style. Derived live from the table
+	 * geometry and the header/total/banding settings, so it follows row and
+	 * column insertion and removal automatically.
+	 */
+	TableArea areaAt(int row, int column) const;
+
 	/// Updates the position and size of all cell text frames for this table.
 	void updateCells() { updateCells(0, 0, rows() - 1, columns() - 1); }
 
@@ -563,6 +653,11 @@ public:
 	/** @brief Perform undo/redo action */
 	void restore(UndoState *state, bool isUndo) override;
 
+	/// Mirrors the table style's conditional map into the document cell style
+	/// context as synthetic named styles, so the name-based parent splice can
+	/// resolve them. Call after the conditional configuration changes.
+	void syncConditionalStylesToContext();
+
 signals:
 	/// This signal is emitted whenever the table changes.
 	void changed();
@@ -595,6 +690,15 @@ private:
 	 * Should be called once, and once only, during table construction.
 	 */
 	void initialize(int numRows, int numColumns);
+
+	/**
+	 * Returns the name of the (synthetic) conditional cell style for @a area,
+	 * or an empty string if the table style defines no conditional for it.
+	 */
+	QString areaStyleName(TableArea area) const;
+
+	/// Returns the synthetic context name used for @a area's conditional style.
+	QString conditionalSyntheticName(TableArea area) const;
 
 	/// Activates the cell @a cell, or the cell at row 0, column 0 if @a cell is invalid.
 	void activateCell(const TableCell& cell);
@@ -638,6 +742,18 @@ private:
 	 * columns were removed, starting with the row or column at @a index.
 	 */
 	void updateSpans(int index, int number, ChangeType changeType);
+
+	/// Captures the state of rows [index, index+numRows) into a snapshot for undo.
+	TableRowsSnapshot snapshotRows(int index, int numRows) const;
+
+	/// Restores rows from a snapshot. Assumes the rows have been re-inserted blank.
+	void restoreRowsFromSnapshot(const TableRowsSnapshot& snap);
+
+	/// Captures the state of columns [index, index+numColumns) into a snapshot for undo.
+	TableColumnsSnapshot snapshotColumns(int index, int numColumns) const;
+
+	/// Restores columns from a snapshot. Assumes the columns have been re-inserted blank.
+	void restoreColumnsFromSnapshot(const TableColumnsSnapshot& snap);
 
 	/// Prints internal table information. For internal use.
 	void debug() const;
@@ -707,6 +823,30 @@ private:
 
 	// Undo/redo column width action
 	void restoreTableColumnWidth(SimpleState *state, bool isUndo);
+
+	// Undo/redo table cell merge action
+	void restoreTableMergeCells(SimpleState *state, bool isUndo);
+
+	// Undo/redo table cell unmerge action
+	void restoreTableUnmergeCells(SimpleState *state, bool isUndo);
+
+	// Undo/redo table row insert
+	void restoreTableInsertRows(SimpleState *state, bool isUndo);
+
+	// Undo/redo table column insert
+	void restoreTableInsertColumns(SimpleState *state, bool isUndo);
+
+	/// Restores from a TABLE_APPEND_ROWS undo state.
+	void restoreTableAppendRows(SimpleState *state, bool isUndo);
+
+	/// Restores from a TABLE_APPEND_COLUMNS undo state.
+	void restoreTableAppendColumns(SimpleState *state, bool isUndo);
+
+	// Undo/redo table row removal
+	void restoreTableRemoveRows(SimpleState *state, bool isUndo);
+
+	// Undo/redo table column removal
+	void restoreTableRemoveColumns(SimpleState *state, bool isUndo);
 
 private:
 	//<<Data we need to save

@@ -17,6 +17,8 @@
 #include <QMap>
 #include <QMutex>
 #include <QRegularExpression>
+#include <QStringDecoder>
+#include <QStringEncoder>
 
 // ============================================================================
 // Helper: Hunspell dictionary management
@@ -25,13 +27,20 @@
 class HunspellManager
 {
 	public:
+		struct DictEntry
+		{
+			Hunspell* hunspell {nullptr};
+			QStringDecoder decoder;
+			QStringEncoder encoder;
+		};
+
 		static HunspellManager* instance()
 		{
 			static HunspellManager manager;
 			return &manager;
 		}
 
-		Hunspell* getHunspell(const QString& language)
+		DictEntry* getDictEntry(const QString& language)
 		{
 			QMutexLocker locker(&m_mutex);
 
@@ -44,6 +53,15 @@ class HunspellManager
 			if (affPath.isEmpty() || dicPath.isEmpty())
 			{
 				altLanguage = LanguageManager::instance()->getAlternativeAbbrevfromAbbrev(language);
+
+				// Check if we already have the alt language cached
+				if (m_dictionaries.contains(altLanguage))
+				{
+					// Alias the original language to the existing entry
+					m_dictionaries[language] = m_dictionaries[altLanguage];
+					return m_dictionaries[language];
+				}
+
 				affPath = findDictionaryFile(altLanguage, ".aff");
 				dicPath = findDictionaryFile(altLanguage, ".dic");
 				if (affPath.isEmpty() || dicPath.isEmpty())
@@ -54,14 +72,43 @@ class HunspellManager
 			}
 
 			Hunspell* hunspell = new Hunspell(affPath.toUtf8().constData(), dicPath.toUtf8().constData());
-			m_dictionaries[altLanguage.isEmpty() ? language : altLanguage] = hunspell;
-			return hunspell;
+			const std::string encoding = hunspell->get_dict_encoding();
+
+			DictEntry* entry = new DictEntry;
+			entry->hunspell = hunspell;
+			entry->decoder = QStringDecoder(encoding.c_str());
+			entry->encoder = QStringEncoder(encoding.c_str());
+			if (!entry->decoder.isValid() || !entry->encoder.isValid())
+			{
+				qWarning() << "Unknown dictionary encoding" << QString::fromStdString(encoding)
+						   << "for language" << language << "- falling back to UTF-8";
+				entry->decoder = QStringDecoder(QStringDecoder::Utf8);
+				entry->encoder = QStringEncoder(QStringEncoder::Utf8);
+			}
+
+			// Cache under both the requested language AND the alt language if different
+			m_dictionaries[language] = entry;
+			if (!altLanguage.isEmpty() && altLanguage != language)
+				m_dictionaries[altLanguage] = entry;
+
+			return entry;
 		}
 
 		~HunspellManager()
 		{
-			for (Hunspell* hunspell : m_dictionaries.values())
-				delete hunspell;
+			// Multiple keys may point to the same DictEntry (aliasing for language fallbacks),
+			// so collect unique pointers before deleting.
+			QList<DictEntry*> toDelete;
+			for (DictEntry* entry : m_dictionaries.values())
+			{
+				if (!toDelete.contains(entry))
+					toDelete.append(entry);
+			}
+			for (DictEntry* entry : toDelete)
+			{
+				delete entry->hunspell;
+				delete entry;
+			}
 		}
 
 	private:
@@ -88,7 +135,7 @@ class HunspellManager
 			return QString();
 		}
 
-		QMap<QString, Hunspell*> m_dictionaries;
+		QMap<QString, DictEntry*> m_dictionaries;
 		QMutex m_mutex;
 };
 
@@ -98,34 +145,31 @@ class HunspellManager
 
 QVector<SpellError> performSpellCheck(const StoryTextSnapshot& snapshot)
 {
-	// qDebug()<<Q_FUNC_INFO;
 	QVector<SpellError> errors;
-	
+
 	if (snapshot.isEmpty())
 		return errors;
-	
+
 	// Process each paragraph
 	for (int paraIndex = 0; paraIndex < snapshot.paragraphCount(); ++paraIndex)
 	{
 		// Get language runs for this paragraph
 		QVector<LanguageRun> runs = snapshot.getLanguageRunsForParagraph(paraIndex);
-		
+
 		// Check each language run separately
 		for (const LanguageRun& run : runs)
 		{
 			if (run.language.isEmpty())
 				continue; // Skip runs with no language set
-			
+
 			// Extract text for this language run
 			QString text = snapshot.plainText.mid(run.start, run.length);
-			// qDebug()<<text;
-			// Check this text segment
 			QVector<SpellError> runErrors = checkTextInLanguage(text, run.language, run.start);
-			
+
 			errors.append(runErrors);
 		}
 	}
-	
+
 	return errors;
 }
 
@@ -133,23 +177,21 @@ QVector<SpellError> performSpellCheck(const StoryTextSnapshot& snapshot)
 // Language-Specific Checking
 // ============================================================================
 
-QVector<SpellError> checkTextInLanguage(const QString& text,
-										const QString& language,
-										int basePosition)
+QVector<SpellError> checkTextInLanguage(const QString& text, const QString& language, int basePosition)
 {
 	QVector<SpellError> errors;
-	
+
 	if (text.isEmpty())
 		return errors;
-	
-	// static const QRegularExpression wordRegex("\\b([\\w']+)\\b");
 
 	static const QRegularExpression wordRegex("\\b([\\w']*\\p{L}[\\w']*)\\b", QRegularExpression::UseUnicodePropertiesOption);
 
-
-	Hunspell* hunspell = HunspellManager::instance()->getHunspell(language);
-	if (!hunspell)
+	HunspellManager::DictEntry* entry = HunspellManager::instance()->getDictEntry(language);
+	if (!entry)
 		return errors;
+
+	// int wordCount = 0;
+	// int misspelledCount = 0;
 
 	QRegularExpressionMatchIterator it = wordRegex.globalMatch(text);
 	while (it.hasNext())
@@ -160,10 +202,12 @@ QVector<SpellError> checkTextInLanguage(const QString& text,
 		if (word.length() < 2)
 			continue;
 
-		// Single conversion, single Hunspell call
-		const std::string wordUtf8 = word.toStdString();
-		if (!hunspell->spell(wordUtf8))
+		// wordCount++;
+		// Encode word in the dictionary's native encoding before passing to Hunspell
+		QByteArray encoded = entry->encoder.encode(word);
+		if (!entry->hunspell->spell(encoded.toStdString()))
 		{
+			// misspelledCount++;
 			SpellError error;
 			error.position = basePosition + match.capturedStart(1);
 			error.length   = word.length();
@@ -172,24 +216,30 @@ QVector<SpellError> checkTextInLanguage(const QString& text,
 			errors.append(error);
 		}
 	}
-	
+
+	// qDebug() << "checkTextInLanguage" << language
+	// 			 << "text length:" << text.length()
+	// 			 << "words checked:" << wordCount
+	// 			 << "misspelled:" << misspelledCount;
+
 	return errors;
 }
 
 QStringList getSpellingSuggestions(const QString& word, const QString& language)
 {
-	Hunspell* hunspell = HunspellManager::instance()->getHunspell(language);
-	if (!hunspell)
+	HunspellManager::DictEntry* entry = HunspellManager::instance()->getDictEntry(language);
+	if (!entry)
 		return QStringList();
 
 	int maxSuggestions = PrefsManager::instance().appPrefs.spellCheckPrefs.maxSuggestions;
 
-	const std::vector<std::string> suggestions = hunspell->suggest(word.toStdString());
+	QByteArray encoded = entry->encoder.encode(word);
+	const std::vector<std::string> suggestions = entry->hunspell->suggest(encoded.toStdString());
 
 	QStringList result;
 	result.reserve(qMin((int)suggestions.size(), maxSuggestions));
 	for (size_t i = 0; i < suggestions.size() && i < (size_t)maxSuggestions; ++i)
-		result << QString::fromStdString(suggestions[i]);
+		result << entry->decoder.decode(QByteArray::fromStdString(suggestions[i]));
 
 	return result;
 }

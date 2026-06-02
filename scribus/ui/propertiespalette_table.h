@@ -16,6 +16,7 @@ for which a new license (GPL+exception) is in place.
 #include "scribusapi.h"
 #include "scguardedptr.h"
 #include "tableborder.h"
+#include "tablecell.h"
 #include "units.h"
 
 #include "ui_propertiespalette_tablebase.h"
@@ -23,6 +24,7 @@ for which a new license (GPL+exception) is in place.
 class PageItem;
 class ScribusMainWindow;
 class ScribusDoc;
+
 
 /**
  * Widget for table properties in the Properties Palette.
@@ -65,6 +67,8 @@ public slots:
 	/// Updates the fill controls.
 	void updateFillControls();
 	void updateStyleControls();
+	void updatePaddingControls();
+	void toggleLabelVisibility(bool v);
 
 private slots:
 	void setTableStyle(const QString& name);
@@ -92,6 +96,16 @@ private slots:
 	void on_fillShade_valueChanged(double shade);
 	void on_buttonClearTableStyle_clicked();
 	void on_buttonClearCellStyle_clicked();
+	void on_cellPaddingWidget_valuesChanged(const MarginStruct& padding);
+
+	/// Syncs the side selector's visual state to reflect the actual borders
+	/// on the currently-selected (or all) cells.
+	void syncSideSelectorToCells();
+
+	/// Returns the cells that border edits should currently apply to:
+	/// the selected cells in edit mode (or active cell as fallback), or
+	/// all cells in normal mode.
+	QSet<TableCell> effectiveCells() const;
 
 private:
 	/// This enum represents three states. Used for three-state logic.
@@ -115,6 +129,8 @@ private:
 	void updateBorders();
 	/// Returns the color with name @a colorName and shade @a shade as a QColor.
 	QColor getColor(const QString& colorName, int shade) const;
+	void applyToInnerHorizontal(const QSet<TableCell>& cells, const TableBorder& border);
+	void applyToInnerVertical(const QSet<TableCell>& cells, const TableBorder& border);
 
 private:
 	/// The current main window.
@@ -124,8 +140,14 @@ private:
 	/// The currently edited item.
 	PageItem* m_item {nullptr};
 
+	double m_unitRatio {1.0};
+	int m_unitIndex {SC_PT};
+
 	/// The currently edited border.
 	TableBorder m_currentBorder;
+
+	/// The previous side selector selection, used to detect which side toggled.
+	TableSides m_lastSelection { TableSide::All };
 };
 
 #endif // PROPERTIESPALETTE_TABLE_H

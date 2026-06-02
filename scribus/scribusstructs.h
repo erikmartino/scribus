@@ -307,7 +307,12 @@ enum class TableSide
 	Right = 2,  /**< The right side is selected. */
 	Top = 4,    /**< The top side is selected. */
 	Bottom = 8, /**< The bottom side is selected. */
-	All = Left | Right | Top | Bottom
+	InnerHorizontal  = 16, /**< The inner horizontal side is selected. */
+	InnerVertical    = 32, /**< The inner vertical side is selected. */
+	All = Left | Right | Top | Bottom,
+	AllOuter = Left | Right | Top | Bottom,
+	AllInner = InnerHorizontal | InnerVertical,
+	Everything = AllOuter | AllInner
 };
 Q_DECLARE_FLAGS(TableSides, TableSide)
 Q_DECLARE_OPERATORS_FOR_FLAGS(TableSides)
@@ -329,7 +334,7 @@ struct SingleLine
 	void setShade(int value)        { Shade = value; }
 	bool operator==(const SingleLine& other) const
 	{
-		if (!compareDouble(Width, other.Width) )
+		if (!doubleIsEqual(Width, other.Width) )
 			return false;
 		if ((Dash != other.Dash)  || (LineEnd != other.LineEnd) || (LineJoin != other.LineJoin) ||
 			(Color != other.Color)|| (Shade != other.Shade))
@@ -542,6 +547,7 @@ enum UpdateRequests
 	reqInlinePalUpdate   = 2048,
 	reqMarksUpdate       = 4096,
 	reqNumUpdate         = 8192,
+	reqTableStylesUpdate = 16384,
 	reqUpdateAll = 65535
 };
 

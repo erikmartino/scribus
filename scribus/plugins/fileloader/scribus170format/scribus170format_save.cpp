@@ -32,6 +32,7 @@ for which a new license (GPL+exception) is in place.
 #include "pageitem_regularpolygon.h"
 #include "pageitem_spiral.h"
 #include "pageitem_table.h"
+#include "pagesize.h"
 #include "prefsmanager.h"
 #include "qtiocompressor.h"
 #include "resourcecollection.h"
@@ -333,7 +334,8 @@ bool Scribus170Format::saveFile(const QString & fileName, const FileFormat & /* 
 	docu.writeAttribute("BleedRight"  , m_Doc->bleeds()->right());
 	docu.writeAttribute("BleedBottom" , m_Doc->bleeds()->bottom());
 	docu.writeAttribute("ORIENTATION" , m_Doc->pageOrientation());
-	docu.writeAttribute("PAGESIZE"    , m_Doc->pageSize());
+	PageSize ps(m_Doc->pageWidth(), m_Doc->pageHeight());
+	docu.writeAttribute("PAGESIZE"    , ps.name()); // legacy for Scribus < 1.7.4
 	docu.writeAttribute("FIRSTNUM"    , m_Doc->FirstPnum);
 	docu.writeAttribute("BOOK"        , m_Doc->pagePositioning());
 	if (m_Doc->usesAutomaticTextFrames())
@@ -1430,11 +1432,11 @@ void Scribus170Format::writeSections(ScXmlStreamWriter & docu) const
 	for (auto it = m_Doc->sections().begin() ; it != m_Doc->sections().end(); ++it )
 	{
 		docu.writeEmptyElement("Section");
-		docu.writeAttribute("Number", (*it).number);
-		docu.writeAttribute("Name", (*it).name);
-		docu.writeAttribute("From", (*it).fromindex);
-		docu.writeAttribute("To", (*it).toindex);
-		switch ((*it).type)
+		docu.writeAttribute("Number", it->number);
+		docu.writeAttribute("Name", it->name);
+		docu.writeAttribute("From", it->fromindex);
+		docu.writeAttribute("To", it->toindex);
+		switch (it->type)
 		{
 			case Type_1_2_3:
 				docu.writeAttribute("Type", "Type_1_2_3");
@@ -1472,12 +1474,16 @@ void Scribus170Format::writeSections(ScXmlStreamWriter & docu) const
 			case Type_None:
 				docu.writeAttribute("Type", "Type_None");
 				break;
+			// Case of numeration formats not supported by 1.7.0 format
+			default:
+				docu.writeAttribute("Type", "Type_1_2_3");
+				break;
 		}
-		docu.writeAttribute("Start", (*it).sectionstartindex);
-		docu.writeAttribute("Reversed", (*it).reversed);
-		docu.writeAttribute("Active", (*it).active);
-		docu.writeAttribute("FillChar", (*it).pageNumberFillChar.unicode());
-		docu.writeAttribute("FieldWidth", (*it).pageNumberWidth);
+		docu.writeAttribute("Start", it->sectionstartindex);
+		docu.writeAttribute("Reversed", it->reversed);
+		docu.writeAttribute("Active", it->active);
+		docu.writeAttribute("FillChar", it->pageNumberFillChar.unicode());
+		docu.writeAttribute("FieldWidth", it->pageNumberWidth);
 	}
 	docu.writeEndElement();
 }
@@ -1621,6 +1627,10 @@ void  Scribus170Format::writeNotesStyles(ScXmlStreamWriter & docu, const QString
 				break;
 			case Type_None:
 				docu.writeAttribute("Type", "Type_None");
+				break;
+			// Case of numeration formats not supported by 1.7.0 format
+			default:
+				docu.writeAttribute("Type", "Type_1_2_3");
 				break;
 		}
 		docu.writeAttribute("Range", (int) noteStyle->range());
@@ -1802,7 +1812,8 @@ void Scribus170Format::WritePages(ScribusDoc *doc, ScXmlStreamWriter& docu, QPro
 		docu.writeAttribute("NUM",page->pageNr());
 		docu.writeAttribute("NAM",page->pageName());
 		docu.writeAttribute("MNAM",page->masterPageName());
-		docu.writeAttribute("Size", page->size());
+		PageSize ps(page->width(), page->height());
+		docu.writeAttribute("Size", ps.name()); // legacy for Scribus < 1.7.4
 		docu.writeAttribute("Orientation", page->orientation());
 		docu.writeAttribute("LEFT", page->LeftPg);
 		docu.writeAttribute("PRESET", page->marginPreset);

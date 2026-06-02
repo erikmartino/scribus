@@ -31,7 +31,7 @@ struct OpticalMarginRule
 
 	bool operator==(const OpticalMarginRule& other) const
 	{
-		if (!compareDouble(Left, other.Left) || !compareDouble(Right, other.Right) || (Unit != other.Unit))
+		if (!doubleIsEqual(Left, other.Left) || !doubleIsEqual(Right, other.Right) || (Unit != other.Unit))
 			return false;
 		return true;
 	}

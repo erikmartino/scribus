@@ -32,6 +32,7 @@ for which a new license (GPL+exception) is in place.
 #include "pageitem_regularpolygon.h"
 #include "pageitem_spiral.h"
 #include "pageitem_table.h"
+#include "pagesize.h"
 #include "prefsmanager.h"
 #include "qtiocompressor.h"
 #include "resourcecollection.h"
@@ -333,9 +334,11 @@ bool Scribus171Format::saveFile(const QString & fileName, const FileFormat & /* 
 	docu.writeAttribute("BleedRight", m_Doc->bleeds()->right());
 	docu.writeAttribute("BleedBottom", m_Doc->bleeds()->bottom());
 	docu.writeAttribute("PageOrientation", m_Doc->pageOrientation());
-	docu.writeAttribute("PageSize", m_Doc->pageSize());
+	PageSize ps(m_Doc->pageWidth(), m_Doc->pageHeight());
+	docu.writeAttribute("PageSize", ps.name()); // legacy for Scribus < 1.7.4
 	docu.writeAttribute("FirstPageNumber", m_Doc->FirstPnum);
 	docu.writeAttribute("PagePositioning", m_Doc->pagePositioning());
+	docu.writeAttribute("BindingDirection", m_Doc->bindingDirection());
 	if (m_Doc->usesAutomaticTextFrames())
 		docu.writeAttribute("AutomaticTextFrames", 1);
 	docu.writeAttribute("AutomaticTextFrameColumnCount", m_Doc->PageSp);
@@ -417,6 +420,7 @@ bool Scribus171Format::saveFile(const QString & fileName, const FileFormat & /* 
 		docu.writeAttribute("ShowFrames", static_cast<int>(m_Doc->guidesPrefs().framesShown));
 		docu.writeAttribute("ShowControls", static_cast<int>(m_Doc->guidesPrefs().showControls));
 	}
+	docu.writeAttribute("ShowTableCellFrames", static_cast<int>(m_Doc->guidesPrefs().tableCellFramesShown));
 	docu.writeAttribute("ShowLayerMarkers", static_cast<int>(m_Doc->guidesPrefs().layerMarkersShown));
 	docu.writeAttribute("ShowMargins", static_cast<int>(m_Doc->guidesPrefs().marginsShown));
 	docu.writeAttribute("ShowBaselineGrid", static_cast<int>(m_Doc->guidesPrefs().baselineGridShown));
@@ -1012,8 +1016,14 @@ void Scribus171Format::writeCellStyles(ScXmlStreamWriter& docu) const
 	QList<int> styleList = m_Doc->getSortedCellStyleList();
 	for (int i = 0; i < styleList.count(); ++i)
 	{
+		const CellStyle& style = m_Doc->cellStyles()[styleList[i]];
+		// Skip synthetic conditional cell styles -- they are runtime-only
+		// bridges, regenerated from each table style's <Conditional> children
+		// on load via syncConditionalStylesToContext().
+		if (style.name().startsWith(QLatin1String("__cond_")))
+			continue;
 		docu.writeStartElement("CellStyle");
-		putCellStyle(docu, m_Doc->cellStyles()[styleList[i]]);
+		putCellStyle(docu, style);
 		docu.writeEndElement();
 	}
 }
@@ -1030,6 +1040,22 @@ void Scribus171Format::putTableStyle(ScXmlStreamWriter &docu, const TableStyle &
 		docu.writeAttribute("FillColor", style.fillColor());
 	if (!style.isInhFillShade())
 		docu.writeAttribute("FillShade", style.fillShade());
+	if (!style.isInhParagraphStyleName())
+		docu.writeAttribute("ParagraphStyleName", style.paragraphStyleName());
+	// Config attributes -- must precede child elements.
+	if (style.headerRows() != 0)
+		docu.writeAttribute("HeaderRows", style.headerRows());
+	if (style.totalRows() != 0)
+		docu.writeAttribute("TotalRows", style.totalRows());
+	if (style.bandedRows())
+		docu.writeAttribute("BandedRows", QString::number(1));
+	if (style.bandedColumns())
+		docu.writeAttribute("BandedColumns", QString::number(1));
+	if (style.firstColumn())
+		docu.writeAttribute("FirstColumn", QString::number(1));
+	if (style.lastColumn())
+		docu.writeAttribute("LastColumn", QString::number(1));
+
 	if (!style.isInhLeftBorder())
 	{
 		const TableBorder& tbLeft = style.leftBorder();
@@ -1090,9 +1116,24 @@ void Scribus171Format::putTableStyle(ScXmlStreamWriter &docu, const TableStyle &
 		}
 		docu.writeEndElement();
 	}
+
+	// Conditional child styles.
+	const QHash<TableArea, CellStyle>& conds = style.conditionalStyles();
+	for (auto it = conds.constBegin(); it != conds.constEnd(); ++it)
+	{
+		docu.writeStartElement("Conditional");
+		docu.writeAttribute("Type", tableAreaToString(it.key()));
+		putCellStyleBody(docu, it.value());
+		docu.writeEndElement();
+	}
 }
 
 void Scribus171Format::putCellStyle(ScXmlStreamWriter &docu, const CellStyle &style) const
+{
+	putCellStyleBody(docu, style);
+}
+
+void Scribus171Format::putCellStyleBody(ScXmlStreamWriter &docu, const CellStyle &style) const
 {
 	if (!style.name().isEmpty() )
 		docu.writeAttribute("Name", style.name());
@@ -1104,6 +1145,8 @@ void Scribus171Format::putCellStyle(ScXmlStreamWriter &docu, const CellStyle &st
 		docu.writeAttribute("FillColor", style.fillColor());
 	if (!style.isInhFillShade())
 		docu.writeAttribute("FillShade", style.fillShade());
+	if (!style.isInhParagraphStyleName())
+		docu.writeAttribute("ParagraphStyleName", style.paragraphStyleName());
 	if (!style.isInhLeftPadding())
 		docu.writeAttribute("LeftPadding",style.leftPadding());
 	if (!style.isInhRightPadding())
@@ -1425,16 +1468,16 @@ void Scribus171Format::writeSections(ScXmlStreamWriter & docu) const
 	for (auto it = m_Doc->sections().begin() ; it != m_Doc->sections().end(); ++it )
 	{
 		docu.writeEmptyElement("Section");
-		docu.writeAttribute("Number", (*it).number);
-		docu.writeAttribute("Name", (*it).name);
-		docu.writeAttribute("From", (*it).fromindex);
-		docu.writeAttribute("To", (*it).toindex);
-		docu.writeAttribute("Type", fromNumToString((*it).type));
-		docu.writeAttribute("Start", (*it).sectionstartindex);
-		docu.writeAttribute("Reversed", (*it).reversed);
-		docu.writeAttribute("Active", (*it).active);
-		docu.writeAttribute("FillChar", (*it).pageNumberFillChar.unicode());
-		docu.writeAttribute("FieldWidth", (*it).pageNumberWidth);
+		docu.writeAttribute("Number", it->number);
+		docu.writeAttribute("Name", it->name);
+		docu.writeAttribute("From", it->fromindex);
+		docu.writeAttribute("To", it->toindex);
+		docu.writeAttribute("Type", fromNumToString(it->type));
+		docu.writeAttribute("Start", it->sectionstartindex);
+		docu.writeAttribute("Reversed", it->reversed);
+		docu.writeAttribute("Active", it->active);
+		docu.writeAttribute("FillChar", it->pageNumberFillChar.unicode());
+		docu.writeAttribute("FieldWidth", it->pageNumberWidth);
 	}
 	docu.writeEndElement();
 }
@@ -1721,7 +1764,8 @@ void Scribus171Format::WritePages(ScribusDoc *doc, ScXmlStreamWriter& docu, QPro
 		docu.writeAttribute("PageNumber",page->pageNr());
 		docu.writeAttribute("PageName",page->pageName());
 		docu.writeAttribute("MasterPageName",page->masterPageName());
-		docu.writeAttribute("Size", page->size());
+		PageSize ps(page->width(), page->height());
+		docu.writeAttribute("Size", ps.name()); // legacy for Scribus < 1.7.4
 		docu.writeAttribute("Orientation", page->orientation());
 		docu.writeAttribute("LeftPage", page->LeftPg);
 		docu.writeAttribute("Preset", page->marginPreset);
@@ -2515,9 +2559,9 @@ void Scribus171Format::WriteObjects(ScribusDoc *doc, ScXmlStreamWriter& docu, co
 					CellStyle cs;
 					if (!cstyle.isEmpty())
 						cs = cell.style();
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhFillColor())))
+					if (!cell.style().isInhFillColor())
 						docu.writeAttribute("FillColor", cell.fillColor());
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhFillShade())))
+					if (!cell.style().isInhFillShade())
 						docu.writeAttribute("FillShade", cell.fillShade());
 					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhLeftPadding())))
 						docu.writeAttribute("LeftPadding",cell.leftPadding());

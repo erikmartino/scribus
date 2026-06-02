@@ -372,34 +372,34 @@ public:
 	~SToolBFont() {};
 	
 	FontCombo* Fonts { nullptr };
-	ScrSpinBox* charScaleH { nullptr };
-	ScrSpinBox* charScaleV { nullptr };
+	ScrSpinBox* charScaleWidth { nullptr };
+	ScrSpinBox* charScaleHight { nullptr };
 	QAction* fontsAction { nullptr };
-	QAction* chScaleHAction { nullptr };
-	QAction* chScaleVAction { nullptr };
+	QAction* chScaleWidthAction { nullptr };
+	QAction* chScaleHeightAction { nullptr };
 
 protected:
 	void changeEvent(QEvent *e) override;
 
 public slots:
-	void SetFont(const QString& f);
-	void SetSize(double s);
-	void SetScaleH(double s);
-	void SetScaleV(double s);
+	void setFont(const QString& f);
+	void setSize(double s);
+	void setScaleWidth(double s);
+	void setScaleHeight(double s);
 
 signals:
 	void newFont(const QString &);
 	void newSize(double);
-	void newScaleH(double);
-	void newScaleV(double);
+	void newScaleWidth(double);
+	void newScaleHeight(double);
 
 private:
 	ScrSpinBox* Size { nullptr };
-	QLabel*  lblScaleTxtH { nullptr };
-	QLabel*  lblScaleTxtV { nullptr };
+	QLabel*  labelScaleTextWidth { nullptr };
+	QLabel*  labelScaleTextHeight { nullptr };
 	QAction* sizeAction { nullptr };
-	QAction* scaleTxtHAction { nullptr };
-	QAction* scaleTxtVAction { nullptr };
+	QAction* scaleTextWidthAction { nullptr };
+	QAction* scaleTextHeightAction { nullptr };
 
 private slots:
 	void iconSetChange();
@@ -460,13 +460,13 @@ private:
 
 protected slots:
 	void setFontPref();
-	void newTxScale();
-	void newTxScaleV();
-	void newTxKern(double s);
-	void newShadowOffs(double x, double y);
-	void newTxtOutline(double o);
-	void newTxtUnderline(double p, double w);
-	void newTxtStrike(double p, double w);
+	void newTextScaleWidth();
+	void newTextScaleHeight();
+	void newTextKern(double s);
+	void newShadowOffset(double x, double y);
+	void newTextOutline(double o);
+	void newTextUnderline(double p, double w);
+	void newTextStrikethough(double p, double w);
 	void updateProps();
 	void updateProps(QTextCursor &cur);
 	void updateProps(int p, int ch);

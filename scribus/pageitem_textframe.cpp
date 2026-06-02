@@ -96,7 +96,8 @@ PageItem_TextFrame::~PageItem_TextFrame()
 void PageItem_TextFrame::init()
 {
 	m_origAnnotPos = QRectF(xPos(), yPos(), width(), height());
-	connect(&itemText,SIGNAL(changed(int,int)), this, SLOT(slotInvalidateLayout(int,int)));
+	connect(&itemText, SIGNAL(changed(int,int)), this, SLOT(slotInvalidateLayout(int,int)));
+	connect(&itemText, SIGNAL(changed(int,int)), this, SLOT(slotSpellCheckTextChanged(int,int)));
 }
 
 QRegion PageItem_TextFrame::calcAvailableRegion()
@@ -3059,6 +3060,11 @@ void PageItem_TextFrame::slotInvalidateLayout(int firstItem, int /*endItem*/)
 	}
 }
 
+void PageItem_TextFrame::slotSpellCheckTextChanged(int /*firstItem*/, int /*endItem*/)
+{
+	TextFrameSpellChecker::instance()->frameTextChanged(this);
+}
+
 bool PageItem_TextFrame::isValidChainFromBegin()
 {
 	if (invalid)
@@ -3473,7 +3479,7 @@ void PageItem_TextFrame::DrawObj_Item(ScPainter *p, const QRectF& cullingArea)
 		textLayout.render(&painter, this);
 
 		// Draw spell check underlines (only in edit mode)
-		if (TextFrameSpellChecker::instance()->isEnabled() &&
+		if (TextFrameSpellChecker::instance()->isEnabled() && !TextFrameSpellChecker::instance()->isPaused() &&
 			PrefsManager::instance().appPrefs.spellCheckPrefs.showMisspeltIndicator &&
 			 m_Doc->appMode == modeEdit && this == m_Doc->m_Selection->itemAt(0))
 		{
@@ -3616,7 +3622,7 @@ void PageItem_TextFrame::DrawObj_Decoration(ScPainter *p)
 	if ((!isEmbedded) && (!m_Doc->RePos))
 	{
 		double scpInv = 0.0;
-		if ((drawFrame()) && (m_Doc->guidesPrefs().framesShown) && (no_stroke))
+		if ((drawFrame()) && (m_Doc->guidesPrefs().framesShown) && (no_stroke) && (!isTableCellTextFrame() || m_Doc->guidesPrefs().tableCellFramesShown))
 		{
 			p->setPen(PrefsManager::instance().appPrefs.displayPrefs.frameNormColor, scpInv, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin);
 			if ((isBookmark) || (m_isAnnotation))
@@ -3660,7 +3666,7 @@ void PageItem_TextFrame::DrawObj_Decoration(ScPainter *p)
 			double ofy = m_height - ofwh * 3;
 			p->drawSharpRect(ofx, ofy, ofwh, ofwh);
 		}
-		if (no_fill && no_stroke && m_Doc->guidesPrefs().framesShown)
+		if (no_fill && no_stroke && m_Doc->guidesPrefs().framesShown && (!isTableCellTextFrame() || m_Doc->guidesPrefs().tableCellFramesShown))
 		{
 			p->setPen(PrefsManager::instance().appPrefs.displayPrefs.frameNormColor, scpInv, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin);
 			if (m_Locked)
@@ -3680,14 +3686,28 @@ void PageItem_TextFrame::DrawObj_Decoration(ScPainter *p)
 
 void PageItem_TextFrame::drawSpellCheckSquiggles(ScPainter* p, const QVector<SpellError>& errors)
 {
+	const int textLen = itemText.length();
+	const Box* outerBox = textLayout.box();
 	p->save();
 
-	// Set red pen for spell check squiggles
-	p->setPen(Qt::red, 0.5, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin);
 	for (const SpellError& error : errors)
 	{
+		// Skip errors whose positions are no longer valid
+		if (error.position < 0 || error.position >= textLen)
+			continue;
+		if (error.position + error.length > textLen)
+			continue;
+
+		// Get font size at this error position (CharStyle stores size in tenths of a point)
+		const double fontSize = itemText.charStyle(error.position).fontSize() / 10.0;
+
+		// Scale pen width, amplitude, and wavelength to font size
+		// 12pt is the reference — adjust ratios to taste
+		const double penWidth = qMax(0.5, fontSize / 24.0);
+		p->setPen(Qt::red, penWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+
 		// Iterate over columns
-		for (const Box* column : textLayout.box()->boxes())
+		for (const Box* column : outerBox->boxes())
 		{
 			// Iterate over lines within each column
 			for (const Box* box : column->boxes())
@@ -3697,8 +3717,7 @@ void PageItem_TextFrame::drawSpellCheckSquiggles(ScPainter* p, const QVector<Spe
 					continue;
 
 				// Check if error overlaps this line
-				if (error.position > line->lastChar() ||
-					error.position + error.length <= line->firstChar())
+				if (error.position > line->lastChar() || error.position + error.length <= line->firstChar())
 					continue;
 
 				// Calculate x positions for the error span
@@ -3707,11 +3726,18 @@ void PageItem_TextFrame::drawSpellCheckSquiggles(ScPainter* p, const QVector<Spe
 
 				QLineF startPoint = line->positionToPoint(startPos, itemText);
 				QLineF endPoint = line->positionToPoint(endPos, itemText);
-				double startX = startPoint.x1();
-				double endX = endPoint.x1();
-				double squiggleY = startPoint.y2();
+
+				// positionToPoint returns coordinates in the line's local space.
+				// Translate by column offset and outer box offset to reach frame space.
+				double offsetX = column->x() + outerBox->x();
+				double offsetY = column->y() + outerBox->y();
+
+				double startX = startPoint.x1() + offsetX;
+				double endX = endPoint.x1() + offsetX;
+				double squiggleY = startPoint.y1() + offsetY + line->ascent() + (fontSize * 0.15);
+
 				// Draw squiggle
-				drawSquiggleLine(p, startX, squiggleY, endX - startX);
+				drawSquiggleLine(p, startX, squiggleY, endX - startX, fontSize);
 			}
 		}
 	}
@@ -3719,13 +3745,17 @@ void PageItem_TextFrame::drawSpellCheckSquiggles(ScPainter* p, const QVector<Spe
 	p->restore();
 }
 
-void PageItem_TextFrame::drawSquiggleLine(ScPainter* p, double x, double y, double width)
+void PageItem_TextFrame::drawSquiggleLine(ScPainter* p, double x, double y, double width, double fontSize)
 {
 	if (width <= 0)
 		return;
 
-	const double amplitude = 0.25;
-	const double wavelength = 4.0;
+	// Scale amplitude and wavelength with font size.
+	// Reference: 12pt text -> amplitude 0.6, wavelength 3.0
+	const double scale = fontSize / 12.0;
+	const double amplitude = 0.4 * scale;
+	const double halfAmplitude = amplitude * 0.5;
+	const double wavelength = 3.0 * scale;
 
 	// Create a smooth wave using bezier curves
 	FPointArray wave;
@@ -3744,13 +3774,9 @@ void PageItem_TextFrame::drawSquiggleLine(ScPainter* p, double x, double y, doub
 
 		// If this is the final segment, make it gentler
 		if (nextX >= x + width)
-			curveY = up ? y - amplitude * 0.5 : y + amplitude * 0.5;
+			curveY = up ? y - halfAmplitude : y + halfAmplitude;
 		// Final curve - use smaller amplitude
-		wave.svgCurveToCubic(
-					currentX + wavelength / 4.0, curveY,
-					currentX + 3 * wavelength / 4.0, curveY,
-					nextX, y
-					);
+		wave.svgCurveToCubic(currentX + wavelength / 4.0, curveY, currentX + 3 * wavelength / 4.0, curveY, nextX, y);
 
 		currentX = nextX;
 		up = !up;
@@ -3877,30 +3903,30 @@ void PageItem_TextFrame::handleModeEditKey(QKeyEvent *k, bool& keyRepeat)
 
 	switch (kk)
 	{
-	case Qt::Key_PageDown:
-	case Qt::Key_PageUp:
-	case Qt::Key_End:
-	case Qt::Key_Home:
-	case Qt::Key_Right:
-	case Qt::Key_Left:
-	case Qt::Key_Up:
-	case Qt::Key_Down:
-		if ( (buttonModifiers & Qt::ShiftModifier) == 0 )
-			deselectAll();
-		if (UndoManager::undoEnabled())
-		{
-			SimpleState *ss = dynamic_cast<SimpleState*>(undoManager->getLastUndo());
-			if (ss)
-				ss->set("ETEA", QString(""));
-			else
+		case Qt::Key_PageDown:
+		case Qt::Key_PageUp:
+		case Qt::Key_End:
+		case Qt::Key_Home:
+		case Qt::Key_Right:
+		case Qt::Key_Left:
+		case Qt::Key_Up:
+		case Qt::Key_Down:
+			if ( (buttonModifiers & Qt::ShiftModifier) == 0 )
+				deselectAll();
+			if (UndoManager::undoEnabled())
 			{
-				TransactionState *ts = dynamic_cast<TransactionState*>(undoManager->getLastUndo());
-				if (ts)
-					ss = dynamic_cast<SimpleState*>(ts->last());
+				SimpleState *ss = dynamic_cast<SimpleState*>(undoManager->getLastUndo());
 				if (ss)
 					ss->set("ETEA", QString(""));
+				else
+				{
+					TransactionState *ts = dynamic_cast<TransactionState*>(undoManager->getLastUndo());
+					if (ts)
+						ss = dynamic_cast<SimpleState*>(ts->last());
+					if (ss)
+						ss->set("ETEA", QString(""));
+				}
 			}
-		}
 	}
 
 	if (unicodeTextEditMode)
@@ -4542,6 +4568,23 @@ void PageItem_TextFrame::handleModeEditKey(QKeyEvent *k, bool& keyRepeat)
 //	view->slotDoCurs(true);
 	if ((kk == Qt::Key_Left) || (kk == Qt::Key_Right) || (kk == Qt::Key_Up) || (kk == Qt::Key_Down))
 		keyRepeat = false;
+}
+
+bool PageItem_TextFrame::cursorOnFirstLine() const
+{
+	if (textLayout.lines() <= 0)
+		return true;
+	const int pos = itemText.cursorPosition();
+	return pos <= textLayout.line(0)->lastChar();
+}
+
+bool PageItem_TextFrame::cursorOnLastLine() const
+{
+	const int n = textLayout.lines();
+	if (n <= 0)
+		return true;
+	const int pos = itemText.cursorPosition();
+	return pos >= textLayout.line(n - 1)->firstChar();
 }
 
 void PageItem_TextFrame::deleteSelectedTextFromFrame(/*bool findNotes*/)
@@ -6019,4 +6062,50 @@ void PageItem_TextFrame::setTextFrameHeight()
 	m_Doc->changed();
 	m_Doc->regionsChanged()->update(QRect());
 	m_Doc->changedPagePreview();
+}
+
+double PageItem_TextFrame::naturalContentHeight()
+{
+	// Temporarily expand the frame, iterating if needed, until layout
+	// reports a height strictly less than what we gave it -- meaning
+	// the layout had room to spare and the natural height is honest.
+	// Without this, content overflowing the current frame is excluded
+	// from the layout's reported size.
+	const double savedHeight = m_height;
+	double tryHeight = qMax(m_height, 100.0);
+	double naturalH = 0.0;
+
+	for (int i = 0; i < 10; ++i)
+	{
+		setHeight(tryHeight);
+		updateClip();
+		invalidateLayout(false);
+		layout();
+
+		if (textLayout.lines() <= 0)
+		{
+			naturalH = 0.0;
+			break;
+		}
+
+		naturalH = qMax(textLayout.box()->naturalHeight(), maxY);
+
+		// If naturalH < tryHeight, layout had headroom; trust the answer.
+		if (naturalH < tryHeight - 0.5)
+			break;
+
+		// Otherwise layout filled the whole frame -- might be truncated.
+		tryHeight *= 2.0;
+	}
+
+	double height = textToFrameDistTop() + textToFrameDistBottom();
+	if (textLayout.lines() > 0)
+		height += naturalH;
+
+	setHeight(savedHeight);
+	updateClip();
+	invalidateLayout(false);
+	layout();
+
+	return std::ceil(height);
 }

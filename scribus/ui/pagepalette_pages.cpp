@@ -64,6 +64,7 @@ PagePalette_Pages::PagePalette_Pages(QWidget *parent)
 
 	connect(pageLayout, SIGNAL(schemeChanged(int)), this, SLOT(handlePageLayout(int)));
 	connect(pageLayout, SIGNAL(firstPageChanged(int)), this, SLOT(handleFirstPage(int)));
+	connect(pageLayout, SIGNAL(bindingDirectionChanged(int)), this, SLOT(handleBindingDirection(int)));
 
 	connect(pageGrid, SIGNAL(click(int, int)), this, SLOT(pageView_gotoPage(int, int)));
 	connect(pageGrid, SIGNAL(movePage(int, int)), this, SLOT(pageView_movePage(int, int)));
@@ -306,8 +307,18 @@ void PagePalette_Pages::enablePalette(const bool enabled)
 
 void PagePalette_Pages::handlePageLayout(int layout)
 {
-	pageLayout->setFirstPage(currView->m_doc->pageSets()[layout].FirstPage);
+	if (!currView)
+		return;
 	currView->m_doc->setPagePositioning(layout);
+
+	// Block firstPageChanged signal while we sync the UI to the new layout's
+	// stored FirstPage value. Without this, setFirstPage() triggers
+	// handleFirstPage() before pagePositioning has been updated, which
+	// writes the new layout's FirstPage value into the old layout's slot.
+	disconnect(pageLayout, SIGNAL(firstPageChanged(int)), this, SLOT(handleFirstPage(int)));
+	pageLayout->setFirstPage(currView->m_doc->pageSets()[layout].FirstPage);
+	connect(pageLayout, SIGNAL(firstPageChanged(int)), this, SLOT(handleFirstPage(int)));
+
 	currView->reformPages();
 	currView->DrawNew();
 	currView->GotoPage(currView->m_doc->currentPageNumber());
@@ -316,7 +327,20 @@ void PagePalette_Pages::handlePageLayout(int layout)
 
 void PagePalette_Pages::handleFirstPage(int fp)
 {
+	if (!currView)
+		return;
 	currView->m_doc->setPageSetFirstPage(currView->m_doc->pagePositioning(), fp);
+	currView->reformPages();
+	currView->DrawNew();
+	currView->GotoPage(currView->m_doc->currentPageNumber());
+	rebuildPages();
+}
+
+void PagePalette_Pages::handleBindingDirection(int direction)
+{
+	if (!currView)
+		return;
+	currView->m_doc->setBindingDirection(direction);
 	currView->reformPages();
 	currView->DrawNew();
 	currView->GotoPage(currView->m_doc->currentPageNumber());
@@ -365,12 +389,14 @@ void PagePalette_Pages::rebuildPages()
 
 	disconnect(pageLayout, SIGNAL(schemeChanged(int)), this, SLOT(handlePageLayout(int)));
 	disconnect(pageLayout, SIGNAL(firstPageChanged(int)), this, SLOT(handleFirstPage(int)));
+	disconnect(pageLayout, SIGNAL(bindingDirectionChanged(int)), this, SLOT(handleBindingDirection(int)));
 
 	pageViewWidget->pageGrid()->clear();
 	if (currView == nullptr)
 	{
 		connect(pageLayout, SIGNAL(schemeChanged(int)), this, SLOT(handlePageLayout(int)));
 		connect(pageLayout, SIGNAL(firstPageChanged(int)), this, SLOT(handleFirstPage(int)));
+		connect(pageLayout, SIGNAL(bindingDirectionChanged(int)), this, SLOT(handleBindingDirection(int)));
 		return;
 	}
 
@@ -378,13 +404,12 @@ void PagePalette_Pages::rebuildPages()
 	pageLayout->updateSchemeSelector(currView->m_doc->pageSets(), currView->m_doc->pagePositioning());
 	pageLayout->setScheme(currView->m_doc->pagePositioning());
 	pageLayout->setFirstPage(currentPageSet.FirstPage);
+	pageLayout->setBindingDirection(currView->m_doc->bindingDirection());
 
-	int counter = currentPageSet.FirstPage;
-	int cols = currentPageSet.Columns;
-
+	pageViewWidget->pageGrid()->setBindingDirection(currView->m_doc->bindingDirection());
 	pageViewWidget->pageGrid()->setDocumentPageSize(QSize(currView->m_doc->pageWidth(), currView->m_doc->pageHeight()));
-	pageViewWidget->pageGrid()->setPageInGroup(cols);
-	pageViewWidget->pageGrid()->setPageOffset(counter);
+	pageViewWidget->pageGrid()->setPageInGroup(currentPageSet.Columns);
+	pageViewWidget->pageGrid()->setPageOffset(currentPageSet.FirstPage);
 
 	m_pagePreviewUpdatePending = false;
 
@@ -424,6 +449,7 @@ void PagePalette_Pages::rebuildPages()
 	}
 	connect(pageLayout, SIGNAL(schemeChanged(int)), this, SLOT(handlePageLayout(int)));
 	connect(pageLayout, SIGNAL(firstPageChanged(int)), this, SLOT(handleFirstPage(int)));
+	connect(pageLayout, SIGNAL(bindingDirectionChanged(int)), this, SLOT(handleBindingDirection(int)));
 }
 
 void PagePalette_Pages::rebuild()
@@ -456,6 +482,7 @@ void PagePalette_Pages::setView(ScribusView *view)
 		return;
 
 	pageViewWidget->pageGrid()->setSelectionColor(PrefsManager::instance().appPrefs.displayPrefs.pageBorderColor);
+	pageViewWidget->pageGrid()->setBindingDirection(view->m_doc->bindingDirection());
 
 //	if (currView)
 //		connect(currView->m_doc, SIGNAL(pagePreviewChanged()), this, SLOT(updatePagePreview()));

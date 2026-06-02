@@ -14,6 +14,7 @@ for which a new license (GPL+exception) is in place.
 
 #include "styleitem.h"
 #include "styles/styleset.h"
+#include "styles/tablearea.h"
 #include "styles/tablestyle.h"
 
 class SMTableStyleWidget;
@@ -94,6 +95,15 @@ private slots:
 	void slotFillColor();
 	void slotFillShade();
 	void slotParentChanged(const QString &parent);
+	void slotBordersChanged(TableSides sides, const TableBorder& border);
+	void slotHeaderRows();
+	void slotTotalRows();
+	void slotBandedRows();
+	void slotBandedColumns();
+	void slotFirstColumn();
+	void slotLastColumn();
+	void slotAreaChanged(TableArea area);
+	void slotParagraphStyle(const QString& psName);
 };
 
 #endif // SMTABLESTYLES_H

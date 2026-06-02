@@ -2533,6 +2533,7 @@ void Scribus171Format::readDocAttributes(ScribusDoc* doc, const ScXmlStreamAttri
 		m_Doc->setPageOrientation(attrs.valueAsInt("ORIENTATION", 0));
 		m_Doc->FirstPnum = attrs.valueAsInt("FIRSTNUM", 1);
 		m_Doc->setPagePositioning(attrs.valueAsInt("BOOK", 0));
+		m_Doc->setBindingDirection(attrs.valueAsInt("BINDINGDIRECTION", 0));
 
 		m_Doc->setUsesAutomaticTextFrames( attrs.valueAsInt("AUTOTEXT") );
 		m_Doc->PageSp = attrs.valueAsInt("AUTOSPALTEN");
@@ -2599,6 +2600,7 @@ void Scribus171Format::readDocAttributes(ScribusDoc* doc, const ScXmlStreamAttri
 		m_Doc->setPageOrientation(attrs.valueAsInt("PageOrientation", 0));
 		m_Doc->FirstPnum = attrs.valueAsInt("FirstPageNumber", 1);
 		m_Doc->setPagePositioning(attrs.valueAsInt("PagePositioning", 0));
+		m_Doc->setBindingDirection(attrs.valueAsInt("BindingDirection", 0));
 
 		m_Doc->setUsesAutomaticTextFrames( attrs.valueAsInt("AutomaticTextFrames") );
 		m_Doc->PageSp = attrs.valueAsInt("AutomaticTextFrameColumnCount");
@@ -2761,6 +2763,7 @@ void Scribus171Format::readGuideSettings(ScribusDoc* doc, const ScXmlStreamAttri
 		doc->guidesPrefs().guidesShown = attrs.valueAsBool("SHOWGUIDES", true);
 		doc->guidesPrefs().colBordersShown = attrs.valueAsBool("showcolborders", false);
 		doc->guidesPrefs().framesShown = attrs.valueAsBool("SHOWFRAME", true);
+		doc->guidesPrefs().tableCellFramesShown = attrs.valueAsBool("SHOWTABLECELLFRAMES", false);
 		doc->guidesPrefs().layerMarkersShown = attrs.valueAsBool("SHOWLAYERM", false);
 		doc->guidesPrefs().marginsShown = attrs.valueAsBool("SHOWMARGIN", true);
 		doc->guidesPrefs().baselineGridShown = attrs.valueAsBool("SHOWBASE", false);
@@ -2817,6 +2820,7 @@ void Scribus171Format::readGuideSettings(ScribusDoc* doc, const ScXmlStreamAttri
 		doc->guidesPrefs().guidesShown = attrs.valueAsBool("ShowGuides", true);
 		doc->guidesPrefs().colBordersShown = attrs.valueAsBool("ShowColumnBorders", false);
 		doc->guidesPrefs().framesShown = attrs.valueAsBool("ShowFrames", true);
+		doc->guidesPrefs().tableCellFramesShown = attrs.valueAsBool("ShowTableCellFrames", false);
 		doc->guidesPrefs().layerMarkersShown = attrs.valueAsBool("ShowLayerMarkers", false);
 		doc->guidesPrefs().marginsShown = attrs.valueAsBool("ShowMargins", true);
 		doc->guidesPrefs().baselineGridShown = attrs.valueAsBool("ShowBaselineGrid", false);
@@ -3810,6 +3814,7 @@ void Scribus171Format::readTableStyle(ScribusDoc *doc, ScXmlStreamReader& reader
 		newStyle.setDefaultStyle(true);
 	else
 		newStyle.setDefaultStyle(false);
+
 	//Remove uppercase in 1.8 format
 	QString parentStyle;
 	if (attrs.hasAttribute("Parent"))
@@ -3822,6 +3827,85 @@ void Scribus171Format::readTableStyle(ScribusDoc *doc, ScXmlStreamReader& reader
 		newStyle.setFillColor(attrs.valueAsString("FillColor"));
 	if (attrs.hasAttribute("FillShade"))
 		newStyle.setFillShade(attrs.valueAsDouble("FillShade"));
+	if (attrs.hasAttribute("ParagraphStyleName"))
+		newStyle.setParagraphStyleName(attrs.valueAsString("ParagraphStyleName"));
+
+	// Conditional (table-area) formatting configuration.
+	if (attrs.hasAttribute("HeaderRows"))
+		newStyle.setHeaderRows(attrs.valueAsInt("HeaderRows", 0));
+	if (attrs.hasAttribute("TotalRows"))
+		newStyle.setTotalRows(attrs.valueAsInt("TotalRows", 0));
+	if (attrs.hasAttribute("BandedRows"))
+		newStyle.setBandedRows(attrs.valueAsInt("BandedRows", 0) != 0);
+	if (attrs.hasAttribute("BandedColumns"))
+		newStyle.setBandedColumns(attrs.valueAsInt("BandedColumns", 0) != 0);
+	if (attrs.hasAttribute("FirstColumn"))
+		newStyle.setFirstColumn(attrs.valueAsInt("FirstColumn", 0) != 0);
+	if (attrs.hasAttribute("LastColumn"))
+		newStyle.setLastColumn(attrs.valueAsInt("LastColumn", 0) != 0);
+
+	QString tagName(reader.nameAsString());
+	while (!reader.atEnd() && !reader.hasError())
+	{
+		reader.readNext();
+		if (reader.isEndElement() && reader.name() == tagName)
+			break;
+		if (!reader.isStartElement())
+			continue;
+		if (reader.name() == QLatin1String("TableBorderLeft"))
+		{
+			TableBorder border;
+			readTableBorderLines(doc, reader, border);
+			newStyle.setLeftBorder(border);
+		}
+		else if (reader.name() == QLatin1String("TableBorderRight"))
+		{
+			TableBorder border;
+			readTableBorderLines(doc, reader, border);
+			newStyle.setRightBorder(border);
+		}
+		else if (reader.name() == QLatin1String("TableBorderTop"))
+		{
+			TableBorder border;
+			readTableBorderLines(doc, reader, border);
+			newStyle.setTopBorder(border);
+		}
+		else if (reader.name() == QLatin1String("TableBorderBottom"))
+		{
+			TableBorder border;
+			readTableBorderLines(doc, reader, border);
+			newStyle.setBottomBorder(border);
+		}
+		else if (reader.name() == QLatin1String("Conditional"))
+		{
+			ScXmlStreamAttributes cattrs = reader.scAttributes();
+			TableArea area = tableAreaFromString(cattrs.valueAsString("Type", "WholeTable"));
+			CellStyle cond;
+			readConditionalCellStyle(doc, reader, cattrs, cond);
+			newStyle.setConditionalStyle(area, cond);
+		}
+		else
+			reader.skipCurrentElement();
+	}
+}
+
+void Scribus171Format::readConditionalCellStyle(ScribusDoc *doc, ScXmlStreamReader& reader, const ScXmlStreamAttributes& attrs, CellStyle& newStyle) const
+{
+	newStyle.erase();
+	if (attrs.hasAttribute("FillColor"))
+		newStyle.setFillColor(attrs.valueAsString("FillColor"));
+	if (attrs.hasAttribute("FillShade"))
+		newStyle.setFillShade(attrs.valueAsDouble("FillShade"));
+	if (attrs.hasAttribute("LeftPadding"))
+		newStyle.setLeftPadding(attrs.valueAsDouble("LeftPadding", 0.0));
+	if (attrs.hasAttribute("ParagraphStyleName"))
+		newStyle.setParagraphStyleName(attrs.valueAsString("ParagraphStyleName"));
+	if (attrs.hasAttribute("RightPadding"))
+		newStyle.setRightPadding(attrs.valueAsDouble("RightPadding", 0.0));
+	if (attrs.hasAttribute("TopPadding"))
+		newStyle.setTopPadding(attrs.valueAsDouble("TopPadding", 0.0));
+	if (attrs.hasAttribute("BottomPadding"))
+		newStyle.setBottomPadding(attrs.valueAsDouble("BottomPadding", 0.0));
 
 	QString tagName(reader.nameAsString());
 	while (!reader.atEnd() && !reader.hasError())
@@ -3914,6 +3998,8 @@ void Scribus171Format::readCellStyle(ScribusDoc *doc, ScXmlStreamReader& reader,
 		newStyle.setFillColor(attrs.valueAsString("FillColor"));
 	if (attrs.hasAttribute("FillShade"))
 		newStyle.setFillShade(attrs.valueAsDouble("FillShade"));
+	if (attrs.hasAttribute("ParagraphStyleName"))
+		newStyle.setParagraphStyleName(attrs.valueAsString("ParagraphStyleName"));
 	if (attrs.hasAttribute("LeftPadding"))
 		newStyle.setLeftPadding(attrs.valueAsDouble("LeftPadding", 0.0));
 	if (attrs.hasAttribute("RightPadding"))
@@ -3930,7 +4016,7 @@ void Scribus171Format::readCellStyle(ScribusDoc *doc, ScXmlStreamReader& reader,
 		if (reader.isEndElement() && reader.name() == tagName)
 			break;
 		if (!reader.isStartElement())
-			break;
+			continue;
 		if (reader.name() == QLatin1String("TableBorderLeft"))
 		{
 			TableBorder border;
@@ -4759,17 +4845,6 @@ bool Scribus171Format::readPage(ScribusDoc* doc, ScXmlStreamReader& reader)
 		newPage->setHeight(attrs.valueAsDouble("PAGEHEIGHT"));
 	else
 		newPage->setHeight(attrs.valueAsDouble("PageHeight"));
-
-	//14704: Double check the page size should not be Custom in case the size doesn't match a standard size
-	if (attrs.hasAttribute("Size"))
-	{
-		QString pageSize(attrs.valueAsString("Size"));
-		PageSize ps(pageSize);
-		if (!compareDouble(ps.width(), newPage->width()) || !compareDouble(ps.height(), newPage->height()))
-			newPage->setSize(CommonStrings::customPageSize);
-		else
-			newPage->setSize(pageSize);
-	}
 
 	newPage->setInitialHeight(newPage->height());
 	newPage->setInitialWidth(newPage->width());

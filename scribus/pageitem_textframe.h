@@ -58,6 +58,8 @@ public:
 	const PageItem_TextFrame * asTextFrame() const override { return this; }
 	bool isTextFrame() const override { return true; }
 	bool isTextContainer() const override { return true; }
+	bool isTableCellTextFrame() const { return m_isTableCellTextFrame; }
+	void setIsTableCellTextFrame(bool isTableCellTextFrame){ m_isTableCellTextFrame = isTableCellTextFrame; }
 
 	void clearContents() override;
 	void truncateContents() override;
@@ -68,6 +70,20 @@ public:
 	* @param keyRepeat a reference to the keyRepeat property
 	*/
 	void handleModeEditKey(QKeyEvent *k, bool& keyRepeat) override;
+	/**
+	 * Returns true if the text cursor is on the first visual line of the
+	 * laid-out text. An empty frame (no lines) is treated as on the first
+	 * line. Used by table-cell navigation to decide whether Up should
+	 * escape to the cell above.
+	 */
+	bool cursorOnFirstLine() const;
+	/**
+	 * Returns true if the text cursor is on the last visual line of the
+	 * laid-out text. An empty frame (no lines) is treated as on the last
+	 * line. Used by table-cell navigation to decide whether Down should
+	 * escape to the cell below.
+	 */
+	bool cursorOnLastLine() const;
 	void deleteSelectedTextFromFrame();
 	void ExpandSel(int oldPos);
 	void deselectAll();
@@ -102,7 +118,7 @@ protected:
 	void drawUnderflowMarker(ScPainter *p);
 	void drawColumnBorders(ScPainter *p);
 	void drawSpellCheckSquiggles(ScPainter* p, const QVector<SpellError>& errors);
-	void drawSquiggleLine(ScPainter* p, double x, double y, double width);
+	void drawSquiggleLine(ScPainter* p, double x, double y, double width, double fontSize);
 
 	bool unicodeTextEditMode {false};
 	int unicodeInputCount {0};
@@ -130,9 +146,11 @@ private:
 	bool checkKeyIsShortcut(QKeyEvent *k);
 	QRectF m_origAnnotPos;
 	void updateBulletsNum();
+	bool m_isTableCellTextFrame { false };
 
 private slots:
 	void slotInvalidateLayout(int firstItem, int endItem);
+	void slotSpellCheckTextChanged(int firstItem, int endItem);
 
 public:
 	//for footnotes/endnotes
@@ -169,6 +187,7 @@ protected:
 
 public:
 	void setTextFrameHeight();
+	double naturalContentHeight();
 };
 
 #endif

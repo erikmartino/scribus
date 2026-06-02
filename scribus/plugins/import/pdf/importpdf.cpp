@@ -166,7 +166,7 @@ bool PdfPlug::importFile(const QString& fNameIn, const TransactionSettings& trSe
 	}
 	else if (!m_Doc || (flags & LoadSavePlugin::lfCreateDoc))
 	{
-		m_Doc = ScCore->primaryMainWindow()->doFileNew(docWidth, docHeight, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 1, "Custom", true);
+		m_Doc = ScCore->primaryMainWindow()->doFileNew(docWidth, docHeight, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 1, QSizeF(), true);
 		ScCore->primaryMainWindow()->HaveNewDoc();
 		ret = true;
 	}
@@ -879,7 +879,7 @@ QString PdfPlug::UnicodeParsedString(const GooString *s1) const
 	if (!s1 || s1->empty())
 		return QString();
 	bool isUnicode;
-	int i;
+	size_t i;
 	Unicode u;
 	QString result;
 	if ((s1->getChar(0) & 0xff) == 0xfe && (s1->size() > 1 && (s1->getChar(1) & 0xff) == 0xff))
