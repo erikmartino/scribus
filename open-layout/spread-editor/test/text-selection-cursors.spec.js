@@ -322,10 +322,6 @@ test.describe('Visual State Transitions', () => {
     // Typography ribbon section should be visible
     const typography = page.locator('scribus-ribbon-section[label="Typography"]');
     await expect(typography).toBeVisible();
-
-    // Formatting ribbon section should be visible
-    const formatting = page.locator('scribus-ribbon-section[label="Formatting"]');
-    await expect(formatting).toBeVisible();
   });
 
   test('exiting text mode via Escape hides cursor and typography ribbon', async ({ page }) => {

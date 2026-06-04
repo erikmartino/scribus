@@ -124,7 +124,7 @@ test.describe('Story Editor Integration', () => {
         await page.keyboard.press('Home');
         await page.waitForTimeout(300);
 
-        const fontSizeInput = page.locator('scribus-input#font-size');
+        const fontSizeInput = page.locator('scribus-input[data-property-key="font-size"]');
         const firstParaSize = await fontSizeInput.evaluate(el => el.value);
         expect(Number(firstParaSize)).toBe(30);
 

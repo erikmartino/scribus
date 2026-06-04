@@ -16,6 +16,14 @@ test.describe('Pages Side Panel and Multi-Spread Navigation', () => {
     page.on('pageerror', err => {
       console.error(`BROWSER [error]: ${err.message}`);
     });
+    page.on('requestfailed', request => {
+      console.log(`FAILED REQUEST: ${request.url()} - ${request.failure()?.errorText || 'Unknown'}`);
+    });
+    page.on('response', response => {
+      if (!response.ok()) {
+        console.log(`FAILED RESPONSE: ${response.url()} - ${response.status()}`);
+      }
+    });
 
     // Create a unique test document via the POST copy endpoint from the brochure-q2 template
     testDocSlug = `test-pages-w${testInfo.workerIndex}-${Date.now()}`;
@@ -25,12 +33,6 @@ test.describe('Pages Side Panel and Multi-Spread Navigation', () => {
       data: { from: 'alice/brochure-q2' },
     });
     expect(res.status()).toBe(201);
-
-    // Open the spread editor with the doc param
-    await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}`);
-    await page.waitForSelector('scribus-app-shell:defined');
-    const statusEl = page.locator('#status');
-    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
   });
 
   test.afterEach(async () => {
@@ -38,36 +40,62 @@ test.describe('Pages Side Panel and Multi-Spread Navigation', () => {
     fs.rmSync(testDocDir, { recursive: true, force: true });
   });
 
-  test('should support pages side panel and switching spreads', async ({ page }) => {
+  test('should support individual pages side panel and click-to-jump centering', async ({ page }) => {
+    // Open spread editor with active document
+    await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}`);
+    await page.waitForSelector('scribus-app-shell:defined');
     const statusEl = page.locator('#status');
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
 
-    // The Pages panel tab button should be visible in the sidebar
+    // Open the Pages panel tab
     const pagesTab = page.locator('[data-panel-id="pages"]');
     await expect(pagesTab).toBeVisible();
     await pagesTab.click();
 
-    // Verify that both Spread 1 and Spread 2 cards are visible
-    const spread1Card = page.locator('[data-spread-id="spread-1"]');
-    const spread2Card = page.locator('[data-spread-id="spread-2"]');
-    await expect(spread1Card).toBeVisible();
-    await expect(spread2Card).toBeVisible();
+    // Verify individual page cards are rendered via unique page index
+    const page1Card = page.locator('[data-page-index="1"]');
+    const page2Card = page.locator('[data-page-index="2"]');
+    
+    await expect(page1Card).toBeVisible();
+    await expect(page2Card).toBeVisible();
 
-    // Verify that Spread 1 displays details of pages
-    await expect(spread1Card.locator('.spread-meta')).toHaveText(/Pages: 1, 2/);
-    await expect(spread2Card.locator('.spread-meta')).toHaveText(/Page: 2/);
+    // Page 1 should be active by default since we loaded page 1's spread
+    await expect(page1Card).toHaveClass(/active/);
 
-    // Verify that Spread 1 is currently active (has .active class)
-    await expect(spread1Card).toHaveClass(/active/);
-    await expect(spread2Card).not.toHaveClass(/active/);
+    // Clicking Page 2 should keep us on the same spread but shift the active card
+    await page2Card.click();
+    await expect(page2Card).toHaveClass(/active/);
+    await expect(page1Card).not.toHaveClass(/active/);
 
-    // Switch to Spread 2 by clicking its card
-    await spread2Card.click();
+    // Verify that the URL contains the &page=2 parameter
+    const url = page.url();
+    expect(url).toContain('page=2');
 
-    // Wait for it to reload (status should show Ready again)
+    // Verify Page 3 is visible and on spread-2
+    const page3Card = page.locator('[data-page-index="3"]');
+    await expect(page3Card).toBeVisible();
+
+    // Click Page 3 to trigger spread loading and page navigation
+    await page3Card.click();
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+    await expect(page3Card).toHaveClass(/active/);
+    await expect(page2Card).not.toHaveClass(/active/);
+    expect(page.url()).toContain('page=3');
+  });
+
+  test('should load the correct spread and center the page via URL query parameter', async ({ page }) => {
+    // Open spread editor with a specific page query parameter (?page=2)
+    await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}&page=2`);
+    await page.waitForSelector('scribus-app-shell:defined');
+    const statusEl = page.locator('#status');
     await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
 
-    // Verify that Spread 2 is now active
-    await expect(spread2Card).toHaveClass(/active/);
-    await expect(spread1Card).not.toHaveClass(/active/);
+    // Open Pages panel
+    const pagesTab = page.locator('[data-panel-id="pages"]');
+    await pagesTab.click();
+
+    // Verify that Page 2 card is highlighted as active
+    const page2Card = page.locator('[data-page-index="2"]');
+    await expect(page2Card).toHaveClass(/active/);
   });
 });

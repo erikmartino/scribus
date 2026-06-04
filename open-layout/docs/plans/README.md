@@ -14,6 +14,9 @@ All implementation planning should live under `docs/plans/`.
 
 Completed plans are removed per convention. Previously completed:
 
+- `2026-06-04-remove-line-height-slider.md` — Remove Line-Height Slider from the Ribbon Bar (completed).
+- `2026-06-04-remove-font-size-sliders.md` — Remove Font-Size Sliders from the Ribbon Bar (completed).
+- `2026-06-01-spread-editor-pages-panel-plan.md` — Individual Pages Side Panel & Jump Routing (completed).
 - `2026-06-01-image-placement-scaling-plan.md` — Interactive image placement, fit modes, scaling, and clipping (completed).
 - `2026-06-01-spread-editor-refactoring-plan.md` — Modulating and organizing spread-editor-app.js (completed).
 - `2026-05-25-spread-editor-pages-panel-plan.md` — Multi-Spread Editing and Pages Side Panel in Spread Editor (completed).

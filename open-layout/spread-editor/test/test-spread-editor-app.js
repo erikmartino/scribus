@@ -90,13 +90,12 @@ test('SpreadEditorApp Selection Modes', async (t) => {
     assert.strictEqual(sections.length, 0);
   });
 
-  await t.test('getRibbonSections returns Typography and Formatting for text mode', () => {
+  await t.test('getRibbonSections returns Typography for text mode', () => {
     app.mode = 'text';
     const sections = app.getRibbonSections();
     // getAttribute stores as property in dom-mock, so read .label
     const labels = sections.map(s => s.label);
-    assert.strictEqual(labels.length, 2);
+    assert.strictEqual(labels.length, 1);
     assert.ok(labels.includes('Typography'));
-    assert.ok(labels.includes('Formatting'));
   });
 });

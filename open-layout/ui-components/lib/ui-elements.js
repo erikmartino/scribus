@@ -188,11 +188,18 @@ export class ScribusInput extends HTMLElement {
           letter-spacing: 0.025em;
           white-space: nowrap;
         }
+        .input-container {
+          position: relative;
+          display: flex;
+          align-items: center;
+          width: 100%;
+        }
         input {
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid var(--border, #2e2e32);
           color: var(--text-main, #e1e1e6);
           padding: 8px 12px;
+          padding-right: ${type === 'number' ? '32px' : '12px'};
           border-radius: 6px;
           font-size: 0.875rem;
           font-family: inherit;
@@ -205,6 +212,47 @@ export class ScribusInput extends HTMLElement {
           border-color: var(--accent, #bb86fc);
           background: rgba(255, 255, 255, 0.05);
           box-shadow: 0 0 0 2px rgba(187, 134, 252, 0.1);
+        }
+        /* Hide native spinner buttons */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield;
+        }
+        .spinner-buttons {
+          position: absolute;
+          right: 4px;
+          display: flex;
+          flex-direction: column;
+          height: calc(100% - 8px);
+          width: 24px;
+          justify-content: center;
+          gap: 2px;
+          z-index: 10;
+        }
+        .spin-btn {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid var(--border, #2e2e32);
+          color: var(--text-dim, #94949b);
+          font-size: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 14px;
+          width: 100%;
+          cursor: pointer;
+          border-radius: 3px;
+          padding: 0;
+          user-select: none;
+          transition: all 0.15s ease;
+        }
+        .spin-btn:hover {
+          background: rgba(255, 255, 255, 0.15);
+          color: var(--text-main, #e1e1e6);
+          border-color: var(--accent, #bb86fc);
         }
         .val {
           font-size: 0.7rem;
@@ -234,14 +282,22 @@ export class ScribusInput extends HTMLElement {
         ${label ? `<label>${label}</label>` : ''}
         <span class="val" id="val-display"></span>
       </div>
-      <input
-        id="input"
-        type="${type}"
-        value="${value}"
-        placeholder="${placeholder}"
-        ${min ? `min="${min}"` : ''}
-        ${max ? `max="${max}"` : ''}
-      >
+      <div class="input-container">
+        <input
+          id="input"
+          type="${type}"
+          value="${value}"
+          placeholder="${placeholder}"
+          ${min ? `min="${min}"` : ''}
+          ${max ? `max="${max}"` : ''}
+        >
+        ${type === 'number' ? `
+          <div class="spinner-buttons">
+            <button type="button" class="spin-btn spin-up" aria-label="Increment">▲</button>
+            <button type="button" class="spin-btn spin-down" aria-label="Decrement">▼</button>
+          </div>
+        ` : ''}
+      </div>
     `;
 
     const input = this.shadowRoot.getElementById('input');
@@ -263,6 +319,31 @@ export class ScribusInput extends HTMLElement {
         window.addEventListener('pointerup',  clearDragging, { once: true });
         window.addEventListener('pointercancel', clearDragging, { once: true });
       });
+    }
+
+    if (type === 'number') {
+      const upBtn = this.shadowRoot.querySelector('.spin-up');
+      const downBtn = this.shadowRoot.querySelector('.spin-down');
+      
+      const changeVal = (direction) => {
+        let val = Number(input.value) || 0;
+        const step = Number(this.getAttribute('step')) || 1;
+        const minVal = min !== null ? Number(min) : -Infinity;
+        const maxVal = max !== null ? Number(max) : Infinity;
+        
+        if (direction === 'up') {
+          val = Math.min(maxVal, val + step);
+        } else {
+          val = Math.max(minVal, val - step);
+        }
+        
+        input.value = String(val);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+
+      if (upBtn) upBtn.addEventListener('click', () => changeVal('up'));
+      if (downBtn) downBtn.addEventListener('click', () => changeVal('down'));
     }
 
     input.addEventListener('input', (e) => {

@@ -273,14 +273,7 @@ export class StoryEditorPlugin {
       })
     );
 
-    const pi = this.editor.cursor.paraIndex;
-    const paraStyle = this.paragraphStyles[pi] || {};
-    sections.push(
-      TextTools.createFormattingSection(this.shell, {
-        fontSize: paraStyle.fontSize || this.state.typingStyle.fontSize || 20,
-        lineHeight: 138 // Fixed in this demo for now
-      })
-    );
+
 
     return sections;
   }

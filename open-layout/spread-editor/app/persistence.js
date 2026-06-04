@@ -88,6 +88,28 @@ export async function loadFromStore(app) {
     };
   }
 
+  // Check page query parameter to select correct spread initially
+  const params = new URLSearchParams(window.location.search);
+  const pageParam = params.get('page');
+  if (pageParam && app._spreadsList) {
+    let globalPageIndex = 0;
+    let foundSpreadId = null;
+    for (const spreadId of app._spreadsList) {
+      const pages = app._spreadsMetadata[spreadId]?.pages || [];
+      for (const page of pages) {
+        globalPageIndex++;
+        if (String(globalPageIndex) === String(pageParam) || page.label === String(pageParam)) {
+          foundSpreadId = spreadId;
+          break;
+        }
+      }
+      if (foundSpreadId) {
+        app._activeSpreadId = foundSpreadId;
+        break;
+      }
+    }
+  }
+
   if (!app._activeSpreadId) {
     app._activeSpreadId = app._spreadsList[0] || 'spread-1';
   }

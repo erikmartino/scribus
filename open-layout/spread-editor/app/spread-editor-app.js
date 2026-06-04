@@ -249,6 +249,27 @@ export class SpreadEditorApp {
       await this.update();
       this.setMode('object');
       this.setStatus('Ready - spread editor active.', 'ok');
+
+      // Check query parameter and jump to the initial page
+      const pageParam = params.get('page');
+      if (pageParam) {
+        let targetPage = null;
+        if (this._spreadsList) {
+          for (const spreadId of this._spreadsList) {
+            const pages = this._spreadsMetadata[spreadId]?.pages || [];
+            const page = pages.find(p => p.label === pageParam || String(p.index + 1) === pageParam);
+            if (page) {
+              targetPage = page;
+              break;
+            }
+          }
+        }
+        if (targetPage) {
+          setTimeout(() => {
+            this.jumpToPage(targetPage.label);
+          }, 50);
+        }
+      }
     } catch (err) {
       this.setStatus('Error loading layout engine: ' + err.message, 'error');
       console.error(err);
@@ -543,17 +564,6 @@ export class SpreadEditorApp {
           } else {
             this.editor.applyCharacterStyle({ fontSize: size });
           }
-        }
-        // While the slider thumb is being dragged, skip the full layout rebuild.
-        // renderToContainer clears container.innerHTML which causes visible
-        // flashing and layout reflows that shift the slider's viewport position,
-        // corrupting Chrome's native drag position calculation.
-        // Instead, defer a single update for after the drag ends.
-        const slider = this.shell?.ribbonContainer?.querySelector('scribus-input#font-size');
-        if (slider?._dragging) {
-          clearTimeout(this._fontSizeDragTimer);
-          this._fontSizeDragTimer = setTimeout(() => this._scheduleStyleUpdate(), 200);
-          return;
         }
         this._scheduleStyleUpdate();
       },
@@ -1474,17 +1484,11 @@ export class SpreadEditorApp {
     // Text-mode sections
     if (this.mode !== 'object' && this.editor) {
       const typingStyle = this.editor.getTypingStyle();
-      const paraIndex = Math.max(0, Math.min(this.editor.story.length - 1, this.editor.cursor.paraIndex));
-      const paraStyle = this.editor.paragraphStyles[paraIndex] || {};
       sections.push(
         TextTools.createTypographySection(this.shell, {
           fontFamily: typingStyle.fontFamily || 'EB Garamond',
           bold: !!typingStyle.bold,
           italic: !!typingStyle.italic
-        }),
-        TextTools.createFormattingSection(this.shell, {
-          fontSize: paraStyle.fontSize || this._fontSize || 20,
-          lineHeight: this._lineHeight || 138
         })
       );
     }
@@ -1649,6 +1653,98 @@ export class SpreadEditorApp {
     this.shell?.updatePanels();
   }
 
+  jumpToPage(pageParam) {
+    const spread = this.currentSpread;
+    if (!spread) return;
+
+    // Find the target page globally to get its label and index
+    let targetPage = null;
+    let totalIndex = 0;
+    let targetGlobalIndex = 0;
+
+    if (this._spreadsList) {
+      for (const spreadId of this._spreadsList) {
+        const pgs = this._spreadsMetadata[spreadId]?.pages || [];
+        for (const page of pgs) {
+          totalIndex++;
+          if (String(totalIndex) === String(pageParam) || page.label === String(pageParam)) {
+            targetPage = page;
+            targetGlobalIndex = totalIndex;
+            break;
+          }
+        }
+        if (targetPage) break;
+      }
+    }
+
+    if (!targetPage) return;
+
+    const pages = this._activeSpreadPages || [];
+    // Match page within active spread using index
+    const pageIndexInSpread = pages.findIndex(p => p.index === targetPage.index);
+    if (pageIndexInSpread === -1) return;
+
+    const pageRect = spread.pageRects[pageIndexInSpread];
+    if (!pageRect) return;
+
+    const pb = spread.pasteboardRect;
+    const cw = this.container.clientWidth;
+    const ch = this.container.clientHeight;
+
+    // Calculate zoomed position of page in content SVG coordinates
+    const pageLeftPx = (pageRect.x - pb.x) * this._zoom;
+    const pageWidthPx = pageRect.width * this._zoom;
+    const pageTopPx = (pageRect.y - pb.y) * this._zoom;
+    const pageHeightPx = pageRect.height * this._zoom;
+
+    // Scroll so the page is centered in the container viewport
+    this.container.scrollLeft = pageLeftPx - (cw - pageWidthPx) / 2;
+    this.container.scrollTop = pageTopPx - (ch - pageHeightPx) / 2;
+
+    // Redraw overlay
+    this._updateOverlay();
+
+    // Update the 'page' query parameter in the URL with the unique global index
+    const params = new URLSearchParams(window.location.search);
+    params.set('page', String(targetGlobalIndex));
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, '', newUrl);
+
+    // Re-render panels to update active page state
+    this.shell?.updatePanels();
+  }
+
+  async navigateToPage(pageParam) {
+    let targetSpreadId = null;
+    let targetPage = null;
+    let totalIndex = 0;
+
+    if (this._spreadsList) {
+      for (const spreadId of this._spreadsList) {
+        const pgs = this._spreadsMetadata[spreadId]?.pages || [];
+        for (const page of pgs) {
+          totalIndex++;
+          if (String(totalIndex) === String(pageParam) || page.label === String(pageParam)) {
+            targetPage = page;
+            targetSpreadId = spreadId;
+            break;
+          }
+        }
+        if (targetPage) break;
+      }
+    }
+
+    if (!targetPage) return;
+
+    if (targetSpreadId !== this._activeSpreadId) {
+      this.setStatus(`Loading ${targetSpreadId}...`);
+      await this.selectSpread(targetSpreadId);
+    }
+
+    // Centering scroll and update query parameter
+    this.jumpToPage(totalIndex);
+  }
+
   getPanelContent(panelId, selected) {
     // Reset panel-body to its default styles (overridden by the assets panel to
     // enable internal scrolling; must be restored when switching to other panels).
@@ -1686,6 +1782,7 @@ export class SpreadEditorApp {
           border-bottom: 1px solid var(--border, #2e2e32);
           padding-bottom: 12px;
           margin-bottom: 8px;
+          flex-shrink: 0;
         }
         .pages-title {
           font-size: 0.8rem;
@@ -1703,72 +1800,79 @@ export class SpreadEditorApp {
           padding: 1px 6px;
           border-radius: 20px;
         }
-        .pages-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
+        .pages-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
           overflow-y: auto;
           flex: 1;
           min-height: 0;
-          padding-right: 4px;
+          padding: 4px;
         }
-        .spread-card {
+        .page-card {
           display: flex;
+          flex-direction: column;
           align-items: center;
-          gap: 12px;
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid var(--border, #2e2e32);
           border-radius: 8px;
-          padding: 10px 12px;
+          padding: 12px;
           cursor: pointer;
           position: relative;
-          transition: transform var(--transition-fast, 0.2s), border-color var(--transition-fast, 0.2s), box-shadow var(--transition-fast, 0.2s), background var(--transition-fast, 0.2s);
+          transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
           user-select: none;
         }
-        .spread-card:hover {
+        .page-card:hover {
           transform: translateY(-2px);
           border-color: var(--accent, #bb86fc);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
           background: rgba(255, 255, 255, 0.04);
         }
-        .spread-card.active {
+        .page-card.active {
           border-color: var(--accent, #bb86fc);
           background: rgba(187, 134, 252, 0.08);
           box-shadow: 0 0 8px rgba(187, 134, 252, 0.2);
         }
-        .spread-icon {
-          color: var(--text-dim, #a1a1aa);
+        .page-thumbnail {
+          width: 54px;
+          height: 72px;
+          background: #ffffff;
+          border: 1px solid #c7c1b5;
+          border-radius: 4px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+          margin-bottom: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
-          flex-shrink: 0;
-          transition: color var(--transition-fast, 0.2s);
+          transition: border-color 0.2s, box-shadow 0.2s;
+          position: relative;
         }
-        .spread-card.active .spread-icon, .spread-card:hover .spread-icon {
-          color: var(--accent, #bb86fc);
+        .page-card.active .page-thumbnail {
+          border-color: var(--accent, #bb86fc);
+          box-shadow: 0 2px 8px rgba(187, 134, 252, 0.3);
         }
-        .spread-details {
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          min-width: 0;
-          flex: 1;
+        .page-number-large {
+          font-size: 1.3rem;
+          font-weight: 700;
+          color: #2f2f32;
         }
-        .spread-name {
-          font-size: 0.8rem;
-          font-weight: 500;
+        .page-label {
+          font-size: 0.75rem;
+          font-weight: 600;
           color: var(--text-main, #e1e1e6);
+          margin-bottom: 2px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          margin-bottom: 2px;
+          max-width: 100%;
         }
-        .spread-meta {
-          font-size: 0.7rem;
+        .page-spread-info {
+          font-size: 0.65rem;
           color: var(--text-dim, #a1a1aa);
-        }
-        .spread-card.active .spread-meta {
-          color: rgba(161, 161, 170, 0.8);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100%;
         }
       `;
       container.appendChild(style);
@@ -1779,83 +1883,81 @@ export class SpreadEditorApp {
 
       const title = document.createElement('h3');
       title.className = 'pages-title';
-      title.textContent = 'Document Spreads';
+      title.textContent = 'Document Pages';
       header.appendChild(title);
 
       const countBadge = document.createElement('span');
       countBadge.className = 'pages-count';
-      countBadge.textContent = `${this._spreadsList?.length || 0} Spreads`;
+      countBadge.textContent = '0 Pages';
       header.appendChild(countBadge);
 
       container.appendChild(header);
 
-      // List
-      const list = document.createElement('div');
-      list.className = 'pages-list';
+      // Parse active page from query parameter or default to active spread's first page
+      const urlParams = new URLSearchParams(window.location.search);
+      const activePageParam = urlParams.get('page') || (this._activeSpreadPages?.[0]?.label || '1');
+      console.log('[PAGES PANEL] activePageParam is:', activePageParam, 'search:', window.location.search);
+
+      // Grid of pages
+      const grid = document.createElement('div');
+      grid.className = 'pages-grid';
+
+      let totalPagesCount = 0;
 
       if (this._spreadsList) {
         this._spreadsList.forEach((spreadId) => {
-          const card = document.createElement('div');
-          card.className = 'spread-card' + (spreadId === this._activeSpreadId ? ' active' : '');
-          card.dataset.spreadId = spreadId;
-
-          // Get pages for display
           const metadata = this._spreadsMetadata?.[spreadId];
           const pages = metadata?.pages || [];
-          const labels = pages.map(p => p.label).join(', ');
-          const pageStr = pages.length > 1 ? `Pages: ${labels}` : `Page: ${labels || '?'}`;
-          
-          // Icon
-          const iconContainer = document.createElement('div');
-          iconContainer.className = 'spread-icon';
-          if (pages.length > 1) {
-            iconContainer.innerHTML = `
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="3" y="5" width="8" height="14" rx="1" ry="1"></rect>
-                <rect x="13" y="5" width="8" height="14" rx="1" ry="1"></rect>
-                <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"></line>
-              </svg>
-            `;
-          } else {
-            iconContainer.innerHTML = `
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="7" y="5" width="10" height="14" rx="1" ry="1"></rect>
-              </svg>
-            `;
-          }
-          card.appendChild(iconContainer);
+          const spreadName = spreadId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-          // Details
-          const details = document.createElement('div');
-          details.className = 'spread-details';
+          pages.forEach((page) => {
+            totalPagesCount++;
+            const pageIndex = totalPagesCount;
+            const isActive = String(pageIndex) === activePageParam;
+            console.log('[PAGES PANEL] Page card label:', page.label, 'index:', pageIndex, 'isActive:', isActive);
+            const card = document.createElement('div');
+            card.className = 'page-card' + (isActive ? ' active' : '');
+            card.dataset.pageIndex = pageIndex;
+            card.dataset.pageLabel = page.label;
+            card.dataset.spreadId = spreadId;
 
-          const name = document.createElement('span');
-          name.className = 'spread-name';
-          name.textContent = spreadId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          details.appendChild(name);
+            // Thumbnail
+            const thumbnail = document.createElement('div');
+            thumbnail.className = 'page-thumbnail';
+            
+            const num = document.createElement('span');
+            num.className = 'page-number-large';
+            num.textContent = page.label;
+            thumbnail.appendChild(num);
+            card.appendChild(thumbnail);
 
-          const meta = document.createElement('span');
-          meta.className = 'spread-meta';
-          meta.textContent = pageStr;
-          details.appendChild(meta);
+            // Label
+            const label = document.createElement('span');
+            label.className = 'page-label';
+            label.textContent = `Page ${page.label}`;
+            card.appendChild(label);
 
-          card.appendChild(details);
+            // Spread Info
+            const spreadInfo = document.createElement('span');
+            spreadInfo.className = 'page-spread-info';
+            spreadInfo.textContent = spreadName;
+            card.appendChild(spreadInfo);
 
-          card.addEventListener('click', () => {
-            if (spreadId !== this._activeSpreadId) {
-              card.classList.add('active'); // immediate feedback
-              this.setStatus(`Loading ${spreadId}...`);
-              setTimeout(() => {
-                this.selectSpread(spreadId);
-              }, 10);
-            }
+            card.addEventListener('click', async () => {
+              if (String(pageIndex) !== activePageParam) {
+                grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                await this.navigateToPage(pageIndex);
+              }
+            });
+
+            grid.appendChild(card);
           });
-
-          list.appendChild(card);
         });
       }
 
-      container.appendChild(list);
+      countBadge.textContent = `${totalPagesCount} Pages`;
+      container.appendChild(grid);
       return container;
     }
 

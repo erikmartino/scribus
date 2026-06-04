@@ -51,42 +51,5 @@ export const TextTools = {
       });
       container.appendChild(italicBtn);
     });
-  },
-
-  /**
-   * Creates the standard Formatting ribbon section (Font Size, Line Height).
-   * @param {AppShell} shell - The AppShell instance.
-   * @param {Object} options - Configuration for inputs and initial values.
-   */
-  createFormattingSection(shell, {
-    fontSize = 20,
-    lineHeight = 138,
-    fontSizeCommand = 'text.font-size',
-    lineHeightCommand = 'text.line-height'
-  } = {}) {
-    return AppShell.createRibbonSection('Formatting', (container) => {
-      const fontSizeInput = shell.ui.createInput({ 
-        label: 'Size', 
-        type: 'range', 
-        min: 1, 
-        max: 200, 
-        value: fontSize, 
-        id: 'font-size',
-        onInput: (val) => shell.commands.execute(fontSizeCommand, { fontSize: Number(val) })
-      });
-      
-      const lineHeightInput = shell.ui.createInput({ 
-        label: 'Line %', 
-        type: 'range', 
-        min: 105, 
-        max: 190, 
-        value: lineHeight, 
-        id: 'line-height',
-        onInput: (val) => shell.commands.execute(lineHeightCommand, { lineHeight: Number(val) })
-      });
-
-      container.appendChild(fontSizeInput);
-      container.appendChild(lineHeightInput);
-    });
   }
 };
