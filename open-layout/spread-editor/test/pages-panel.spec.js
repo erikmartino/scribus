@@ -40,7 +40,7 @@ test.describe('Pages Side Panel and Multi-Spread Navigation', () => {
     fs.rmSync(testDocDir, { recursive: true, force: true });
   });
 
-  test('should support individual pages side panel and click-to-jump centering', async ({ page }) => {
+  test('should support spreads list in pages panel and click-to-jump centering', async ({ page }) => {
     // Open spread editor with active document
     await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}`);
     await page.waitForSelector('scribus-app-shell:defined');
@@ -52,39 +52,27 @@ test.describe('Pages Side Panel and Multi-Spread Navigation', () => {
     await expect(pagesTab).toBeVisible();
     await pagesTab.click();
 
-    // Verify individual page cards are rendered via unique page index
-    const page1Card = page.locator('[data-page-index="1"]');
-    const page2Card = page.locator('[data-page-index="2"]');
+    // Verify spread cards are rendered (by the index of their first page)
+    const spread1Card = page.locator('[data-page-index="1"]'); // Spread 1 starts at Page 1
+    const spread2Card = page.locator('[data-page-index="3"]'); // Spread 2 starts at Page 3
     
-    await expect(page1Card).toBeVisible();
-    await expect(page2Card).toBeVisible();
+    await expect(spread1Card).toBeVisible();
+    await expect(spread2Card).toBeVisible();
 
-    // Page 1 should be active by default since we loaded page 1's spread
-    await expect(page1Card).toHaveClass(/active/);
+    // Spread 1 should be active by default since we loaded page 1's spread
+    await expect(spread1Card).toHaveClass(/active/);
 
-    // Clicking Page 2 should keep us on the same spread but shift the active card
-    await page2Card.click();
-    await expect(page2Card).toHaveClass(/active/);
-    await expect(page1Card).not.toHaveClass(/active/);
-
-    // Verify that the URL contains the &page=2 parameter
-    const url = page.url();
-    expect(url).toContain('page=2');
-
-    // Verify Page 3 is visible and on spread-2
-    const page3Card = page.locator('[data-page-index="3"]');
-    await expect(page3Card).toBeVisible();
-
-    // Click Page 3 to trigger spread loading and page navigation
-    await page3Card.click();
+    // Click Spread 2 to trigger spread loading and page navigation
+    await spread2Card.click();
     await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
-    await expect(page3Card).toHaveClass(/active/);
-    await expect(page2Card).not.toHaveClass(/active/);
+    await expect(spread2Card).toHaveClass(/active/);
+    await expect(spread1Card).not.toHaveClass(/active/);
     expect(page.url()).toContain('page=3');
   });
 
   test('should load the correct spread and center the page via URL query parameter', async ({ page }) => {
     // Open spread editor with a specific page query parameter (?page=2)
+    // Page 2 is part of Spread 1 (index 1)
     await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}&page=2`);
     await page.waitForSelector('scribus-app-shell:defined');
     const statusEl = page.locator('#status');
@@ -94,8 +82,8 @@ test.describe('Pages Side Panel and Multi-Spread Navigation', () => {
     const pagesTab = page.locator('[data-panel-id="pages"]');
     await pagesTab.click();
 
-    // Verify that Page 2 card is highlighted as active
-    const page2Card = page.locator('[data-page-index="2"]');
-    await expect(page2Card).toHaveClass(/active/);
+    // Verify that Spread 1 card is highlighted as active since page 2 belongs to it
+    const spread1Card = page.locator('[data-page-index="1"]');
+    await expect(spread1Card).toHaveClass(/active/);
   });
 });

@@ -8,12 +8,17 @@ All implementation planning should live under `docs/plans/`.
 
 - `story-editor-do-not-implement-yet-plan.md` — Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
 
+
 ## Reference specifications live in `../../specs/`.
 
 ## Archived/cleaned up
 
 Completed plans are removed per convention. Previously completed:
 
+- `spread-editor-pages-panel-thumbnails-plan.md` — Spread List with JPEG Thumbnails in Pages Side Panel (completed).
+- `spread-editor-crisp-jpg-thumbnail-plan.md` — Save Spread Preview JPG on document save (completed).
+- `spread-editor-save-jpg-thumbnail-plan.md` — Save Spread Preview JPG on document save (completed).
+- `spread-editor-save-thumbnail-plan.md` — Save Spread Preview SVG on document save (completed).
 - `2026-06-04-remove-line-height-slider.md` — Remove Line-Height Slider from the Ribbon Bar (completed).
 - `2026-06-04-remove-font-size-sliders.md` — Remove Font-Size Sliders from the Ribbon Bar (completed).
 - `2026-06-01-spread-editor-pages-panel-plan.md` — Individual Pages Side Panel & Jump Routing (completed).

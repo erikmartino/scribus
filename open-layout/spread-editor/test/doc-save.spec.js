@@ -81,6 +81,25 @@ test.describe('Document Save', () => {
     expect(storyJson.paragraphs.length).toBeGreaterThan(0);
   });
 
+  test('clicking Save also persists a clean JPG preview of the spread', async ({ page }) => {
+    const saveBtn = page.locator('scribus-button[label="Save"]');
+    await saveBtn.click();
+
+    // Wait for status to show "Saved."
+    const statusEl = page.locator('#status');
+    await expect(statusEl).toHaveText('Saved.', { timeout: 10000 });
+
+    // Verify preview file was written to disk
+    const previewPath = path.join(testDocDir, 'spreads', 'spread-1.jpg');
+    expect(fs.existsSync(previewPath)).toBe(true);
+
+    // Verify the JPG magic number header (FF D8 FF)
+    const fileHeader = fs.readFileSync(previewPath).slice(0, 3);
+    expect(fileHeader[0]).toBe(0xFF);
+    expect(fileHeader[1]).toBe(0xD8);
+    expect(fileHeader[2]).toBe(0xFF);
+  });
+
   test('Save updates document.json modified timestamp', async ({ page }) => {
     const docJsonPath = path.join(testDocDir, 'document.json');
     const before = JSON.parse(fs.readFileSync(docJsonPath, 'utf-8'));

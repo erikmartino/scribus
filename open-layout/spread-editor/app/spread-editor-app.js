@@ -1774,6 +1774,7 @@ export class SpreadEditorApp {
           min-height: 0;
           overflow: hidden;
           box-sizing: border-box;
+          background: #18181c;
         }
         .pages-header {
           display: flex;
@@ -1801,9 +1802,9 @@ export class SpreadEditorApp {
           border-radius: 20px;
         }
         .pages-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
           overflow-y: auto;
           flex: 1;
           min-height: 0;
@@ -1812,49 +1813,92 @@ export class SpreadEditorApp {
         .page-card {
           display: flex;
           flex-direction: column;
-          align-items: center;
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid var(--border, #2e2e32);
           border-radius: 8px;
-          padding: 12px;
+          padding: 8px;
           cursor: pointer;
           position: relative;
-          transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                      border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                      box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                      background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           user-select: none;
         }
         .page-card:hover {
           transform: translateY(-2px);
           border-color: var(--accent, #bb86fc);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          background: rgba(255, 255, 255, 0.04);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+          background: rgba(255, 255, 255, 0.05);
         }
         .page-card.active {
           border-color: var(--accent, #bb86fc);
           background: rgba(187, 134, 252, 0.08);
-          box-shadow: 0 0 8px rgba(187, 134, 252, 0.2);
+          box-shadow: 0 0 12px rgba(187, 134, 252, 0.25);
         }
-        .page-thumbnail {
-          width: 54px;
-          height: 72px;
-          background: #ffffff;
-          border: 1px solid #c7c1b5;
-          border-radius: 4px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        .spread-thumbnail-container {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 1.5;
+          background: #1e1e20;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 6px;
+          overflow: hidden;
           margin-bottom: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .page-card.active .spread-thumbnail-container {
+          border-color: rgba(187, 134, 252, 0.4);
+        }
+        .spread-thumbnail-img {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          opacity: 0;
+          transition: opacity 0.3s ease;
+          z-index: 2;
+        }
+        .spread-thumbnail-img.loaded {
+          opacity: 1;
+        }
+        .spread-fallback {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+          z-index: 1;
+          padding: 8px;
+          box-sizing: border-box;
+        }
+        .mini-page {
+          background: #ffffff;
+          border: 1px solid #c7c1b5;
+          border-radius: 2px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          aspect-ratio: 0.707;
+          height: 70%;
           position: relative;
+          overflow: hidden;
         }
-        .page-card.active .page-thumbnail {
-          border-color: var(--accent, #bb86fc);
-          box-shadow: 0 2px 8px rgba(187, 134, 252, 0.3);
-        }
-        .page-number-large {
-          font-size: 1.3rem;
+        .mini-page-label {
+          font-size: 0.65rem;
           font-weight: 700;
-          color: #2f2f32;
+          color: #1e1e20;
+          user-select: none;
         }
         .page-label {
           font-size: 0.75rem;
@@ -1883,12 +1927,12 @@ export class SpreadEditorApp {
 
       const title = document.createElement('h3');
       title.className = 'pages-title';
-      title.textContent = 'Document Pages';
+      title.textContent = 'Document Spreads';
       header.appendChild(title);
 
       const countBadge = document.createElement('span');
       countBadge.className = 'pages-count';
-      countBadge.textContent = '0 Pages';
+      countBadge.textContent = '0 Spreads';
       header.appendChild(countBadge);
 
       container.appendChild(header);
@@ -1898,65 +1942,95 @@ export class SpreadEditorApp {
       const activePageParam = urlParams.get('page') || (this._activeSpreadPages?.[0]?.label || '1');
       console.log('[PAGES PANEL] activePageParam is:', activePageParam, 'search:', window.location.search);
 
-      // Grid of pages
+      // Grid of pages (now spreads)
       const grid = document.createElement('div');
       grid.className = 'pages-grid';
 
       let totalPagesCount = 0;
+      let spreadsCount = 0;
 
       if (this._spreadsList) {
         this._spreadsList.forEach((spreadId) => {
           const metadata = this._spreadsMetadata?.[spreadId];
           const pages = metadata?.pages || [];
+          if (pages.length === 0) return;
+
+          spreadsCount++;
+          const firstPageIndex = totalPagesCount + 1;
           const spreadName = spreadId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+          const isActive = spreadId === this._activeSpreadId;
+
+          console.log('[PAGES PANEL] Spread card:', spreadId, 'firstPageIndex:', firstPageIndex, 'isActive:', isActive);
+
+          const card = document.createElement('div');
+          card.className = 'page-card' + (isActive ? ' active' : '');
+          card.dataset.pageIndex = firstPageIndex;
+          card.dataset.spreadId = spreadId;
+
+          // Thumbnail Container
+          const thumbContainer = document.createElement('div');
+          thumbContainer.className = 'spread-thumbnail-container';
+
+          // Fallback structure with mini pages
+          const fallback = document.createElement('div');
+          fallback.className = 'spread-fallback';
           pages.forEach((page) => {
-            totalPagesCount++;
-            const pageIndex = totalPagesCount;
-            const isActive = String(pageIndex) === activePageParam;
-            console.log('[PAGES PANEL] Page card label:', page.label, 'index:', pageIndex, 'isActive:', isActive);
-            const card = document.createElement('div');
-            card.className = 'page-card' + (isActive ? ' active' : '');
-            card.dataset.pageIndex = pageIndex;
-            card.dataset.pageLabel = page.label;
-            card.dataset.spreadId = spreadId;
-
-            // Thumbnail
-            const thumbnail = document.createElement('div');
-            thumbnail.className = 'page-thumbnail';
-            
-            const num = document.createElement('span');
-            num.className = 'page-number-large';
-            num.textContent = page.label;
-            thumbnail.appendChild(num);
-            card.appendChild(thumbnail);
-
-            // Label
-            const label = document.createElement('span');
-            label.className = 'page-label';
-            label.textContent = `Page ${page.label}`;
-            card.appendChild(label);
-
-            // Spread Info
-            const spreadInfo = document.createElement('span');
-            spreadInfo.className = 'page-spread-info';
-            spreadInfo.textContent = spreadName;
-            card.appendChild(spreadInfo);
-
-            card.addEventListener('click', async () => {
-              if (String(pageIndex) !== activePageParam) {
-                grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
-                card.classList.add('active');
-                await this.navigateToPage(pageIndex);
-              }
-            });
-
-            grid.appendChild(card);
+            const miniPage = document.createElement('div');
+            miniPage.className = 'mini-page';
+            const miniLabel = document.createElement('span');
+            miniLabel.className = 'mini-page-label';
+            miniLabel.textContent = page.label;
+            miniPage.appendChild(miniLabel);
+            fallback.appendChild(miniPage);
           });
+          thumbContainer.appendChild(fallback);
+
+          // Real JPEG Image Preview
+          const img = document.createElement('img');
+          img.className = 'spread-thumbnail-img';
+          img.alt = spreadName;
+          img.src = `/store/${this._docPath}/spreads/${spreadId}.jpg?t=${Date.now()}`;
+          img.onload = () => {
+            img.classList.add('loaded');
+          };
+          img.onerror = () => {
+            img.style.display = 'none';
+          };
+          thumbContainer.appendChild(img);
+
+          card.appendChild(thumbContainer);
+
+          // Title (Spread Name)
+          const label = document.createElement('span');
+          label.className = 'page-label';
+          label.textContent = spreadName;
+          card.appendChild(label);
+
+          // Page Range Info (e.g. "Pages 1-2")
+          const spreadInfo = document.createElement('span');
+          spreadInfo.className = 'page-spread-info';
+          if (pages.length === 1) {
+            spreadInfo.textContent = `Page ${pages[0].label}`;
+          } else {
+            spreadInfo.textContent = `Pages ${pages[0].label}–${pages[pages.length - 1].label}`;
+          }
+          card.appendChild(spreadInfo);
+
+          card.addEventListener('click', async () => {
+            if (!card.classList.contains('active')) {
+              grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
+              card.classList.add('active');
+              await this.navigateToPage(firstPageIndex);
+            }
+          });
+
+          grid.appendChild(card);
+          totalPagesCount += pages.length;
         });
       }
 
-      countBadge.textContent = `${totalPagesCount} Pages`;
+      countBadge.textContent = `${spreadsCount} Spreads`;
       container.appendChild(grid);
       return container;
     }

@@ -1,6 +1,7 @@
 import {
   serializeStory,
   putJson,
+  putAsset,
   updateDocTimestamp,
   loadSpread,
   loadParagraphStyles,
@@ -12,6 +13,8 @@ import {
   cloneStyle,
   cloneParagraphStyle,
 } from '../lib/story-editor-core.js';
+import { SvgRenderer, getImagePlacement } from '../../doc-renderer/lib/svg-renderer.js';
+import { buildParagraphLayoutStyles } from '../../story-editor/lib/layout-engine.js';
 
 /** Generate a simple SVG data URL as a placeholder for empty image frames. */
 export function emptyImagePlaceholder() {
@@ -295,6 +298,227 @@ export async function saveSpread(app) {
 
     // document.json timestamp
     puts.push(updateDocTimestamp(app._docPath));
+
+    // JPG preview/thumbnail of the spread without editor decoration
+    if (app.engine) {
+      const previewPromise = new Promise(async (resolve) => {
+        try {
+          const SVG_NS = 'http://www.w3.org/2000/svg';
+          const pb = app.currentSpread?.pasteboardRect;
+          const width = pb ? pb.width : 800;
+          const height = pb ? pb.height : 600;
+
+          // Create clean offscreen SVG
+          const previewSvg = document.createElementNS(SVG_NS, 'svg');
+          previewSvg.setAttribute('width', String(width));
+          previewSvg.setAttribute('height', String(height));
+          if (pb) {
+            previewSvg.setAttribute('viewBox', `${pb.x} ${pb.y} ${pb.width} ${pb.height}`);
+          } else {
+            previewSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+          }
+          previewSvg.setAttribute('xmlns', SVG_NS);
+
+          // 1. Draw page backgrounds (white)
+          if (app.currentSpread && app.currentSpread.pageRects) {
+            for (const page of app.currentSpread.pageRects) {
+              const rect = document.createElementNS(SVG_NS, 'rect');
+              rect.setAttribute('x', String(page.x));
+              rect.setAttribute('y', String(page.y));
+              rect.setAttribute('width', String(page.width));
+              rect.setAttribute('height', String(page.height));
+              rect.setAttribute('fill', '#ffffff');
+              previewSvg.appendChild(rect);
+            }
+          }
+
+          // 2. Draw image boxes
+          if (app.imageBoxes && app.imageBoxes.length > 0) {
+            const g = document.createElementNS(SVG_NS, 'g');
+            g.setAttribute('data-layer', 'image-boxes');
+            previewSvg.appendChild(g);
+
+            for (const box of app.imageBoxes) {
+              const placement = getImagePlacement(box);
+              const nested = document.createElementNS(SVG_NS, 'svg');
+              nested.setAttribute('x', String(box.x));
+              nested.setAttribute('y', String(box.y));
+              nested.setAttribute('width', String(box.width));
+              nested.setAttribute('height', String(box.height));
+              nested.setAttribute('overflow', 'hidden');
+              nested.setAttribute('style', 'pointer-events: none;');
+
+              const imgEl = document.createElementNS(SVG_NS, 'image');
+              imgEl.setAttribute('href', box.imageUrl);
+              imgEl.setAttribute('x', String(placement.x));
+              imgEl.setAttribute('y', String(placement.y));
+              imgEl.setAttribute('width', String(placement.w));
+              imgEl.setAttribute('height', String(placement.h));
+              imgEl.setAttribute('preserveAspectRatio', 'none');
+              imgEl.setAttribute('pointer-events', 'none');
+
+              nested.appendChild(imgEl);
+              g.appendChild(nested);
+            }
+          }
+
+          // 3. Flow and render text outline paths (using standard text with base64 embedded fonts)
+          const renderer = new SvgRenderer({
+            fontFamily: app.engine._svgRenderer._fontFamily || 'EB Garamond',
+            useOutlines: false,
+          });
+
+          for (const storyEntry of app._stories) {
+            const storyBoxes = storyEntry.boxIds
+              .map(id => app.boxes.find(b => b.id === id))
+              .filter(Boolean);
+
+            if (storyBoxes.length === 0) continue;
+
+            const paragraphLayoutStyles = buildParagraphLayoutStyles(
+              app._fontSize, storyEntry.editor.paragraphStyles);
+
+            const shaped = app.engine.shapeParagraphs(
+              storyEntry.editor.story, app._fontSize, paragraphLayoutStyles);
+
+            const { boxResults } = app.engine.flowIntoBoxes(
+              shaped, storyBoxes, app._fontSize, app._lineHeight);
+
+            const result = renderer.render(boxResults, app._fontSize, app._lineHeight);
+
+            // Transplant all outline elements (text/images) to our preview SVG
+            for (const child of Array.from(result.svg.childNodes)) {
+              if (child.tagName === 'rect' && child.getAttribute('fill') === 'none') {
+                continue;
+              }
+              previewSvg.appendChild(child.cloneNode(true));
+            }
+          }
+
+          // 4. Generate and embed @font-face rules as base64 for all loaded fonts
+          let fontFaceCss = `
+            svg text {
+              text-rendering: optimizeLegibility;
+              -webkit-font-smoothing: antialiased;
+            }
+          `;
+
+          function uint8ArrayToBase64(uint8) {
+            let binary = '';
+            const len = uint8.byteLength;
+            const chunkSize = 0xffff;
+            for (let i = 0; i < len; i += chunkSize) {
+              const chunk = uint8.subarray(i, i + chunkSize);
+              binary += String.fromCharCode.apply(null, chunk);
+            }
+            return btoa(binary);
+          }
+
+          const buffers = app.engine._fontRegistry._buffers;
+          if (buffers) {
+            for (const [key, buffer] of Object.entries(buffers)) {
+              const parts = key.split(':');
+              const family = parts[0];
+              const variant = parts[1] || 'regular';
+
+              let weight = 'normal';
+              let style = 'normal';
+              if (variant.includes('bold')) weight = 'bold';
+              if (variant.includes('italic')) style = 'italic';
+
+              try {
+                const base64 = uint8ArrayToBase64(buffer);
+                fontFaceCss += `
+@font-face {
+  font-family: '${family}';
+  src: url(data:font/truetype;base64,${base64}) format('truetype');
+  font-weight: ${weight};
+  font-style: ${style};
+}
+`;
+              } catch (e) {
+                console.warn('Failed to embed font in preview CSS:', key, e);
+              }
+            }
+          }
+
+          const styleEl = document.createElementNS(SVG_NS, 'style');
+          styleEl.textContent = fontFaceCss;
+          previewSvg.appendChild(styleEl);
+
+          // 5. Convert all image URLs to base64 data URLs to make SVG self-contained
+          const images = Array.from(previewSvg.getElementsByTagName('image'));
+          for (const imgEl of images) {
+            const href = imgEl.getAttribute('href') || imgEl.getAttribute('xlink:href');
+            if (href && !href.startsWith('data:')) {
+              try {
+                const res = await fetch(href);
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const dataUrl = await new Promise((resolveReader) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolveReader(reader.result);
+                    reader.readAsDataURL(blob);
+                  });
+                  imgEl.setAttribute('href', dataUrl);
+                  imgEl.removeAttribute('xlink:href');
+                }
+              } catch (imgErr) {
+                console.warn('Failed to convert image to data URL for preview:', href, imgErr);
+              }
+            }
+          }
+
+          const svgString = new XMLSerializer().serializeToString(previewSvg);
+          const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              const width = pb ? pb.width : 800;
+              const height = pb ? pb.height : 600;
+              // Render at 2x resolution for crisp high-quality output
+              const scale = 2;
+              canvas.width = width * scale;
+              canvas.height = height * scale;
+              const ctx = canvas.getContext('2d');
+              ctx.scale(scale, scale);
+              
+              // Fill canvas with white background
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0);
+              canvas.toBlob(async (blob) => {
+                if (blob) {
+                  try {
+                    const res = await putAsset(`/store/${app._docPath}/spreads/${app._activeSpreadId}.jpg`, blob, 'image/jpeg');
+                    resolve(res);
+                  } catch (err) {
+                    console.error('Failed to upload JPG preview:', err);
+                    resolve(null);
+                  }
+                } else {
+                  resolve(null);
+                }
+              }, 'image/jpeg', 0.85);
+            } catch (err) {
+              console.error('Failed to render canvas for JPG preview:', err);
+              resolve(null);
+            }
+          };
+          img.onerror = (err) => {
+            console.error('Failed to load SVG into Image for JPG preview:', err);
+            resolve(null);
+          };
+          img.src = svgUrl;
+        } catch (err) {
+          console.error('Failed to setup SVG preview outlines generation:', err);
+          resolve(null);
+        }
+      });
+      puts.push(previewPromise);
+    }
 
     const results = await Promise.all(puts);
     // updateDocTimestamp returns void, so filter only Response objects

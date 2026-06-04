@@ -1,6 +1,6 @@
 // svg-renderer.js — laid-out paragraphs -> SVG element with columns/boxes
 
-import { buildPositions } from '../../story-editor/lib/positions.js';
+import { buildPositions, mergeLigatureClusters, splitGlyphsIntoWords } from '../../story-editor/lib/positions.js';
 
 /**
  * @typedef {import('../../story-editor/lib/positions.js').CursorPosition} CursorPosition
@@ -111,9 +111,11 @@ export class SvgRenderer {
   /**
    * @param {{ fontFamily: string, padding?: number }} options
    */
-  constructor({ fontFamily, padding = 16 }) {
+  constructor({ fontFamily, padding = 16, useOutlines = false, fontRegistry = null }) {
     this._fontFamily = fontFamily;
     this._padding = padding;
+    this._useOutlines = useOutlines;
+    this._fontRegistry = fontRegistry;
   }
 
   get padding() {
@@ -183,44 +185,162 @@ export class SvgRenderer {
         const { words, isLastInPara } = entry;
         if (i > 0 && lines[i - 1].isLastInPara) y += paraSpacing;
 
-        let textEl = this._createTextEl(y, entryFontSize);
+        if (this._useOutlines && this._fontRegistry) {
+          const { glyphs: rawGlyphs, words, text, hyphenated } = entry;
+          const glyphs = mergeLigatureClusters(rawGlyphs);
+          const wordGroups = splitGlyphsIntoWords(glyphs, text, entry.endChar);
 
-        for (const word of words) {
-          for (let fi = 0; fi < word.fragments.length; fi++) {
-            const frag = word.fragments[fi];
+          let wx = box.x + this._padding;
+          let wordIndex = 0;
 
-            // Inline image: render <image> instead of <tspan>
-            if (frag.style && frag.style.inlineImage) {
-              // Flush any pending text element
-              if (textEl.childNodes.length > 0) {
-                svg.appendChild(textEl);
-                textEl = this._createTextEl(y, entryFontSize);
+          for (let wi = 0; wi < wordGroups.length; wi++) {
+            const group = wordGroups[wi];
+
+            if (group.glyphs.length > 0) {
+              const word = words[wordIndex++];
+              if (word) {
+                wx = box.x + this._padding + word.x;
               }
-              const imgSize = entryFontSize * 3;
-              const imgX = box.x + this._padding + word.x;
-              const imgY = y - entryFontSize;
-              const imgEl = document.createElementNS(SVG_NS, 'image');
-              imgEl.setAttribute('href', frag.style.inlineImage);
-              imgEl.setAttribute('x', imgX.toFixed(2));
-              imgEl.setAttribute('y', imgY.toFixed(2));
-              imgEl.setAttribute('width', String(imgSize));
-              imgEl.setAttribute('height', String(imgSize));
-              imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-              imgEl.setAttribute('style', 'pointer-events:none');
-              svg.appendChild(imgEl);
-              continue;
             }
 
-            const tspan = document.createElementNS(SVG_NS, 'tspan');
-            if (fi === 0) tspan.setAttribute('x', (box.x + this._padding + word.x).toFixed(2));
-            const attrs = svgAttrsForStyle(frag.style, entryFontFamily);
-            for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
-            tspan.textContent = frag.text;
-            textEl.appendChild(tspan);
-          }
-        }
+            // Draw inline images in the word (if any)
+            if (group.glyphs.length > 0 && words[wordIndex - 1]) {
+              const wordObj = words[wordIndex - 1];
+              for (const frag of wordObj.fragments) {
+                if (frag.style && frag.style.inlineImage) {
+                  const imgSize = entryFontSize * 3;
+                  const imgX = box.x + this._padding + wordObj.x;
+                  const imgY = y - entryFontSize;
+                  const imgEl = document.createElementNS(SVG_NS, 'image');
+                  imgEl.setAttribute('href', frag.style.inlineImage);
+                  imgEl.setAttribute('x', imgX.toFixed(2));
+                  imgEl.setAttribute('y', imgY.toFixed(2));
+                  imgEl.setAttribute('width', String(imgSize));
+                  imgEl.setAttribute('height', String(imgSize));
+                  imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                  imgEl.setAttribute('style', 'pointer-events:none');
+                  svg.appendChild(imgEl);
+                }
+              }
+            }
 
-        svg.appendChild(textEl);
+            // Render each glyph in the word
+            for (let gi = 0; gi < group.glyphs.length; gi++) {
+              const g = group.glyphs[gi];
+              const family = g.style.fontFamily || entryFontFamily;
+              const variant = this._fontRegistry.variantForStyle(g.style);
+              const fontEntry = this._fontRegistry.getFont(family, variant);
+
+              if (fontEntry && fontEntry.hbFont) {
+                const pathData = fontEntry.hbFont.glyphToPath(g.gid);
+                if (pathData) {
+                  const scale = entryFontSize / fontEntry.upem;
+                  const gx = wx + g.dx;
+                  const gy = y - g.dy;
+
+                  const pathEl = document.createElementNS(SVG_NS, 'path');
+                  pathEl.setAttribute('d', pathData);
+                  pathEl.setAttribute('fill', '#222');
+                  pathEl.setAttribute('transform', `translate(${gx.toFixed(2)}, ${gy.toFixed(2)}) scale(${scale.toFixed(6)}, ${(-scale).toFixed(6)})`);
+                  svg.appendChild(pathEl);
+                }
+              }
+
+              wx += g.ax;
+            }
+
+            // Spaces following this word
+            if (group.spaceGlyphs.length > 0) {
+              const nextWord = words[wordIndex];
+              let spaceAdvance = 0;
+              if (nextWord) {
+                const totalGap = (box.x + this._padding + nextWord.x) - wx;
+                spaceAdvance = totalGap / group.spaceGlyphs.length;
+              }
+
+              for (const sg of group.spaceGlyphs) {
+                if (nextWord) {
+                  wx += spaceAdvance;
+                } else {
+                  wx += sg.ax;
+                }
+              }
+            }
+          }
+
+          // Render hyphen if line is hyphenated
+          if (hyphenated && words.length > 0) {
+            const lastGlyph = glyphs[glyphs.length - 1];
+            const lastStyle = lastGlyph ? lastGlyph.style : {};
+            const family = lastStyle.fontFamily || entryFontFamily;
+            const variant = this._fontRegistry.variantForStyle(lastStyle);
+            const fontEntry = this._fontRegistry.getFont(family, variant);
+
+            if (fontEntry && fontEntry.hbFont) {
+              const buf = this._fontRegistry._hb.createBuffer();
+              buf.addText('-');
+              buf.guessSegmentProperties();
+              this._fontRegistry._hb.shape(fontEntry.hbFont, buf);
+              const shapedHyphen = buf.json(fontEntry.hbFont);
+              buf.destroy();
+
+              if (shapedHyphen && shapedHyphen.length > 0) {
+                const hGid = shapedHyphen[0].g;
+                const pathData = fontEntry.hbFont.glyphToPath(hGid);
+                if (pathData) {
+                  const scale = entryFontSize / fontEntry.upem;
+                  const gx = wx;
+                  const gy = y;
+
+                  const pathEl = document.createElementNS(SVG_NS, 'path');
+                  pathEl.setAttribute('d', pathData);
+                  pathEl.setAttribute('fill', '#222');
+                  pathEl.setAttribute('transform', `translate(${gx.toFixed(2)}, ${gy.toFixed(2)}) scale(${scale.toFixed(6)}, ${(-scale).toFixed(6)})`);
+                  svg.appendChild(pathEl);
+                }
+              }
+            }
+          }
+        } else {
+          let textEl = this._createTextEl(y, entryFontSize);
+
+          for (const word of words) {
+            for (let fi = 0; fi < word.fragments.length; fi++) {
+              const frag = word.fragments[fi];
+
+              // Inline image: render <image> instead of <tspan>
+              if (frag.style && frag.style.inlineImage) {
+                // Flush any pending text element
+                if (textEl.childNodes.length > 0) {
+                  svg.appendChild(textEl);
+                  textEl = this._createTextEl(y, entryFontSize);
+                }
+                const imgSize = entryFontSize * 3;
+                const imgX = box.x + this._padding + word.x;
+                const imgY = y - entryFontSize;
+                const imgEl = document.createElementNS(SVG_NS, 'image');
+                imgEl.setAttribute('href', frag.style.inlineImage);
+                imgEl.setAttribute('x', imgX.toFixed(2));
+                imgEl.setAttribute('y', imgY.toFixed(2));
+                imgEl.setAttribute('width', String(imgSize));
+                imgEl.setAttribute('height', String(imgSize));
+                imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                imgEl.setAttribute('style', 'pointer-events:none');
+                svg.appendChild(imgEl);
+                continue;
+              }
+
+              const tspan = document.createElementNS(SVG_NS, 'tspan');
+              if (fi === 0) tspan.setAttribute('x', (box.x + this._padding + word.x).toFixed(2));
+              const attrs = svgAttrsForStyle(frag.style, entryFontFamily);
+              for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
+              tspan.textContent = frag.text;
+              textEl.appendChild(tspan);
+            }
+          }
+
+          svg.appendChild(textEl);
+        }
 
         const baseX = box.x + this._padding;
         const positions = buildPositions(entry, baseX);
