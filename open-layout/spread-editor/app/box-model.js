@@ -107,6 +107,7 @@ export function resizeBoxWithAspect(box, handle, dx, dy, aspect = null) {
       const deltaW = (handle === 'e') ? dx : -dx;
       width = Math.max(10, origW + deltaW);
       height = width / aspect;
+      y = box.y - (height - origH) / 2;
       if (handle === 'w') {
         x = box.x - (width - origW);
       }
@@ -114,6 +115,7 @@ export function resizeBoxWithAspect(box, handle, dx, dy, aspect = null) {
       const deltaH = (handle === 's') ? dy : -dy;
       height = Math.max(10, origH + deltaH);
       width = height * aspect;
+      x = box.x - (width - origW) / 2;
       if (handle === 'n') {
         y = box.y - (height - origH);
       }

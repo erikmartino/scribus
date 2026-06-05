@@ -76,14 +76,14 @@ export function drawBoxOverlay(overlaySvg, { boxes, selectedBoxId, stories, link
     frame.classList.add('box-rect');
     frame.dataset.boxId = box.id;
     frame.dataset.id = box.id;
-    frame.dataset.handle = 'body';
+    const isSelected = box.id === selectedBoxId;
+    const isMode3 = isSelected && activeCroppingMode === 3;
+    frame.dataset.handle = isMode3 ? 'content_body' : 'body';
     frame.setAttribute('x', String(tl.x));
     frame.setAttribute('y', String(tl.y));
     frame.setAttribute('width', String(w));
     frame.setAttribute('height', String(h));
     frame.setAttribute('fill', 'rgba(255,255,255,0.001)');
-    const isSelected = box.id === selectedBoxId;
-    const isMode3 = isSelected && activeCroppingMode === 3;
     frame.setAttribute('stroke', isSelected ? (isMode3 ? 'none' : '#2f6ea4') : '#7b7568');
     frame.setAttribute('stroke-width', isSelected ? '1.8' : '1.1');
     frame.setAttribute('stroke-dasharray', isSelected ? '5 3' : '4 4');
@@ -130,7 +130,7 @@ export function drawBoxOverlay(overlaySvg, { boxes, selectedBoxId, stories, link
       contentOutline.setAttribute('y', String(tlContent.y));
       contentOutline.setAttribute('width', String(wContent));
       contentOutline.setAttribute('height', String(hContent));
-      contentOutline.setAttribute('fill', 'none');
+      contentOutline.setAttribute('fill', 'rgba(255, 255, 255, 0.001)');
       contentOutline.setAttribute('stroke', '#ff9800');
       contentOutline.setAttribute('stroke-width', '1.8');
       contentOutline.setAttribute('stroke-dasharray', '5 3');

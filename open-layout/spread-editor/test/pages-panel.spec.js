@@ -82,8 +82,84 @@ test.describe('Pages Side Panel and Multi-Spread Navigation', () => {
     const pagesTab = page.locator('[data-panel-id="pages"]');
     await pagesTab.click();
 
-    // Verify that Spread 1 card is highlighted as active since page 2 belongs to it
     const spread1Card = page.locator('[data-page-index="1"]');
     await expect(spread1Card).toHaveClass(/active/);
   });
+
+  test('should reuse the same pages-panel DOM element instead of recreating it on update', async ({ page }) => {
+    await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}`);
+    await page.waitForSelector('scribus-app-shell:defined');
+    const statusEl = page.locator('#status');
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+
+    // Open Pages panel
+    const pagesTab = page.locator('[data-panel-id="pages"]');
+    await pagesTab.click();
+
+    const panelLocator = page.locator('.pages-panel');
+    await expect(panelLocator).toBeVisible();
+
+    // Store initial element handle
+    const initialHandle = await panelLocator.elementHandle();
+
+    // Find and drag a box slightly to trigger selection and movement updates
+    const box = page.locator('.box-rect').first();
+    await expect(box).toBeVisible();
+    const boxBounds = await box.boundingBox();
+    if (boxBounds) {
+      await page.mouse.move(boxBounds.x + 10, boxBounds.y + 10);
+      await page.mouse.down();
+      await page.mouse.move(boxBounds.x + 30, boxBounds.y + 30);
+      await page.mouse.up();
+    }
+
+    // Get final element handle
+    const finalHandle = await panelLocator.elementHandle();
+
+    // Assert that the page panel DOM node reference is exactly the same
+    const isSameNode = await page.evaluate(
+      ([el1, el2]) => el1 === el2,
+      [initialHandle, finalHandle]
+    );
+    expect(isSameNode).toBe(true);
+  });
+
+  test('should reuse the same assets-panel DOM element instead of recreating it on update', async ({ page }) => {
+    await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}`);
+    await page.waitForSelector('scribus-app-shell:defined');
+    const statusEl = page.locator('#status');
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+
+    // Open Assets panel
+    const assetsTab = page.locator('[data-panel-id="assets"]');
+    await assetsTab.click();
+
+    const panelLocator = page.locator('.assets-panel');
+    await expect(panelLocator).toBeVisible();
+
+    // Store initial element handle
+    const initialHandle = await panelLocator.elementHandle();
+
+    // Find and drag a box slightly to trigger selection and movement updates
+    const box = page.locator('.box-rect').first();
+    await expect(box).toBeVisible();
+    const boxBounds = await box.boundingBox();
+    if (boxBounds) {
+      await page.mouse.move(boxBounds.x + 10, boxBounds.y + 10);
+      await page.mouse.down();
+      await page.mouse.move(boxBounds.x + 30, boxBounds.y + 30);
+      await page.mouse.up();
+    }
+
+    // Get final element handle
+    const finalHandle = await panelLocator.elementHandle();
+
+    // Assert that the assets panel DOM node reference is exactly the same
+    const isSameNode = await page.evaluate(
+      ([el1, el2]) => el1 === el2,
+      [initialHandle, finalHandle]
+    );
+    expect(isSameNode).toBe(true);
+  });
 });
+

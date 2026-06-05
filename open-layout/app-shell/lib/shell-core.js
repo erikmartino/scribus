@@ -291,16 +291,61 @@ export class AppShell extends EventTarget {
       body.appendChild(contentWrapper);
     }
 
-    const fragment = document.createDocumentFragment();
     if (this._activePanel === 'properties') {
+      const fragment = document.createDocumentFragment();
       this._renderPropertiesPanel(fragment, selected);
+      this._reconcileDOM(contentWrapper, Array.from(fragment.children));
     } else if (this._activePanel === 'layers') {
+      const fragment = document.createDocumentFragment();
       this._renderLayersPanel(fragment, selected);
+      this._reconcileDOM(contentWrapper, Array.from(fragment.children));
     } else {
-      this._renderCustomPanel(this._activePanel, fragment, selected);
-    }
+      // For custom panels, avoid re-creation if already mounted.
+      const customPanels = [];
+      this.plugins.forEach(plugin => {
+        if (typeof plugin.getPanelContent === 'function') {
+          const panel = plugin.getPanelContent(this._activePanel, selected);
+          if (panel) {
+            customPanels.push(panel);
+          }
+        }
+      });
 
-    this._reconcileDOM(contentWrapper, Array.from(fragment.children));
+      if (customPanels.length > 0) {
+        const existingWrappers = Array.from(contentWrapper.children).filter(c => 
+          c.className === 'shell-panel-content-wrapper'
+        );
+        let matches = existingWrappers.length === customPanels.length;
+        if (matches) {
+          for (let i = 0; i < customPanels.length; i++) {
+            if (!existingWrappers[i].contains(customPanels[i])) {
+              matches = false;
+              break;
+            }
+          }
+        }
+
+        if (!matches) {
+          contentWrapper.innerHTML = '';
+          customPanels.forEach(panel => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'shell-panel-content-wrapper';
+            wrapper.appendChild(panel);
+            contentWrapper.appendChild(wrapper);
+          });
+        }
+      } else {
+        const emptyShown = contentWrapper.children.length === 1 && 
+                           contentWrapper.firstElementChild.className === 'panel-empty';
+        if (!emptyShown) {
+          contentWrapper.innerHTML = '';
+          const span = document.createElement('span');
+          span.className = 'panel-empty';
+          span.textContent = `No content for ${this._activePanel} panel.`;
+          contentWrapper.appendChild(span);
+        }
+      }
+    }
   }
 
   _reconcileDOM(container, newItems) {

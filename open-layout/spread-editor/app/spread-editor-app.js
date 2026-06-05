@@ -118,6 +118,8 @@ export class SpreadEditorApp {
     this._activeSpreadId = 'spread-1';
     this._spreadsList = null;
     this._spreadsMetadata = {};
+    this._pagesPanelTimestamp = Date.now();
+    this._pagesPanelContainer = null;
   }
 
   /** Active editor — returns the EditorState of the currently active story. */
@@ -163,13 +165,13 @@ export class SpreadEditorApp {
         getBounds: () => this.currentSpread?.pasteboardRect,
         getBoxes: () => [...this.boxes, ...this.imageBoxes],
         getActiveCroppingMode: () => this.activeCroppingMode,
-        setBoxes: (next) => {
+        setBoxes: (next, options = {}) => {
           const all = [...this.boxes, ...this.imageBoxes];
           const updated = typeof next === 'function' ? next(all) : next;
           // Partition back into text boxes and image boxes
           this.boxes = updated.filter(b => !b.imageUrl);
           this.imageBoxes = updated.filter(b => !!b.imageUrl);
-          this.update(); // fire-and-forget from interaction handler
+          this.update(options); // fire-and-forget from interaction handler
         },
         onSelectBox: (boxId) => {
           this.selectedBoxId = boxId;
@@ -329,6 +331,8 @@ export class SpreadEditorApp {
   }
 
   async _loadFromStore() {
+    this._pagesPanelContainer = null;
+    this._assetsPanelContainer = null;
     return loadFromStore(this);
   }
 
@@ -401,6 +405,7 @@ export class SpreadEditorApp {
           }
           // Reload assets and update panels so newly generated previews are visible
           this._assets = await loadAssets(this._docPath);
+          this._assetsPanelContainer = null;
           this.shell?.updatePanels();
           // Refresh any boxes that are still showing the placeholder —
           // their previews may have been on disk already (generated previously)
@@ -745,7 +750,10 @@ export class SpreadEditorApp {
   // ---------------------------------------------------------------------------
 
   async _save() {
-    return saveSpread(this);
+    const res = await saveSpread(this);
+    this._pagesPanelTimestamp = Date.now();
+    this._pagesPanelContainer = null;
+    return res;
   }
 
   _serializeSpread() {
@@ -870,78 +878,99 @@ export class SpreadEditorApp {
 
   /** Render all image boxes as SVG <image> elements inside the given SVG. */
   _renderImageBoxes(svg) {
-    // Remove any previous image-box layer
-    const prev = svg.querySelector('[data-layer="image-boxes"]');
-    if (prev) prev.remove();
+    if (this.imageBoxes.length === 0) {
+      const existing = svg.querySelector('[data-layer="image-boxes"]');
+      if (existing) existing.remove();
+      return;
+    }
 
-    if (this.imageBoxes.length === 0) return;
+    let g = svg.querySelector('[data-layer="image-boxes"]');
+    if (!g) {
+      g = document.createElementNS(SVG_NS, 'g');
+      g.setAttribute('data-layer', 'image-boxes');
+      svg.appendChild(g);
+    }
 
-    const g = document.createElementNS(SVG_NS, 'g');
-    g.setAttribute('data-layer', 'image-boxes');
-    svg.appendChild(g);
+    // Keep track of active box IDs to clean up orphaned elements
+    const activeIds = new Set(this.imageBoxes.map(b => b.id));
+
+    // Remove any elements in g that don't belong to active image boxes
+    for (const child of Array.from(g.children)) {
+      const nestedId = child.getAttribute('data-box-nested-id');
+      const bgId = child.getAttribute('data-box-bg-id');
+      const boxId = nestedId || bgId;
+      if (boxId && !activeIds.has(boxId)) {
+        child.remove();
+      }
+    }
 
     for (const box of this.imageBoxes) {
       const placement = getImagePlacement(box);
       const isSelected = box.id === this.selectedBoxId;
       const isMode3 = isSelected && this.activeCroppingMode === 3;
 
+      // Handle Mode 3 background image
+      let bgImg = g.querySelector(`[data-box-bg-id="${box.id}"]`);
       if (isMode3) {
-        // Mode 3 layered rendering:
-        // 1. Semi-transparent background of full image
-        const bgImg = document.createElementNS(SVG_NS, 'image');
-        bgImg.setAttribute('href', box.imageUrl);
+        if (!bgImg) {
+          bgImg = document.createElementNS(SVG_NS, 'image');
+          bgImg.setAttribute('data-box-bg-id', box.id);
+          bgImg.setAttribute('preserveAspectRatio', 'none');
+          bgImg.setAttribute('style', 'opacity: 0.5; pointer-events: none;');
+          bgImg.setAttribute('data-image-box-bg', 'true');
+          // Insert before the nested SVG to draw behind it
+          const nested = g.querySelector(`[data-box-nested-id="${box.id}"]`);
+          if (nested) {
+            g.insertBefore(bgImg, nested);
+          } else {
+            g.appendChild(bgImg);
+          }
+        }
+        if (bgImg.getAttribute('href') !== box.imageUrl) {
+          bgImg.setAttribute('href', box.imageUrl);
+        }
         bgImg.setAttribute('x', String(box.x + placement.x));
         bgImg.setAttribute('y', String(box.y + placement.y));
         bgImg.setAttribute('width', String(placement.w));
         bgImg.setAttribute('height', String(placement.h));
-        bgImg.setAttribute('preserveAspectRatio', 'none');
-        bgImg.setAttribute('style', 'opacity: 0.5; pointer-events: none;');
-        bgImg.setAttribute('data-image-box-bg', 'true');
-        g.appendChild(bgImg);
+      } else {
+        if (bgImg) {
+          bgImg.remove();
+        }
+      }
 
-        // 2. Fully-opaque inner image inside the locked crop frame
-        const nested = document.createElementNS(SVG_NS, 'svg');
-        nested.setAttribute('x', String(box.x));
-        nested.setAttribute('y', String(box.y));
-        nested.setAttribute('width', String(box.width));
-        nested.setAttribute('height', String(box.height));
+      // Handle nested SVG
+      let nested = g.querySelector(`[data-box-nested-id="${box.id}"]`);
+      let imgEl;
+      if (!nested) {
+        nested = document.createElementNS(SVG_NS, 'svg');
+        nested.setAttribute('data-box-nested-id', box.id);
         nested.setAttribute('overflow', 'hidden');
         nested.setAttribute('style', 'pointer-events: none;');
 
-        const fgImg = document.createElementNS(SVG_NS, 'image');
-        fgImg.setAttribute('href', box.imageUrl);
-        fgImg.setAttribute('x', String(placement.x));
-        fgImg.setAttribute('y', String(placement.y));
-        fgImg.setAttribute('width', String(placement.w));
-        fgImg.setAttribute('height', String(placement.h));
-        fgImg.setAttribute('preserveAspectRatio', 'none');
-        fgImg.setAttribute('data-image-box', 'true');
-        fgImg.setAttribute('data-box-id', box.id);
-        
-        nested.appendChild(fgImg);
+        imgEl = document.createElementNS(SVG_NS, 'image');
+        imgEl.setAttribute('preserveAspectRatio', 'none');
+        imgEl.setAttribute('data-image-box', 'true');
+        imgEl.setAttribute('data-box-id', box.id);
+        nested.appendChild(imgEl);
         g.appendChild(nested);
       } else {
-        // Standard clipped/nested svg rendering
-        const nested = document.createElementNS(SVG_NS, 'svg');
-        nested.setAttribute('x', String(box.x));
-        nested.setAttribute('y', String(box.y));
-        nested.setAttribute('width', String(box.width));
-        nested.setAttribute('height', String(box.height));
-        nested.setAttribute('overflow', 'hidden');
-        nested.setAttribute('style', 'pointer-events: none;');
+        imgEl = nested.querySelector('image');
+      }
 
-        const imgEl = document.createElementNS(SVG_NS, 'image');
-        imgEl.setAttribute('href', box.imageUrl);
+      nested.setAttribute('x', String(box.x));
+      nested.setAttribute('y', String(box.y));
+      nested.setAttribute('width', String(box.width));
+      nested.setAttribute('height', String(box.height));
+
+      if (imgEl) {
+        if (imgEl.getAttribute('href') !== box.imageUrl) {
+          imgEl.setAttribute('href', box.imageUrl);
+        }
         imgEl.setAttribute('x', String(placement.x));
         imgEl.setAttribute('y', String(placement.y));
         imgEl.setAttribute('width', String(placement.w));
         imgEl.setAttribute('height', String(placement.h));
-        imgEl.setAttribute('preserveAspectRatio', 'none');
-        imgEl.setAttribute('data-image-box', 'true');
-        imgEl.setAttribute('data-box-id', box.id);
-        
-        nested.appendChild(imgEl);
-        g.appendChild(nested);
       }
     }
   }
@@ -1648,6 +1677,7 @@ export class SpreadEditorApp {
     }
 
     await this._loadFromStore();
+    this._pagesPanelTimestamp = Date.now();
     await this.update();
     this.setStatus('Ready - spread editor active.', 'ok');
     this.shell?.updatePanels();
@@ -1760,291 +1790,316 @@ export class SpreadEditorApp {
         panelBody.style.padding = '0';
       }
 
-      const container = document.createElement('div');
-      container.className = 'pages-panel';
-
-      const style = document.createElement('style');
-      style.textContent = `
-        .pages-panel {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          padding: 1rem;
-          flex: 1;
-          min-height: 0;
-          overflow: hidden;
-          box-sizing: border-box;
-          background: #18181c;
-        }
-        .pages-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          border-bottom: 1px solid var(--border, #2e2e32);
-          padding-bottom: 12px;
-          margin-bottom: 8px;
-          flex-shrink: 0;
-        }
-        .pages-title {
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: var(--text-main, #e1e1e6);
-          margin: 0;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .pages-count {
-          font-size: 0.72rem;
-          color: var(--accent, #bb86fc);
-          background: rgba(187, 134, 252, 0.08);
-          border: 1px solid rgba(187, 134, 252, 0.2);
-          padding: 1px 6px;
-          border-radius: 20px;
-        }
-        .pages-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          overflow-y: auto;
-          flex: 1;
-          min-height: 0;
-          padding: 4px;
-        }
-        .page-card {
-          display: flex;
-          flex-direction: column;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid var(--border, #2e2e32);
-          border-radius: 8px;
-          padding: 8px;
-          cursor: pointer;
-          position: relative;
-          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                      border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                      box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                      background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-          user-select: none;
-        }
-        .page-card:hover {
-          transform: translateY(-2px);
-          border-color: var(--accent, #bb86fc);
-          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-          background: rgba(255, 255, 255, 0.05);
-        }
-        .page-card.active {
-          border-color: var(--accent, #bb86fc);
-          background: rgba(187, 134, 252, 0.08);
-          box-shadow: 0 0 12px rgba(187, 134, 252, 0.25);
-        }
-        .spread-thumbnail-container {
-          position: relative;
-          width: 100%;
-          aspect-ratio: 1.5;
-          background: #1e1e20;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 6px;
-          overflow: hidden;
-          margin-bottom: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .page-card.active .spread-thumbnail-container {
-          border-color: rgba(187, 134, 252, 0.4);
-        }
-        .spread-thumbnail-img {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          opacity: 0;
-          transition: opacity 0.3s ease;
-          z-index: 2;
-        }
-        .spread-thumbnail-img.loaded {
-          opacity: 1;
-        }
-        .spread-fallback {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
-          z-index: 1;
-          padding: 8px;
-          box-sizing: border-box;
-        }
-        .mini-page {
-          background: #ffffff;
-          border: 1px solid #c7c1b5;
-          border-radius: 2px;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          aspect-ratio: 0.707;
-          height: 70%;
-          position: relative;
-          overflow: hidden;
-        }
-        .mini-page-label {
-          font-size: 0.65rem;
-          font-weight: 700;
-          color: #1e1e20;
-          user-select: none;
-        }
-        .page-label {
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: var(--text-main, #e1e1e6);
-          margin-bottom: 2px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 100%;
-        }
-        .page-spread-info {
-          font-size: 0.65rem;
-          color: var(--text-dim, #a1a1aa);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 100%;
-        }
-      `;
-      container.appendChild(style);
-
-      // Header
-      const header = document.createElement('div');
-      header.className = 'pages-header';
-
-      const title = document.createElement('h3');
-      title.className = 'pages-title';
-      title.textContent = 'Document Spreads';
-      header.appendChild(title);
-
-      const countBadge = document.createElement('span');
-      countBadge.className = 'pages-count';
-      countBadge.textContent = '0 Spreads';
-      header.appendChild(countBadge);
-
-      container.appendChild(header);
-
-      // Parse active page from query parameter or default to active spread's first page
-      const urlParams = new URLSearchParams(window.location.search);
-      const activePageParam = urlParams.get('page') || (this._activeSpreadPages?.[0]?.label || '1');
-      console.log('[PAGES PANEL] activePageParam is:', activePageParam, 'search:', window.location.search);
-
-      // Grid of pages (now spreads)
-      const grid = document.createElement('div');
-      grid.className = 'pages-grid';
-
-      let totalPagesCount = 0;
-      let spreadsCount = 0;
-
-      if (this._spreadsList) {
-        this._spreadsList.forEach((spreadId) => {
-          const metadata = this._spreadsMetadata?.[spreadId];
-          const pages = metadata?.pages || [];
-          if (pages.length === 0) return;
-
-          spreadsCount++;
-          const firstPageIndex = totalPagesCount + 1;
-          const spreadName = spreadId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-          const isActive = spreadId === this._activeSpreadId;
-
-          console.log('[PAGES PANEL] Spread card:', spreadId, 'firstPageIndex:', firstPageIndex, 'isActive:', isActive);
-
-          const card = document.createElement('div');
-          card.className = 'page-card' + (isActive ? ' active' : '');
-          card.dataset.pageIndex = firstPageIndex;
-          card.dataset.spreadId = spreadId;
-
-          // Thumbnail Container
-          const thumbContainer = document.createElement('div');
-          thumbContainer.className = 'spread-thumbnail-container';
-
-          // Fallback structure with mini pages
-          const fallback = document.createElement('div');
-          fallback.className = 'spread-fallback';
-          pages.forEach((page) => {
-            const miniPage = document.createElement('div');
-            miniPage.className = 'mini-page';
-            const miniLabel = document.createElement('span');
-            miniLabel.className = 'mini-page-label';
-            miniLabel.textContent = page.label;
-            miniPage.appendChild(miniLabel);
-            fallback.appendChild(miniPage);
-          });
-          thumbContainer.appendChild(fallback);
-
-          // Real JPEG Image Preview
-          const img = document.createElement('img');
-          img.className = 'spread-thumbnail-img';
-          img.alt = spreadName;
-          img.src = `/store/${this._docPath}/spreads/${spreadId}.jpg?t=${Date.now()}`;
-          img.onload = () => {
-            img.classList.add('loaded');
-          };
-          img.onerror = () => {
-            img.style.display = 'none';
-          };
-          thumbContainer.appendChild(img);
-
-          card.appendChild(thumbContainer);
-
-          // Title (Spread Name)
-          const label = document.createElement('span');
-          label.className = 'page-label';
-          label.textContent = spreadName;
-          card.appendChild(label);
-
-          // Page Range Info (e.g. "Pages 1-2")
-          const spreadInfo = document.createElement('span');
-          spreadInfo.className = 'page-spread-info';
-          if (pages.length === 1) {
-            spreadInfo.textContent = `Page ${pages[0].label}`;
-          } else {
-            spreadInfo.textContent = `Pages ${pages[0].label}–${pages[pages.length - 1].label}`;
-          }
-          card.appendChild(spreadInfo);
-
-          card.addEventListener('click', async () => {
-            if (!card.classList.contains('active')) {
-              grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
-              card.classList.add('active');
-              await this.navigateToPage(firstPageIndex);
-            }
-          });
-
-          grid.appendChild(card);
-          totalPagesCount += pages.length;
-        });
+      if (!this._pagesPanelContainer) {
+        this._pagesPanelContainer = this._buildPagesPanel();
       }
 
-      countBadge.textContent = `${spreadsCount} Spreads`;
-      container.appendChild(grid);
-      return container;
+      this._updateActiveSpreadCard();
+      return this._pagesPanelContainer;
     }
 
-    if (panelId !== 'assets') return null;
+    if (panelId === 'assets') {
+      // .panel-body is in shadow DOM so CSS injection can't reach it.
+      // Set overflow/padding directly so the flex height chain works and
+      // .assets-grid (overflow-y: auto; flex: 1; min-height: 0) can scroll.
+      if (panelBody) {
+        panelBody.style.overflow = 'hidden';
+        panelBody.style.padding = '0';
+      }
 
-    // .panel-body is in shadow DOM so CSS injection can't reach it.
-    // Set overflow/padding directly so the flex height chain works and
-    // .assets-grid (overflow-y: auto; flex: 1; min-height: 0) can scroll.
-    if (panelBody) {
-      panelBody.style.overflow = 'hidden';
-      panelBody.style.padding = '0';
+      if (!this._assetsPanelContainer) {
+        this._assetsPanelContainer = this._buildAssetsPanel();
+      }
+
+      return this._assetsPanelContainer;
     }
 
+    return null;
+  }
+
+  _updateActiveSpreadCard() {
+    if (!this._pagesPanelContainer) return;
+    const cards = this._pagesPanelContainer.querySelectorAll('.page-card');
+    cards.forEach(card => {
+      const spreadId = card.dataset.spreadId;
+      const isActive = spreadId === this._activeSpreadId;
+      card.classList.toggle('active', isActive);
+    });
+  }
+
+  _buildPagesPanel() {
+    const container = document.createElement('div');
+    container.className = 'pages-panel';
+
+    const style = document.createElement('style');
+    style.textContent = `
+      .pages-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 1rem;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        box-sizing: border-box;
+        background: #18181c;
+      }
+      .pages-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border, #2e2e32);
+        padding-bottom: 12px;
+        margin-bottom: 8px;
+        flex-shrink: 0;
+      }
+      .pages-title {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-main, #e1e1e6);
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .pages-count {
+        font-size: 0.72rem;
+        color: var(--accent, #bb86fc);
+        background: rgba(187, 134, 252, 0.08);
+        border: 1px solid rgba(187, 134, 252, 0.2);
+        padding: 1px 6px;
+        border-radius: 20px;
+      }
+      .pages-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+        padding: 4px;
+      }
+      .page-card {
+        display: flex;
+        flex-direction: column;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--border, #2e2e32);
+        border-radius: 8px;
+        padding: 8px;
+        cursor: pointer;
+        position: relative;
+        transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                    background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        user-select: none;
+      }
+      .page-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent, #bb86fc);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .page-card.active {
+        border-color: var(--accent, #bb86fc);
+        background: rgba(187, 134, 252, 0.08);
+        box-shadow: 0 0 12px rgba(187, 134, 252, 0.25);
+      }
+      .spread-thumbnail-container {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1.5;
+        background: #1e1e20;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .page-card.active .spread-thumbnail-container {
+        border-color: rgba(187, 134, 252, 0.4);
+      }
+      .spread-thumbnail-img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 2;
+      }
+      .spread-thumbnail-img.loaded {
+        opacity: 1;
+      }
+      .spread-fallback {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+        z-index: 1;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      .mini-page {
+        background: #ffffff;
+        border: 1px solid #c7c1b5;
+        border-radius: 2px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 0.707;
+        height: 70%;
+        position: relative;
+        overflow: hidden;
+      }
+      .mini-page-label {
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: #1e1e20;
+        user-select: none;
+      }
+      .page-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-main, #e1e1e6);
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+      .page-spread-info {
+        font-size: 0.65rem;
+        color: var(--text-dim, #a1a1aa);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+    `;
+    container.appendChild(style);
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'pages-header';
+
+    const title = document.createElement('h3');
+    title.className = 'pages-title';
+    title.textContent = 'Document Spreads';
+    header.appendChild(title);
+
+    const countBadge = document.createElement('span');
+    countBadge.className = 'pages-count';
+    countBadge.textContent = '0 Spreads';
+    header.appendChild(countBadge);
+
+    container.appendChild(header);
+
+    // Parse active page from query parameter or default to active spread's first page
+    const urlParams = new URLSearchParams(window.location.search);
+    const activePageParam = urlParams.get('page') || (this._activeSpreadPages?.[0]?.label || '1');
+    console.log('[PAGES PANEL] activePageParam is:', activePageParam, 'search:', window.location.search);
+
+    // Grid of pages (now spreads)
+    const grid = document.createElement('div');
+    grid.className = 'pages-grid';
+
+    let totalPagesCount = 0;
+    let spreadsCount = 0;
+
+    if (this._spreadsList) {
+      this._spreadsList.forEach((spreadId) => {
+        const metadata = this._spreadsMetadata?.[spreadId];
+        const pages = metadata?.pages || [];
+        if (pages.length === 0) return;
+
+        spreadsCount++;
+        const firstPageIndex = totalPagesCount + 1;
+        const spreadName = spreadId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+        const card = document.createElement('div');
+        card.className = 'page-card';
+        card.dataset.pageIndex = firstPageIndex;
+        card.dataset.spreadId = spreadId;
+
+        // Thumbnail Container
+        const thumbContainer = document.createElement('div');
+        thumbContainer.className = 'spread-thumbnail-container';
+
+        // Fallback structure with mini pages
+        const fallback = document.createElement('div');
+        fallback.className = 'spread-fallback';
+        pages.forEach((page) => {
+          const miniPage = document.createElement('div');
+          miniPage.className = 'mini-page';
+          const miniLabel = document.createElement('span');
+          miniLabel.className = 'mini-page-label';
+          miniLabel.textContent = page.label;
+          miniPage.appendChild(miniLabel);
+          fallback.appendChild(miniPage);
+        });
+        thumbContainer.appendChild(fallback);
+
+        // Real JPEG Image Preview
+        const img = document.createElement('img');
+        img.className = 'spread-thumbnail-img';
+        img.alt = spreadName;
+        img.src = `/store/${this._docPath}/spreads/${spreadId}.jpg?t=${this._pagesPanelTimestamp}`;
+        img.onload = () => {
+          img.classList.add('loaded');
+        };
+        img.onerror = () => {
+          img.style.display = 'none';
+        };
+        thumbContainer.appendChild(img);
+
+        card.appendChild(thumbContainer);
+
+        // Title (Spread Name)
+        const label = document.createElement('span');
+        label.className = 'page-label';
+        label.textContent = spreadName;
+        card.appendChild(label);
+
+        // Page Range Info (e.g. "Pages 1-2")
+        const spreadInfo = document.createElement('span');
+        spreadInfo.className = 'page-spread-info';
+        if (pages.length === 1) {
+          spreadInfo.textContent = `Page ${pages[0].label}`;
+        } else {
+          spreadInfo.textContent = `Pages ${pages[0].label}–${pages[pages.length - 1].label}`;
+        }
+        card.appendChild(spreadInfo);
+
+        card.addEventListener('click', async () => {
+          if (!card.classList.contains('active')) {
+            grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            await this.navigateToPage(firstPageIndex);
+          }
+        });
+
+        grid.appendChild(card);
+        totalPagesCount += pages.length;
+      });
+    }
+
+    countBadge.textContent = `${spreadsCount} Spreads`;
+    container.appendChild(grid);
+    return container;
+  }
+
+  _buildAssetsPanel() {
     const container = document.createElement('div');
     container.className = 'assets-panel';
 

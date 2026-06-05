@@ -7,6 +7,7 @@ import {
   clampBoxesToBounds,
   moveBox,
   resizeBox,
+  resizeBoxWithAspect,
 } from '../app/box-model.js';
 
 const BOUNDS = { x: 0, y: 0, width: 800, height: 600 };
@@ -287,5 +288,48 @@ describe('resizeBox', () => {
     const customBox = { ...box, minWidth: 120 };
     const result = resizeBox(customBox, 'e', -200, 0, BOUNDS);
     assert.equal(result.width, 120);
+  });
+});
+
+describe('resizeBoxWithAspect', () => {
+  const box = { id: 'a', x: 100, y: 100, width: 200, height: 100 }; // aspect = 2.0
+
+  it('resizes east handle, anchoring on the west vertical center', () => {
+    // width increases by 40 -> new width = 240.
+    // height scales with aspect (2.0) -> new height = 240 / 2.0 = 120.
+    // y shifts to keep vertical center fixed at 100 + 100/2 = 150.
+    // So new y = 150 - 120/2 = 90.
+    // x remains 100 (fixed left edge).
+    const result = resizeBoxWithAspect(box, 'e', 40, 0, 2.0);
+    assert.equal(result.width, 240);
+    assert.equal(result.height, 120);
+    assert.equal(result.x, 100);
+    assert.equal(result.y, 90);
+  });
+
+  it('resizes south handle, anchoring on the north horizontal center', () => {
+    // height increases by 20 -> new height = 120.
+    // width scales with aspect (2.0) -> new width = 120 * 2.0 = 240.
+    // x shifts to keep horizontal center fixed at 100 + 200/2 = 200.
+    // So new x = 200 - 240/2 = 80.
+    // y remains 100 (fixed top edge).
+    const result = resizeBoxWithAspect(box, 's', 0, 20, 2.0);
+    assert.equal(result.width, 240);
+    assert.equal(result.height, 120);
+    assert.equal(result.x, 80);
+    assert.equal(result.y, 100);
+  });
+
+  it('resizes se handle, anchoring on nw corner', () => {
+    // corner handles scale using bounding box dx/dy matching.
+    // For SE corner with dx=40, dy=10, absDx=40 > absDy=10, so deltaW = 40.
+    // new width = 240.
+    // new height = 120.
+    // nw corner is fixed, so x remains 100, y remains 100.
+    const result = resizeBoxWithAspect(box, 'se', 40, 10, 2.0);
+    assert.equal(result.width, 240);
+    assert.equal(result.height, 120);
+    assert.equal(result.x, 100);
+    assert.equal(result.y, 100);
   });
 });

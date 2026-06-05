@@ -204,14 +204,21 @@ export class BoxInteractionController {
           targetRelY = currentRelY * s_y;
         } else {
           // MODE 2: Adjust crop box but keep underlying image content physically static in pasteboard space
-          // Current image position in absolute pasteboard space
-          const absoluteImgX = startBox.x + currentRelX;
-          const absoluteImgY = startBox.y + currentRelY;
+          // EXCEPT when dragging (moving) the frame itself, in which case the content moves with it.
+          if (handle === 'body') {
+            targetW = currentW;
+            targetH = currentH;
+            targetRelX = currentRelX;
+            targetRelY = currentRelY;
+          } else {
+            const absoluteImgX = startBox.x + currentRelX;
+            const absoluteImgY = startBox.y + currentRelY;
 
-          targetW = currentW;
-          targetH = currentH;
-          targetRelX = absoluteImgX - nextBox.x;
-          targetRelY = absoluteImgY - nextBox.y;
+            targetW = currentW;
+            targetH = currentH;
+            targetRelX = absoluteImgX - nextBox.x;
+            targetRelY = absoluteImgY - nextBox.y;
+          }
         }
 
         // Cover/Fit dimensions and alignment offsets for the new nextBox frame size
@@ -247,7 +254,7 @@ export class BoxInteractionController {
       }
     }
 
-    this._setBoxes((boxes) => replaceBox(boxes, nextBox));
+    this._setBoxes((boxes) => replaceBox(boxes, nextBox), isImage ? { full: false } : undefined);
   }
 
   _pointerUp(event) {
