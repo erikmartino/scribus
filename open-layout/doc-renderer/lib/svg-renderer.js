@@ -114,7 +114,7 @@ export class SvgRenderer {
   /**
    * @param {{ fontFamily: string, padding?: number }} options
    */
-  constructor({ fontFamily, padding = 16, useOutlines = false, fontRegistry = null }) {
+  constructor({ fontFamily, padding = 0, useOutlines = false, fontRegistry = null }) {
     this._fontFamily = fontFamily;
     this._padding = padding;
     this._useOutlines = useOutlines;

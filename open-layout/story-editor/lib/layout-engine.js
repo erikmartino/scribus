@@ -178,7 +178,7 @@ export class LayoutEngine {
    * @returns {{ boxResults: { box: Box, lines: LineEntry[] }[], overflow: boolean }}
    */
   flowIntoBoxes(shapedParas, boxes, fontSize, lineHeightPct) {
-    const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 16;
+    const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 0;
     const bottomReserve = this._reserveBottom ? fontSize : 0;
 
     const boxResults = boxes.map(box => ({ box, lines: [] }));

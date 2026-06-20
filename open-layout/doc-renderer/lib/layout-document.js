@@ -262,7 +262,7 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
     const shaped = engine.shapeParagraphs(story, fontSize, layoutStyles);
     const { boxResults } = engine.flowIntoBoxes(shaped, storyBoxList, fontSize, lineHeight);
 
-    const padding = engine._svgRenderer.padding ?? engine._svgRenderer._padding ?? 16;
+    const padding = engine._svgRenderer.padding ?? engine._svgRenderer._padding ?? 0;
 
     for (const { box, lines } of boxResults) {
       // Convert LineEntry[] -> LineData[]
