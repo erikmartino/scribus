@@ -173,7 +173,7 @@ describe('EditorState', () => {
     editor.setSelection({ paraIndex: 0, charOffset: 1 }, { paraIndex: 0, charOffset: 3 });
 
     assert.equal(editor.applyCharacterStyle({ bold: true }), true);
-    assert.equal(editor.hasSelection(), false);
+    assert.equal(editor.hasSelection(), true);
     assert.deepEqual(editor.story[0].map((r) => ({ text: r.text, style: r.style })), [
       { text: 'a', style: N },
       { text: 'bC', style: { bold: true, italic: false, fontFamily: '' } },

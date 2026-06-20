@@ -47,6 +47,9 @@ function svgAttrsForStyle(style, defaultFamily = '') {
   } else if (defaultFamily) {
     attrs['font-family'] = `'${defaultFamily}', serif`;
   }
+  if (Number.isFinite(style.fontSize)) {
+    attrs['font-size'] = style.fontSize;
+  }
   return attrs;
 }
 

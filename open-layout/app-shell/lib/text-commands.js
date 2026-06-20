@@ -71,7 +71,15 @@ export function registerTextCommands(shell, context) {
              }
              editor.applyCharacterStyleToCurrentParagraph({ fontSize: size });
           } else {
-            editor.applyCharacterStyle({ fontSize: size });
+             if (editor.paragraphStyles) {
+               const range = editor.getSelectionRange();
+               for (let pi = range.start.paraIndex; pi <= range.end.paraIndex; pi++) {
+                 if (editor.paragraphStyles[pi]) {
+                   editor.paragraphStyles[pi].fontSize = size;
+                 }
+               }
+             }
+             editor.applyCharacterStyle({ fontSize: size });
           }
         }
       });
@@ -89,12 +97,21 @@ export function registerTextCommands(shell, context) {
         if (context.applyLineHeight) {
           context.applyLineHeight(lh);
         } else {
-           // Default: dispatch event or update paragraph style if exists
-           if (editor.paragraphStyles) {
-              const pi = editor.cursor.paraIndex;
-              if (editor.paragraphStyles[pi]) editor.paragraphStyles[pi].lineHeight = lh;
-           }
-           window.dispatchEvent(new CustomEvent('line-height-changed', { detail: lh }));
+            // Default: dispatch event or update paragraph style if exists
+            if (editor.paragraphStyles) {
+               const range = editor.getSelectionRange();
+               if (range) {
+                 for (let pi = range.start.paraIndex; pi <= range.end.paraIndex; pi++) {
+                   if (editor.paragraphStyles[pi]) {
+                     editor.paragraphStyles[pi].lineHeight = lh;
+                   }
+                 }
+               } else {
+                 const pi = editor.cursor.paraIndex;
+                 if (editor.paragraphStyles[pi]) editor.paragraphStyles[pi].lineHeight = lh;
+               }
+            }
+            window.dispatchEvent(new CustomEvent('line-height-changed', { detail: lh }));
         }
       });
     }

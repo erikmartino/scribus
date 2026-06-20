@@ -618,7 +618,6 @@ export class EditorState {
     const range = this.getSelectionRange();
     if (range) {
       this._story = applyStyleRange(this._story, range.start, range.end, patch);
-      this._selection = null;
       this._cursor = {
         paraIndex: range.end.paraIndex,
         charOffset: range.end.charOffset,

@@ -86,7 +86,8 @@ export class Shaper {
 
     for (const run of runs) {
       const offset = fullText.length;
-      const shaped = this.shapeRun(run.text, run.style, fontSize, defaultFamily);
+      const runFontSize = Number.isFinite(run.style.fontSize) ? Number(run.style.fontSize) : fontSize;
+      const shaped = this.shapeRun(run.text, run.style, runFontSize, defaultFamily);
       for (const g of shaped) {
         g.cl += offset;
         allGlyphs.push(g);

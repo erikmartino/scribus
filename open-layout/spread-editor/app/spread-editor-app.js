@@ -558,11 +558,21 @@ export class SpreadEditorApp {
         this.container.focus();
       },
       applyFontSize: (size) => {
-        this._fontSize = size;
         if (this.editor) {
-          const pi = this.editor.cursor.paraIndex;
-          if (this.editor.paragraphStyles && this.editor.paragraphStyles[pi]) {
-            this.editor.paragraphStyles[pi].fontSize = size;
+          if (this.editor.paragraphStyles) {
+            const range = this.editor.getSelectionRange();
+            if (range) {
+              for (let pi = range.start.paraIndex; pi <= range.end.paraIndex; pi++) {
+                if (this.editor.paragraphStyles[pi]) {
+                  this.editor.paragraphStyles[pi].fontSize = size;
+                }
+              }
+            } else {
+              const pi = this.editor.cursor.paraIndex;
+              if (this.editor.paragraphStyles[pi]) {
+                this.editor.paragraphStyles[pi].fontSize = size;
+              }
+            }
           }
           if (!this.editor.hasSelection()) {
             this.editor.applyCharacterStyleToCurrentParagraph({ fontSize: size });
@@ -574,6 +584,21 @@ export class SpreadEditorApp {
       },
       applyLineHeight: (lh) => {
         this._lineHeight = lh;
+        if (this.editor && this.editor.paragraphStyles) {
+          const range = this.editor.getSelectionRange();
+          if (range) {
+            for (let pi = range.start.paraIndex; pi <= range.end.paraIndex; pi++) {
+              if (this.editor.paragraphStyles[pi]) {
+                this.editor.paragraphStyles[pi].lineHeight = lh;
+              }
+            }
+          } else {
+            const pi = this.editor.cursor.paraIndex;
+            if (this.editor.paragraphStyles[pi]) {
+              this.editor.paragraphStyles[pi].lineHeight = lh;
+            }
+          }
+        }
         this._scheduleStyleUpdate();
       }
     });
