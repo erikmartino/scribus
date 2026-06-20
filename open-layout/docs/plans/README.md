@@ -15,6 +15,7 @@ All implementation planning should live under `docs/plans/`.
 
 Completed plans are removed per convention. Previously completed:
 
+- `spread-editor-multiline-font-size-selection-plan.md` — Preserve selection and apply font size/line height to all selected paragraphs (completed).
 - `prevent-cascading-image-loads-on-drag-plan.md` — Prevent cascading image loads in sidebar panels during dragging (completed).
 - `image-drag-full-bounds-mode3-plan.md` — Drag Full Image Bounds in Edit Content Mode (completed).
 - `scaling-origo-opposite-handle-plan.md` — Scale from Opposite Handle/Origin (completed).
