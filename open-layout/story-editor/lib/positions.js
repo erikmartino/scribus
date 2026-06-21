@@ -26,6 +26,10 @@
  * @property {number}   startChar     — start character offset in hyphenated text
  * @property {number}   endChar       — end character offset in hyphenated text
  * @property {number}   paraIndex     — index of the paragraph in the story
+ * @property {number}   [fontSize]    - font size of the line
+ * @property {string}   [fontFamily]  - font family of the line
+ * @property {number}   [lineHeight]  - line height in pixels
+ * @property {number}   [paraSpacing] - paragraph spacing in pixels
  */
 
 const SHY = '\u00AD';

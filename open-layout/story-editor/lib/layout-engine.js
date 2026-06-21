@@ -9,25 +9,44 @@ import { justifyLine } from './justifier.js';
 import { SvgRenderer } from '../../doc-renderer/lib/svg-renderer.js';
 
 export { buildPositions } from './positions.js';
+export { buildParagraphLayoutStyles } from './paragraph-style-render.js';
+import { buildPositions, mergeLigatureClusters, splitGlyphsIntoWords } from './positions.js';
 
 /**
  * @typedef {import('./text-extract.js').Story} Story
  * @typedef {import('./text-extract.js').Run} Run
  * @typedef {import('./shaper.js').Glyph} Glyph
  * @typedef {import('../../doc-renderer/lib/svg-renderer.js').Box} Box
- * @typedef {import('../../doc-renderer/lib/svg-renderer.js').LineMapEntry} LineMapEntry
  * @typedef {import('./positions.js').LineEntry} LineEntry
+ * @typedef {import('./positions.js').CursorPosition} CursorPosition
+ */
+
+/**
+ * A line-map entry produced by resolveLayout, linking a rendered line
+ * back to its paragraph position and providing cursor-position data.
+ * @typedef {object} LineMapEntry
+ * @property {number}           lineIndex  — global index in the flat lineMap array
+ * @property {number}           paraIndex  — which paragraph this line belongs to
+ * @property {CursorPosition[]} positions  — per-character cursor positions
+ * @property {number}           colX       — x of the containing box
+ * @property {number}           boxY       — y of the containing box
+ * @property {number}           boxWidth   — width of the containing box
+ * @property {number}           boxHeight  — height of the containing box
+ * @property {number}           y          — baseline y of this line in SVG coordinates
+ * @property {number}           fontSize   — font size for this line
  */
 
 /**
  * Shaped paragraph data ready for line breaking.
  * @typedef {object} ShapedPara
- * @property {string}   text       — full hyphenated paragraph text
- * @property {Glyph[]}  glyphs     — shaped glyph stream
- * @property {number}   paraIndex  — index into the story
- * @property {number[]} hyphToOrig — mapping from hyphenated-text index to original-text index
- * @property {number}   origLen    — length of the original (un-hyphenated) paragraph text
- * @property {number}   fontSize   — paragraph-level font size used for shaping
+ * @property {string}   text       - full hyphenated paragraph text
+ * @property {Glyph[]}  glyphs     - shaped glyph stream
+ * @property {number}   paraIndex  - index into the story
+ * @property {number[]} hyphToOrig - mapping from hyphenated-text index to original-text index
+ * @property {number}   origLen    - length of the original (un-hyphenated) paragraph text
+ * @property {number}   fontSize   - paragraph-level font size used for shaping
+ * @property {string}   fontFamily - paragraph-level font family used for shaping
+ * @property {number}   [lineHeightPct] - paragraph-level custom line height percentage
  */
 
 export class LayoutEngine {
@@ -39,13 +58,21 @@ export class LayoutEngine {
    * @param {SvgRenderer} svgRenderer
    */
   constructor(hb, fontRegistry, shaper, hyphenator, svgRenderer, options = {}) {
+    /** @private */
     this._hb = hb;
+    /** @private */
     this._fontRegistry = fontRegistry;
+    /** @private */
     this._shaper = shaper;
+    /** @private */
     this._hyphenator = hyphenator;
+    /** @private */
     this._svgRenderer = svgRenderer;
+    /** @private */
     this._shapeCache = new Map();
+    /** @private */
     this._hyphenAdvanceCache = new Map();
+    /** @private */
     this._reserveBottom = options.reserveBottom ?? true;
   }
 
@@ -60,6 +87,7 @@ export class LayoutEngine {
    *   fontItalicUrl: string,
    *   fontFamily: string,
    *   padding?: number,
+   *   reserveBottom?: boolean,
    * }} options
    * @returns {Promise<LayoutEngine>}
    */
@@ -116,11 +144,66 @@ export class LayoutEngine {
   }
 
   /**
+   * Get the layout padding size.
+   * @returns {number}
+   */
+  get padding() {
+    return this._svgRenderer.padding;
+  }
+
+  /**
+   * Get the default font family.
+   * @returns {string}
+   */
+  get defaultFamily() {
+    return this._svgRenderer._fontFamily;
+  }
+
+  /**
+   * Get the loaded font buffers as family:variant -> Uint8Array mapping.
+   * @returns {Record<string, Uint8Array>}
+   */
+  get fontBuffers() {
+    return this._fontRegistry.buffers;
+  }
+
+  /**
+   * Resolve variant for a given style.
+   * @param {import('./style.js').Style} style
+   * @returns {string}
+   */
+  variantForStyle(style) {
+    return this._fontRegistry.variantForStyle(style);
+  }
+
+  /**
+   * Get a font buffer by family and variant.
+   * @param {string} family
+   * @param {string} variant
+   * @returns {Uint8Array|undefined}
+   */
+  getFontBuffer(family, variant) {
+    return this._fontRegistry.getFontBuffer(family, variant);
+  }
+
+  /**
+   * Shape a single styled text run.
+   * @param {string} text
+   * @param {import('./style.js').Style} style
+   * @param {number} fontSize
+   * @param {string} [defaultFamily]
+   * @returns {import('./shaper.js').Glyph[]}
+   */
+  shapeRun(text, style, fontSize, defaultFamily = '') {
+    return this._shaper.shapeRun(text, style, fontSize, defaultFamily);
+  }
+
+  /**
    * Shape and hyphenate paragraphs, returning shaped data ready for line breaking.
    *
    * @param {Story} runsParagraphs
    * @param {number} fontSize
-   * @param {{ fontSize: number, fontFamily: string }[]} [paragraphStyles]
+   * @param {{ fontSize: number, fontFamily: string, lineHeight?: number }[]} [paragraphStyles]
    * @returns {ShapedPara[]}
    */
   shapeParagraphs(runsParagraphs, fontSize, paragraphStyles = []) {
@@ -132,7 +215,7 @@ export class LayoutEngine {
       const styleFontSize = paragraphStyles[pi]?.fontSize;
       const paraFontSize = Number.isFinite(styleFontSize) ? Number(styleFontSize) : fontSize;
       const styleLineHeight = paragraphStyles[pi]?.lineHeight;
-      const paraLineHeightPct = Number.isFinite(styleLineHeight) ? (styleLineHeight * 100) : undefined;
+      const paraLineHeightPct = (styleLineHeight !== undefined && Number.isFinite(styleLineHeight)) ? (styleLineHeight * 100) : undefined;
       const fingerprint = this._fingerprintRuns(runs);
       const cached = this._shapeCache.get(pi);
       const defaultFamily = paragraphStyles[pi]?.fontFamily || this._svgRenderer._fontFamily;
@@ -181,6 +264,7 @@ export class LayoutEngine {
     const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 0;
     const bottomReserve = this._reserveBottom ? fontSize : 0;
 
+    /** @type {{ box: Box, lines: LineEntry[] }[]} */
     const boxResults = boxes.map(box => ({ box, lines: [] }));
     let boxIdx = 0;
     let usedHeight = 0;
@@ -358,13 +442,193 @@ export class LayoutEngine {
    * @param {number} fontSize
    * @param {number} lineHeightPct
    * @param {{ fontSize: number, fontFamily: string }[]} [paragraphStyles]
-   * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[] }>}
+   * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[], overflow?: boolean }>}
    */
   async renderToContainer(container, paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
     const result = await this.renderStory(paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles);
     container.innerHTML = '';
     container.appendChild(result.svg);
     return result;
+  }
+
+  /**
+   * Resolve layout calculations: GPOS word/glyph positioning, absolute coordinates,
+   * and build the interactive cursor lineMap.
+   *
+   * @param {{ box: Box, lines: LineEntry[] }[]} boxResults
+   * @param {number} baseFontSize
+   * @param {number} baseLineHeightPct
+   * @returns {{ textBoxes: any[], lineMap: LineMapEntry[] }}
+   */
+  resolveLayout(boxResults, baseFontSize, baseLineHeightPct) {
+    const padding = this._svgRenderer.padding ?? this._svgRenderer._padding ?? 0;
+    const defaultLineHeight = baseFontSize * (baseLineHeightPct / 100);
+    const defaultParaSpacing = defaultLineHeight * 0.5;
+
+    const textBoxes = [];
+    const lineMap = [];
+    let globalLineIdx = 0;
+
+    for (const { box, lines } of boxResults) {
+      const resolvedLines = [];
+      let y = box.y + padding + (lines[0]?.fontSize ? lines[0].fontSize * 0.8 : baseFontSize * 0.8);
+
+      for (let i = 0; i < lines.length; i++) {
+        const entry = lines[i];
+        const entryFontSize = entry.fontSize ?? baseFontSize;
+        const entryFontFamily = entry.fontFamily || this.defaultFamily || 'EB Garamond';
+        const lineHeight = entry.lineHeight || defaultLineHeight;
+        const paraSpacing = entry.paraSpacing || defaultParaSpacing;
+        const { words, isLastInPara, text, hyphenated, hyphenAdvance } = entry;
+
+        if (i > 0 && lines[i - 1].isLastInPara) {
+          y += paraSpacing;
+        }
+
+        const mergedGlyphs = mergeLigatureClusters(entry.glyphs || []);
+        const wordGroups = splitGlyphsIntoWords(mergedGlyphs, text, entry.endChar);
+
+        let wx = box.x + padding;
+        let wordIndex = 0;
+        const wordDataArr = [];
+
+        for (let wi = 0; wi < wordGroups.length; wi++) {
+          const group = wordGroups[wi];
+          let absX = wx;
+
+          if (group.glyphs.length > 0) {
+            const word = words[wordIndex++];
+            if (word) {
+              absX = box.x + padding + word.x;
+              wx = absX;
+            }
+          }
+
+          // Render each glyph in the word
+          const glyphData = [];
+          for (let gi = 0; gi < group.glyphs.length; gi++) {
+            const g = group.glyphs[gi];
+            const nextCl = gi + 1 < group.glyphs.length
+              ? group.glyphs[gi + 1].cl
+              : group.endCl;
+            const rawText = text.slice(g.cl, nextCl).replace(/\u00AD/g, '');
+            const family = g.style.fontFamily || entryFontFamily;
+            const variant = this.variantForStyle(g.style);
+            
+            glyphData.push({
+              text: rawText,
+              absX: wx + g.dx,
+              absY: y - g.dy,
+              ax: g.ax,
+              ay: g.ay || 0,
+              dx: g.dx || 0,
+              dy: g.dy || 0,
+              style: g.style || {},
+              gid: g.gid,
+              fontFamily: family,
+              variant: variant,
+            });
+
+            wx += g.ax;
+          }
+
+          // Add synthetic hyphen glyph for hyphenated line breaks
+          const isLastWord = wi === wordGroups.length - 1;
+          if (isLastWord && hyphenated && glyphData.length > 0) {
+            const lastGStyle = glyphData[glyphData.length - 1].style;
+            const family = lastGStyle.fontFamily || entryFontFamily;
+            const variant = this.variantForStyle(lastGStyle);
+            glyphData.push({
+              text: '-',
+              absX: wx,
+              absY: y,
+              ax: hyphenAdvance || 0,
+              dx: 0,
+              dy: 0,
+              style: lastGStyle,
+              fontFamily: family,
+              variant: variant,
+            });
+          }
+
+          // Process spaces following this word
+          if (group.spaceGlyphs.length > 0) {
+            const nextWord = words[wordIndex];
+            let spaceAdvance = 0;
+            if (nextWord) {
+              const totalGap = (box.x + padding + nextWord.x) - wx;
+              spaceAdvance = totalGap / group.spaceGlyphs.length;
+            }
+
+            for (const sg of group.spaceGlyphs) {
+              if (nextWord) {
+                wx += spaceAdvance;
+              } else {
+                wx += sg.ax;
+              }
+            }
+          }
+
+          const wordObj = words[wordIndex - 1];
+          wordDataArr.push({
+            x: wordObj ? wordObj.x : 0,
+            absX,
+            fragments: (wordObj?.fragments || []).map(frag => {
+              const family = frag.style.fontFamily || entryFontFamily;
+              const variant = this.variantForStyle(frag.style);
+              return {
+                text: frag.text,
+                style: frag.style || {},
+                absX,
+                fontFamily: family,
+                variant: variant,
+              };
+            }),
+            glyphData,
+          });
+        }
+
+        resolvedLines.push({
+          words: wordDataArr,
+          y,
+          fontSize: entryFontSize,
+          fontFamily: entryFontFamily,
+          lineHeight,
+          isLastInPara,
+          paraSpacing,
+          hyphenated,
+          hyphenAdvance,
+          text,
+          endChar: entry.endChar,
+          paraIndex: entry.paraIndex,
+        });
+
+        // Compute positions for the lineMap
+        const baseX = box.x + padding;
+        const positions = buildPositions(entry, baseX);
+
+        lineMap.push({
+          lineIndex: globalLineIdx++,
+          paraIndex: entry.paraIndex,
+          positions,
+          colX: box.x,
+          boxY: box.y,
+          boxWidth: box.width,
+          boxHeight: box.height,
+          y,
+          fontSize: entryFontSize,
+        });
+
+        y += lineHeight;
+      }
+
+      textBoxes.push({
+        box,
+        lines: resolvedLines,
+      });
+    }
+
+    return { textBoxes, lineMap };
   }
 
   /**
@@ -376,13 +640,15 @@ export class LayoutEngine {
    * @param {number} fontSize
    * @param {number} lineHeightPct
    * @param {{ fontSize: number, fontFamily: string }[]} [paragraphStyles]
-   * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[] }>}
+   * @returns {Promise<{ svg: SVGSVGElement, lineMap: LineMapEntry[], overflow?: boolean }>}
    */
   async renderStory(paragraphs, boxes, fontSize, lineHeightPct, paragraphStyles = []) {
     await this.ensureFonts(paragraphs, paragraphStyles);
     const shaped = this.shapeParagraphs(paragraphs, fontSize, paragraphStyles);
     const { boxResults, overflow } = this.flowIntoBoxes(shaped, boxes, fontSize, lineHeightPct);
-    const result = this._svgRenderer.render(boxResults, fontSize, lineHeightPct);
+    const resolvedLayout = this.resolveLayout(boxResults, fontSize, lineHeightPct);
+    /** @type {{ svg: SVGSVGElement, lineMap: LineMapEntry[], overflow?: boolean }} */
+    const result = this._svgRenderer.render(resolvedLayout);
     result.overflow = overflow;
     return result;
   }
@@ -420,15 +686,4 @@ export class LayoutEngine {
   }
 }
 
-/**
- * @param {number} baseFontSize
- * @param {import('./paragraph-style.js').ParagraphStyle[]} paragraphStyles
- * @returns {{ fontSize: number, fontFamily: string }[]}
- */
-export function buildParagraphLayoutStyles(baseFontSize, paragraphStyles) {
-  void baseFontSize;
-  return paragraphStyles.map((style) => ({
-    fontSize: style.fontSize,
-    fontFamily: style.fontFamily,
-  }));
-}
+

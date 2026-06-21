@@ -26,6 +26,15 @@ export class FontRegistry {
   }
 
   /**
+   * Get all loaded font buffers.
+   * @returns {Record<string, Uint8Array>}
+   */
+  get buffers() {
+    return this._buffers;
+  }
+
+
+  /**
    * Load a font from a URL and register variants.
    * @param {string} family
    * @param {string} url

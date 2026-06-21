@@ -11,7 +11,7 @@ import {
   loadParagraphStyles,
   extFromMime,
 } from '../../document-store/lib/document-store.js';
-import { mergeLigatureClusters, splitGlyphsIntoWords } from '../../story-editor/lib/positions.js';
+import { emptyImagePlaceholder } from './svg-renderer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -29,16 +29,7 @@ const DEFAULT_LAYOUT = {
   lineHeight: 138,
 };
 
-/** Generate a simple SVG data URL as a placeholder for empty image frames. */
-function _emptyImagePlaceholder() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
-    <rect width="200" height="150" fill="#e0ddd5" stroke="#b0ab9f" stroke-width="1"/>
-    <line x1="0" y1="0" x2="200" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
-    <line x1="200" y1="0" x2="0" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
-    <text x="100" y="80" text-anchor="middle" fill="#8a857a" font-size="14" font-family="sans-serif">Image</text>
-  </svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
+
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -179,7 +170,7 @@ export async function layoutDocument(engine, docPath, opts = {}) {
   }
 
   const allPages = [];
-  const fontFamily = engine._svgRenderer._fontFamily || 'EB Garamond';
+  const fontFamily = engine.defaultFamily || 'EB Garamond';
 
   for (const spreadId of spreadIds) {
     const spreadPages = await _layoutSpread(engine, docPath, spreadId, opts);
@@ -227,10 +218,10 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
           imgWidth = meta.width;
           imgHeight = meta.height;
         } else {
-          imageUrl = _emptyImagePlaceholder();
+          imageUrl = emptyImagePlaceholder();
         }
       } else {
-        imageUrl = frame.imageUrl || _emptyImagePlaceholder();
+        imageUrl = frame.imageUrl || emptyImagePlaceholder();
       }
       imageBoxes.push({ id: frame.id, x: frame.x, y: frame.y, width: frame.width, height: frame.height, imageUrl, assetRef: frame.assetRef, placement: frame.placement, imgWidth, imgHeight });
     } else {
@@ -245,7 +236,7 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
   // Shape + flow each story — collect boxResults (no SVG rendered)
   // boxResults: { box, lines }[]
   // We accumulate all box results keyed by box id.
-  const boxLineMap = new Map(); // boxId -> LineData[]
+  const boxLineMap = new Map(); // boxId -> { box, lines }
 
   for (const [storyRef, boxIds] of storyBoxMap.entries()) {
     const storyBoxList = boxIds
@@ -262,71 +253,9 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
     const shaped = engine.shapeParagraphs(story, fontSize, layoutStyles);
     const { boxResults } = engine.flowIntoBoxes(shaped, storyBoxList, fontSize, lineHeight);
 
-    const padding = engine._svgRenderer.padding ?? engine._svgRenderer._padding ?? 0;
-
-    for (const { box, lines } of boxResults) {
-      // Convert LineEntry[] -> LineData[]
-      const lineDataArr = [];
-      let y = box.y + padding + (lines[0]?.fontSize ?? fontSize);
-
-      for (let i = 0; i < lines.length; i++) {
-        const entry = lines[i];
-        const entryFontSize = entry.fontSize ?? fontSize;
-        const entryFontFamily = entry.fontFamily || engine._svgRenderer._fontFamily || 'EB Garamond';
-        const lh = entry.lineHeight ?? (entryFontSize * (lineHeight / 100));
-        const paraSpacing = entry.paraSpacing ?? (lh * 0.5);
-
-        if (i > 0 && lines[i - 1].isLastInPara) y += paraSpacing;
-
-        // Convert words (justified WordEntry[]) -> WordData[]
-        // Per-glyph advances let the PDF renderer reproduce exact GPOS kerning.
-        const mergedGlyphs = mergeLigatureClusters(entry.glyphs || []);
-        const wordGroups = splitGlyphsIntoWords(mergedGlyphs, entry.text, entry.endChar);
-
-        const wordDataArr = (entry.words || []).map((word, wi) => {
-          const group = wordGroups[wi] || { glyphs: [], endCl: entry.endChar };
-          const isLastWord = wi === (entry.words || []).length - 1;
-
-          // Build per-glyph rendering data: {text, ax, dx, style}
-          const glyphData = group.glyphs.map((g, gi) => {
-            const nextCl = gi + 1 < group.glyphs.length
-              ? group.glyphs[gi + 1].cl
-              : group.endCl;
-            const rawText = entry.text.slice(g.cl, nextCl).replace(/\u00AD/g, '');
-            return { text: rawText, ax: g.ax, ay: g.ay || 0, dx: g.dx || 0, dy: g.dy || 0, style: g.style || {} };
-          });
-
-          // Add synthetic hyphen glyph for hyphenated line breaks
-          if (isLastWord && entry.hyphenated && glyphData.length > 0) {
-            glyphData.push({ text: '-', ax: entry.hyphenAdvance || 0, dx: 0,
-              style: glyphData[glyphData.length - 1].style });
-          }
-
-          return {
-            x: word.x,
-            fragments: (word.fragments || []).map(frag => ({
-              text: frag.text,
-              style: frag.style || {},
-              x: word.x,
-            })),
-            glyphData,
-          };
-        });
-
-        lineDataArr.push({
-          words: wordDataArr,
-          y,
-          fontSize: entryFontSize,
-          fontFamily: entryFontFamily,
-          lineHeight: lh,
-          isLastInPara: entry.isLastInPara,
-          paraSpacing,
-        });
-
-        y += lh;
-      }
-
-      boxLineMap.set(box.id ?? JSON.stringify(box), { box, lines: lineDataArr });
+    const resolved = engine.resolveLayout(boxResults, fontSize, lineHeight);
+    for (const resolvedBox of resolved.textBoxes) {
+      boxLineMap.set(resolvedBox.box.id ?? JSON.stringify(resolvedBox.box), resolvedBox);
     }
   }
 
@@ -377,7 +306,9 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
             y: l.y,
             words: l.words.map(w => ({
               ...w,
-              fragments: w.fragments.map(f => ({ ...f })),
+              absX: w.absX - pageX,
+              fragments: w.fragments.map(f => ({ ...f, absX: f.absX - pageX })),
+              glyphData: (w.glyphData || []).map(g => ({ ...g, absX: g.absX - pageX })),
             })),
           }));
           const pageTb = { box: localBox, lines: localLines };

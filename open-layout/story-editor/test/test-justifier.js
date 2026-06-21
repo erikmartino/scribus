@@ -86,4 +86,35 @@ describe('justifyLine', () => {
     assert.ok(bX2 !== undefined, 'B should appear in second layout');
     assert.equal(bX1, bX2, 'B position must not shift when appending a word after it');
   });
+
+  it('preserves gapAfter when there is a style change inside the next word', () => {
+    // text is "of   Typography" where "T" is regular, "ypography" is italic
+    const text = 'of   Typography';
+    const line = {
+      glyphs: [
+        { cl: 0, ax: 10, style: { bold: false, italic: false } }, // o
+        { cl: 1, ax: 10, style: { bold: false, italic: false } }, // f
+        { cl: 2, ax: 5, style: { bold: false, italic: false } },  // space
+        { cl: 3, ax: 5, style: { bold: false, italic: false } },  // space
+        { cl: 4, ax: 5, style: { bold: false, italic: false } },  // space
+        { cl: 5, ax: 10, style: { bold: false, italic: false } }, // T
+        { cl: 6, ax: 10, style: { bold: false, italic: true } },  // y
+        { cl: 7, ax: 10, style: { bold: false, italic: true } },  // p
+        { cl: 8, ax: 10, style: { bold: false, italic: true } },  // o
+        { cl: 9, ax: 10, style: { bold: false, italic: true } },  // g
+        { cl: 10, ax: 10, style: { bold: false, italic: true } }, // r
+        { cl: 11, ax: 10, style: { bold: false, italic: true } }, // a
+        { cl: 12, ax: 10, style: { bold: false, italic: true } }, // p
+        { cl: 13, ax: 10, style: { bold: false, italic: true } }, // h
+        { cl: 14, ax: 10, style: { bold: false, italic: true } }, // y
+      ],
+      endChar: 15,
+      hyphenated: false,
+    };
+
+    const words = justifyLine(line, text, 200, 4, true);
+    assert.equal(words.length, 2);
+    assert.equal(words[0].gapAfter, 15); // should be sum of the three spaces (3 * 5 = 15)
+    assert.equal(words[1].x, 35); // 20 width of "of" + 15 gapAfter
+  });
 });

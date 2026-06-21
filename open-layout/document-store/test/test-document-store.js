@@ -210,6 +210,22 @@ describe('serializeStory', () => {
     const result = serializeStory('s', editor);
     assert.equal(result.paragraphs[0].styleRef, 'body');
   });
+
+  it('serializes run-level fontSize and paragraph-level formatting', () => {
+    const editor = {
+      story: [
+        [{ text: 'Text', style: { bold: false, italic: false, fontFamily: '', fontSize: 32 } }],
+      ],
+      paragraphStyles: [
+        { styleRef: 'custom', fontSize: 24, fontFamily: 'Georgia', lineHeight: 1.6 },
+      ],
+    };
+    const result = serializeStory('s', editor);
+    assert.equal(result.paragraphs[0].runs[0].style.fontSize, 32);
+    assert.equal(result.paragraphs[0].fontSize, 24);
+    assert.equal(result.paragraphs[0].fontFamily, 'Georgia');
+    assert.equal(result.paragraphs[0].lineHeight, 1.6);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -620,6 +636,37 @@ describe('loadStoryFromStore', () => {
     assert.equal(result.paragraphStyles[0].fontSize, 18);
     assert.equal(result.paragraphStyles[1].styleRef, 'body');
     assert.equal(result.paragraphStyles[1].fontSize, 12);
+  });
+
+  it('loads run-level fontSize and paragraph-level overrides', async () => {
+    const storyJson = {
+      id: 'story-overrides',
+      paragraphs: [
+        {
+          styleRef: 'body',
+          fontSize: 30,
+          fontFamily: 'Roboto',
+          lineHeight: 1.8,
+          runs: [
+            { text: 'Override ', style: { fontSize: 45 } },
+            { text: 'Inherit', style: {} }
+          ]
+        }
+      ]
+    };
+    const paraStyles = [
+      { id: 'body', fontSize: 18, fontFamily: 'EB Garamond', lineHeight: 1.4 }
+    ];
+    fetchMock.on('story-overrides.json', { ok: true, json: storyJson });
+    fetchMock.on('paragraph.aggregate.json', { ok: true, json: paraStyles });
+
+    const result = await loadStoryFromStore('alice/doc', 'story-overrides');
+
+    assert.equal(result.paragraphStyles[0].fontSize, 30);
+    assert.equal(result.paragraphStyles[0].fontFamily, 'Roboto');
+    assert.equal(result.paragraphStyles[0].lineHeight, 1.8);
+    assert.equal(result.story[0][0].style.fontSize, 45);
+    assert.equal(result.story[0][1].style.fontSize, undefined);
   });
 
   it('round-trips styleRef through load then serialize', async () => {

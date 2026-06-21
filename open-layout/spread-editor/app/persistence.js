@@ -13,19 +13,9 @@ import {
   cloneStyle,
   cloneParagraphStyle,
 } from '../lib/story-editor-core.js';
-import { SvgRenderer, getImagePlacement } from '../../doc-renderer/lib/svg-renderer.js';
+import { SvgRenderer, getImagePlacement, emptyImagePlaceholder } from '../../doc-renderer/lib/svg-renderer.js';
 import { buildParagraphLayoutStyles } from '../../story-editor/lib/layout-engine.js';
 
-/** Generate a simple SVG data URL as a placeholder for empty image frames. */
-export function emptyImagePlaceholder() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
-      <rect width="200" height="150" fill="#e0ddd5" stroke="#b0ab9f" stroke-width="1"/>
-      <line x1="0" y1="0" x2="200" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
-      <line x1="200" y1="0" x2="0" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
-      <text x="100" y="80" text-anchor="middle" fill="#8a857a" font-size="14" font-family="sans-serif">Image</text>
-    </svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
 
 export async function loadAllSpreadsMetadata(app) {
   if (!app._spreadsList || app._spreadsList.length === 0) return;
@@ -364,7 +354,7 @@ export async function saveSpread(app) {
 
           // 3. Flow and render text outline paths (using standard text with base64 embedded fonts)
           const renderer = new SvgRenderer({
-            fontFamily: app.engine._svgRenderer._fontFamily || 'EB Garamond',
+            fontFamily: app.engine.defaultFamily || 'EB Garamond',
             useOutlines: false,
           });
 
@@ -384,7 +374,8 @@ export async function saveSpread(app) {
             const { boxResults } = app.engine.flowIntoBoxes(
               shaped, storyBoxes, app._fontSize, app._lineHeight);
 
-            const result = renderer.render(boxResults, app._fontSize, app._lineHeight);
+            const resolvedLayout = app.engine.resolveLayout(boxResults, app._fontSize, app._lineHeight);
+            const result = renderer.render(resolvedLayout);
 
             // Transplant all outline elements (text/images) to our preview SVG
             for (const child of Array.from(result.svg.childNodes)) {
@@ -414,7 +405,7 @@ export async function saveSpread(app) {
             return btoa(binary);
           }
 
-          const buffers = app.engine._fontRegistry._buffers;
+          const buffers = app.engine.fontBuffers;
           if (buffers) {
             for (const [key, buffer] of Object.entries(buffers)) {
               const parts = key.split(':');

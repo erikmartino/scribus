@@ -159,7 +159,7 @@
         try {
           setStatus('Initialising layout engine…');
           const engine = await createLayoutEngine();
-          const renderer = new SvgRenderer({ fontFamily: engine._svgRenderer._fontFamily || 'EB Garamond' });
+          const renderer = new SvgRenderer({ fontFamily: engine.defaultFamily || 'EB Garamond' });
 
           setStatus('Calculating layout…');
           const layoutResult = await layoutDocument(engine, docPath);

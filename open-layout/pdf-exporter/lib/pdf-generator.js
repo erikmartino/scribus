@@ -130,15 +130,6 @@ class IdAllocator {
 }
 
 // ---------------------------------------------------------------------------
-function getFontVariant(style) {
-  const bold = !!style.bold;
-  const italic = !!style.italic;
-  if (bold && italic) return 'bolditalic';
-  if (bold) return 'bold';
-  if (italic) return 'italic';
-  return 'regular';
-}
-
 function getFontAlias(family, variant) {
   const cleanFamily = (family || 'Default').replace(/[^a-zA-Z0-9]/g, '');
   return `F_${cleanFamily}_${variant}`;
@@ -168,9 +159,10 @@ function getFallbackPdfFontName(family, variant) {
 /**
  * @param {import('../../doc-renderer/lib/layout-document.js').PageLayoutData[]} pages
  * @param {string} defaultFamily
+ * @param {import('../../story-editor/lib/layout-engine.js').LayoutEngine} engine
  * @returns {Map<string, { family: string, variant: string, unicodes: Set<number> }>}
  */
-function collectFontData(pages, defaultFamily) {
+function collectFontData(pages, defaultFamily, engine) {
   const fontData = new Map();
   for (const page of pages) {
     for (const { lines } of page.textBoxes) {
@@ -180,7 +172,7 @@ function collectFontData(pages, defaultFamily) {
             if (!frag.text || !frag.text.trim()) continue;
 
             const family = frag.style.fontFamily || defaultFamily;
-            const variant = getFontVariant(frag.style);
+            const variant = engine.variantForStyle(frag.style);
             const alias = getFontAlias(family, variant);
             
             if (!fontData.has(alias)) {
@@ -238,6 +230,12 @@ export function streamDocument(engine, docPath, opts = {}) {
   return readable;
 }
 
+/**
+ * @param {import('../../story-editor/lib/layout-engine.js').LayoutEngine} engine
+ * @param {string} docPath
+ * @param {any} opts
+ * @param {any} writer
+ */
 async function _generatePdf(engine, docPath, opts, writer) {
   const onProgress = opts.onProgress ?? (() => {});
   const onStatusUpdate = opts.onStatusUpdate ?? (() => {});
@@ -272,7 +270,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
 
   // Font objects
   onStatusUpdate('Collecting font usage and character sets…');
-  const fontData = collectFontData(pages, fontFamily);
+  const fontData = collectFontData(pages, fontFamily, engine);
   
   onStatusUpdate('Initialising font subsetter (HarfBuzz)…');
   let subsetter;
@@ -296,29 +294,29 @@ async function _generatePdf(engine, docPath, opts, writer) {
     
     if (subsetter) {
       onStatusUpdate(`Resolving font file: ${data.family} (${data.variant})…`);
-      let ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, data.variant);
+      let ttfBuffer = engine.getFontBuffer(data.family, data.variant);
       if (!ttfBuffer) {
         // Cascade strategy: fallback to regular/best available buffer of same family
-        const hasItalic = !!engine._fontRegistry.getFontBuffer(data.family, 'italic');
-        const hasBold = !!engine._fontRegistry.getFontBuffer(data.family, 'bold');
+        const hasItalic = !!engine.getFontBuffer(data.family, 'italic');
+        const hasBold = !!engine.getFontBuffer(data.family, 'bold');
         
         if (data.variant === 'bolditalic') {
           if (hasItalic) {
-            ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'italic');
+            ttfBuffer = engine.getFontBuffer(data.family, 'italic');
             isFauxBold = true;
           } else if (hasBold) {
-            ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'bold');
+            ttfBuffer = engine.getFontBuffer(data.family, 'bold');
             isFauxItalic = true;
           } else {
-            ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'regular');
+            ttfBuffer = engine.getFontBuffer(data.family, 'regular');
             isFauxBold = true;
             isFauxItalic = true;
           }
         } else if (data.variant === 'bold') {
-          ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'regular');
+          ttfBuffer = engine.getFontBuffer(data.family, 'regular');
           isFauxBold = true;
         } else if (data.variant === 'italic') {
-          ttfBuffer = engine._fontRegistry.getFontBuffer(data.family, 'regular');
+          ttfBuffer = engine.getFontBuffer(data.family, 'regular');
           isFauxItalic = true;
         }
       }
@@ -384,7 +382,7 @@ async function _generatePdf(engine, docPath, opts, writer) {
         }
         
         // Shape character or ligature at size 1000 to get exact design-unit widths
-        const glyphs = engine._shaper.shapeRun(text, { 
+        const glyphs = engine.shapeRun(text, { 
           bold: variant.includes('bold'), 
           italic: variant.includes('italic'), 
           fontFamily: family 
@@ -586,7 +584,6 @@ async function _generatePdf(engine, docPath, opts, writer) {
 
     // 5b. Build content stream
     onStatusUpdate(`Assembling page ${pi + 1} content streams…`);
-    const padding = 16; // matches SvgRenderer._padding default
     let ops = '';
 
     // Render interleaved frames (maintains original depth order)
@@ -627,75 +624,37 @@ async function _generatePdf(engine, docPath, opts, writer) {
         ops += `/${alias} Do\n`;
         ops += `Q\n`;
       } else {
-        const { box, lines } = frame.data;
+        const { lines } = frame.data;
         for (const line of lines) {
           const pdfY = pageHeight - line.y;
           for (const word of line.words) {
             if (word.glyphData && word.glyphData.length > 0) {
-              // Per-glyph positioning: uses HarfBuzz advances including GPOS kerning,
-              // so the PDF matches the SVG renderer exactly.
-              let xOffset = 0;
               for (const g of word.glyphData) {
-                let actualAdvance = g.ax;
                 if (g.text && g.text.trim()) {
-                  const family = g.style.fontFamily || fontFamily;
-                  const variant = getFontVariant(g.style);
+                  const family = g.fontFamily;
+                  const variant = g.variant;
                   const alias = getFontAlias(family, variant);
-                  const absX = box.x + padding + word.x + xOffset + g.dx;
+                  const absX = g.absX;
                   const fontInfo = fontMap.get(alias);
                   const useLigatures = !!fontInfo?.subsetBytes;
                   const isFauxBold = !!fontInfo?.isFauxBold;
                   const isFauxItalic = !!fontInfo?.isFauxItalic;
                   ops += textOp(g.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
-                  
-                  const isMappedLigature = useLigatures && ['ffi', 'ffl', 'ff', 'fi', 'fl'].includes(g.text);
-                  if (!isMappedLigature && g.text.length > 1) {
-                    // Sum the individual widths of the characters in the font
-                    let sumWidths = 0;
-                    for (let i = 0; i < g.text.length; i++) {
-                      const charCode = g.text.charCodeAt(i);
-                      const wArray = fontInfo?.widths || [];
-                      const wVal = (charCode >= 32 && charCode <= 244)
-                        ? (wArray[charCode - 32] ?? 500)
-                        : 500;
-                      sumWidths += wVal;
-                    }
-                    actualAdvance = sumWidths * (line.fontSize / 1000);
-                  }
                 }
-                xOffset += actualAdvance;
               }
             } else {
-              // Fallback: fragment-level positioning (no intra-word kerning)
-              let xOffset = 0;
+              // Fallback: fragment-level positioning
               for (const frag of word.fragments) {
                 if (!frag.text || !frag.text.trim()) continue;
-                const family = frag.style.fontFamily || fontFamily;
-                const variant = getFontVariant(frag.style);
+                const family = frag.fontFamily;
+                const variant = frag.variant;
                 const alias = getFontAlias(family, variant);
-                const absX = box.x + padding + word.x + xOffset;
+                const absX = frag.absX;
                 const fontInfo = fontMap.get(alias);
                 const useLigatures = !!fontInfo?.subsetBytes;
                 const isFauxBold = !!fontInfo?.isFauxBold;
                 const isFauxItalic = !!fontInfo?.isFauxItalic;
                 ops += textOp(frag.text, alias, line.fontSize, absX, pdfY, useLigatures, isFauxBold, isFauxItalic);
-
-                // Estimate fragment width for fallback positioning
-                // This is a rough estimate; per-glyph path is preferred.
-                const vk = engine._fontRegistry.variantForStyle(frag.style);
-                const fontEntry = engine._shaper._resolveFontEntry(family, vk);
-                if (fontEntry) {
-                  const scale = line.fontSize / fontEntry.upem;
-                  const buffer = engine._hb.createBuffer();
-                  buffer.addText(frag.text);
-                  buffer.guessSegmentProperties();
-                  engine._hb.shape(fontEntry.hbFont, buffer);
-                  const glyphs = buffer.json(fontEntry.hbFont);
-                  buffer.destroy();
-                  xOffset += glyphs.reduce((sum, g) => sum + (g.ax || 0) * scale, 0);
-                } else {
-                  xOffset += frag.text.length * (line.fontSize * 0.5);
-                }
               }
             }
           }

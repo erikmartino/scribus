@@ -75,15 +75,17 @@ export function justifyLine(line, text, innerWidth, hyphenAdvance, isLastLine) {
         flushFrag(g.cl);
       }
       if (fragStart < 0) {
+        const isNewWord = curWord.fragments.length === 0 && curWord.width === 0;
+        if (isNewWord) {
+          if (words.length > 0) {
+            words[words.length - 1].gapAfter = currentGap;
+          } else {
+            x = currentGap; // Push the first word's start X
+          }
+          currentGap = 0;
+        }
         fragStart = g.cl;
         fragStyle = g.style;
-        // This is the start of a word.
-        if (words.length > 0) {
-          words[words.length - 1].gapAfter = currentGap;
-        } else {
-          x = currentGap; // Push the first word's start X
-        }
-        currentGap = 0;
       }
       curWord.width += g.ax;
     }

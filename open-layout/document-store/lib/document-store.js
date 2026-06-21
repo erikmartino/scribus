@@ -28,12 +28,26 @@ export function serializeStory(id, editor) {
         ...(run.style.bold ? { bold: true } : {}),
         ...(run.style.italic ? { italic: true } : {}),
         ...(run.style.fontFamily ? { fontFamily: run.style.fontFamily } : {}),
+        ...(run.style.fontSize ? { fontSize: run.style.fontSize } : {}),
       },
     }));
-    paragraphs.push({
-      styleRef: pStyles[pi]?.styleRef || 'body',
+    const pStyle = pStyles[pi];
+    const paraObj = {
+      styleRef: pStyle?.styleRef || 'body',
       runs,
-    });
+    };
+    if (pStyle) {
+      if (pStyle.fontSize !== undefined) {
+        paraObj.fontSize = pStyle.fontSize;
+      }
+      if (pStyle.fontFamily !== undefined) {
+        paraObj.fontFamily = pStyle.fontFamily;
+      }
+      if (pStyle.lineHeight !== undefined) {
+        paraObj.lineHeight = pStyle.lineHeight;
+      }
+    }
+    paragraphs.push(paraObj);
   }
 
   return { id, paragraphs };
@@ -348,9 +362,9 @@ export async function loadStoryFromStore(docPath, storyId, options = {}) {
 
     paragraphStyles.push(cloneParagraphStyle({
       styleRef,
-      fontSize: def.fontSize ?? baseFontSize,
-      fontFamily: def.fontFamily ?? 'EB Garamond',
-      lineHeight: def.lineHeight,
+      fontSize: para.fontSize ?? def.fontSize ?? baseFontSize,
+      fontFamily: para.fontFamily ?? def.fontFamily ?? 'EB Garamond',
+      lineHeight: para.lineHeight ?? def.lineHeight,
     }));
   }
 

@@ -8,7 +8,7 @@
 
 /**
  * @typedef {import('./text-extract.js').Story} Story
- * @typedef {import('../../doc-renderer/lib/svg-renderer.js').LineMapEntry} LineMapEntry
+ * @typedef {import('./layout-engine.js').LineMapEntry} LineMapEntry
  */
 
 /**

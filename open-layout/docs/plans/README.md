@@ -15,6 +15,10 @@ All implementation planning should live under `docs/plans/`.
 
 Completed plans are removed per convention. Previously completed:
 
+- `2026-06-20-fix-ligature-word-style-boundary-spacing-plan.md` — Fix spacing gap collapse on style boundary inside words (completed).
+- `2026-06-20-save-font-size-and-line-height-plan.md` — Save paragraph-level font size and line height overrides, and character-level font size overrides to store (completed).
+- `2026-06-20-slim-renderers-and-unify-layout-plan.md` — Slim down SvgRenderer and PDF exporter, unifying GPOS, coordinate math and cursor lineMap inside LayoutEngine (completed).
+- `2026-06-20-align-printout-layout-implementation-plan.md` — Align PDF exporter layout engine and padding calculations with spread editor (completed).
 - `spread-editor-multiline-font-size-selection-plan.md` — Preserve selection and apply font size/line height to all selected paragraphs (completed).
 - `prevent-cascading-image-loads-on-drag-plan.md` — Prevent cascading image loads in sidebar panels during dragging (completed).
 - `image-drag-full-bounds-mode3-plan.md` — Drag Full Image Bounds in Edit Content Mode (completed).

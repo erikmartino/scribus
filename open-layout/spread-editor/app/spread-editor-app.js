@@ -25,10 +25,9 @@ import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
 import { registerTextCommands } from '../../app-shell/lib/text-commands.js';
 import { createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
-import { decorateSpreadForEditor, getImagePlacement } from '../../doc-renderer/lib/svg-renderer.js';
+import { decorateSpreadForEditor, getImagePlacement, emptyImagePlaceholder } from '../../doc-renderer/lib/svg-renderer.js';
 
 import {
-  emptyImagePlaceholder,
   loadAllSpreadsMetadata,
   loadFromStore,
   saveSpread,

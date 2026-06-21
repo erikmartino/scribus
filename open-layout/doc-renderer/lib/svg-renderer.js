@@ -1,12 +1,5 @@
 // svg-renderer.js — laid-out paragraphs -> SVG element with columns/boxes
 
-import { buildPositions, mergeLigatureClusters, splitGlyphsIntoWords } from '../../story-editor/lib/positions.js';
-
-/**
- * @typedef {import('../../story-editor/lib/positions.js').CursorPosition} CursorPosition
- * @typedef {import('../../story-editor/lib/positions.js').LineEntry} LineEntry
- */
-
 /**
  * A box defining a rectangular region for text flow.
  * @typedef {object} Box
@@ -14,20 +7,6 @@ import { buildPositions, mergeLigatureClusters, splitGlyphsIntoWords } from '../
  * @property {number} y      — top edge
  * @property {number} width
  * @property {number} height
- */
-
-/**
- * A line-map entry produced by the renderer, linking a rendered line
- * back to its paragraph position and providing cursor-position data.
- * @typedef {object} LineMapEntry
- * @property {number}           lineIndex  — global index in the flat lineMap array
- * @property {number}           paraIndex  — which paragraph this line belongs to
- * @property {CursorPosition[]} positions  — per-character cursor positions
- * @property {number}           colX       — x of the containing box
- * @property {number}           boxY       — y of the containing box
- * @property {number}           boxWidth   — width of the containing box
- * @property {number}           boxHeight  — height of the containing box
- * @property {number}           y          — baseline y of this line in SVG coordinates
  */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -110,6 +89,18 @@ export function getImagePlacement(box) {
   return { w, h, x, y };
 }
 
+/** Generate a simple SVG data URL as a placeholder for empty image frames. */
+export function emptyImagePlaceholder() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
+    <rect width="200" height="150" fill="#e0ddd5" stroke="#b0ab9f" stroke-width="1"/>
+    <line x1="0" y1="0" x2="200" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
+    <line x1="200" y1="0" x2="0" y2="150" stroke="#b0ab9f" stroke-width="0.5"/>
+    <text x="100" y="80" text-anchor="middle" fill="#8a857a" font-size="14" font-family="sans-serif">Image</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+
 export class SvgRenderer {
   /**
    * @param {{ fontFamily: string, padding?: number }} options
@@ -137,21 +128,15 @@ export class SvgRenderer {
   }
 
   /**
-   * Render lines into arbitrarily placed boxes.
+   * Render lines into SVG elements using pre-calculated resolved layout data.
    *
-   * @param {{ box: Box, lines: LineEntry[] }[]} boxResults
-   *   Each entry has a `box` and `lines` (justified line entries).
-   * @param {number} fontSize
-   * @param {number} lineHeightPct
-   * @returns {{ svg: SVGSVGElement, lineMap: LineMapEntry[] }}
+   * @param {{ textBoxes: any[], lineMap: any[] }} resolvedLayout
+   * @returns {{ svg: SVGSVGElement, lineMap: any[] }}
    */
-  render(boxResults, fontSize, lineHeightPct) {
-    const defaultLineHeight = fontSize * (lineHeightPct / 100);
-    const defaultParaSpacing = defaultLineHeight * 0.5;
-
+  render(resolvedLayout) {
     // Compute SVG bounds from boxes
     let maxX = 0, maxY = 0;
-    for (const { box } of boxResults) {
+    for (const { box } of resolvedLayout.textBoxes) {
       maxX = Math.max(maxX, box.x + box.width);
       maxY = Math.max(maxY, box.y + box.height);
     }
@@ -162,7 +147,7 @@ export class SvgRenderer {
     svg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
 
     // Draw box backgrounds
-    for (const { box } of boxResults) {
+    for (const { box } of resolvedLayout.textBoxes) {
       const bg = document.createElementNS(SVG_NS, 'rect');
       bg.setAttribute('x', box.x);
       bg.setAttribute('y', box.y);
@@ -172,155 +157,64 @@ export class SvgRenderer {
       svg.appendChild(bg);
     }
 
-    // Render lines in each box, building lineMap
-    const lineMap = [];
-    let globalLineIdx = 0;
-
-    for (const { box, lines } of boxResults) {
-      let y = box.y + this._padding + (lines[0]?.fontSize ? lines[0].fontSize * 0.8 : fontSize * 0.8);
-
-      for (let i = 0; i < lines.length; i++) {
-        const entry = lines[i];
-        const entryFontSize = entry.fontSize ?? fontSize;
-        const entryFontFamily = entry.fontFamily || this._fontFamily;
-        const lineHeight = entry.lineHeight || defaultLineHeight;
-        const paraSpacing = entry.paraSpacing || defaultParaSpacing;
-        const { words, isLastInPara } = entry;
-        if (i > 0 && lines[i - 1].isLastInPara) y += paraSpacing;
-
+    for (const { box, lines } of resolvedLayout.textBoxes) {
+      for (const line of lines) {
         if (this._useOutlines && this._fontRegistry) {
-          const { glyphs: rawGlyphs, words, text, hyphenated } = entry;
-          const glyphs = mergeLigatureClusters(rawGlyphs);
-          const wordGroups = splitGlyphsIntoWords(glyphs, text, entry.endChar);
-
-          let wx = box.x + this._padding;
-          let wordIndex = 0;
-
-          for (let wi = 0; wi < wordGroups.length; wi++) {
-            const group = wordGroups[wi];
-
-            if (group.glyphs.length > 0) {
-              const word = words[wordIndex++];
-              if (word) {
-                wx = box.x + this._padding + word.x;
-              }
-            }
-
+          for (const word of line.words) {
             // Draw inline images in the word (if any)
-            if (group.glyphs.length > 0 && words[wordIndex - 1]) {
-              const wordObj = words[wordIndex - 1];
-              for (const frag of wordObj.fragments) {
-                if (frag.style && frag.style.inlineImage) {
-                  const imgSize = entryFontSize * 3;
-                  const imgX = box.x + this._padding + wordObj.x;
-                  const imgY = y - entryFontSize;
-                  const imgEl = document.createElementNS(SVG_NS, 'image');
-                  imgEl.setAttribute('href', frag.style.inlineImage);
-                  imgEl.setAttribute('x', imgX.toFixed(2));
-                  imgEl.setAttribute('y', imgY.toFixed(2));
-                  imgEl.setAttribute('width', String(imgSize));
-                  imgEl.setAttribute('height', String(imgSize));
-                  imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-                  imgEl.setAttribute('style', 'pointer-events:none');
-                  svg.appendChild(imgEl);
-                }
+            for (const frag of word.fragments) {
+              if (frag.style && frag.style.inlineImage) {
+                const imgSize = line.fontSize * 3;
+                const imgX = word.absX;
+                const imgY = line.y - line.fontSize;
+                const imgEl = document.createElementNS(SVG_NS, 'image');
+                imgEl.setAttribute('href', frag.style.inlineImage);
+                imgEl.setAttribute('x', imgX.toFixed(2));
+                imgEl.setAttribute('y', imgY.toFixed(2));
+                imgEl.setAttribute('width', String(imgSize));
+                imgEl.setAttribute('height', String(imgSize));
+                imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                imgEl.setAttribute('style', 'pointer-events:none');
+                svg.appendChild(imgEl);
               }
             }
 
-            // Render each glyph in the word
-            for (let gi = 0; gi < group.glyphs.length; gi++) {
-              const g = group.glyphs[gi];
-              const family = g.style.fontFamily || entryFontFamily;
-              const variant = this._fontRegistry.variantForStyle(g.style);
-              const fontEntry = this._fontRegistry.getFont(family, variant);
+            // Draw glyphs
+            for (const g of (word.glyphData || [])) {
+              if (g.text && g.text.trim()) {
+                const family = g.style.fontFamily || line.fontFamily;
+                const variant = this._fontRegistry.variantForStyle(g.style);
+                const fontEntry = this._fontRegistry.getFont(family, variant);
 
-              if (fontEntry && fontEntry.hbFont) {
-                const pathData = fontEntry.hbFont.glyphToPath(g.gid);
-                if (pathData) {
-                  const scale = entryFontSize / fontEntry.upem;
-                  const gx = wx + g.dx;
-                  const gy = y - g.dy;
-
-                  const pathEl = document.createElementNS(SVG_NS, 'path');
-                  pathEl.setAttribute('d', pathData);
-                  pathEl.setAttribute('fill', '#222');
-                  pathEl.setAttribute('transform', `translate(${gx.toFixed(2)}, ${gy.toFixed(2)}) scale(${scale.toFixed(6)}, ${(-scale).toFixed(6)})`);
-                  svg.appendChild(pathEl);
-                }
-              }
-
-              wx += g.ax;
-            }
-
-            // Spaces following this word
-            if (group.spaceGlyphs.length > 0) {
-              const nextWord = words[wordIndex];
-              let spaceAdvance = 0;
-              if (nextWord) {
-                const totalGap = (box.x + this._padding + nextWord.x) - wx;
-                spaceAdvance = totalGap / group.spaceGlyphs.length;
-              }
-
-              for (const sg of group.spaceGlyphs) {
-                if (nextWord) {
-                  wx += spaceAdvance;
-                } else {
-                  wx += sg.ax;
-                }
-              }
-            }
-          }
-
-          // Render hyphen if line is hyphenated
-          if (hyphenated && words.length > 0) {
-            const lastGlyph = glyphs[glyphs.length - 1];
-            const lastStyle = lastGlyph ? lastGlyph.style : {};
-            const family = lastStyle.fontFamily || entryFontFamily;
-            const variant = this._fontRegistry.variantForStyle(lastStyle);
-            const fontEntry = this._fontRegistry.getFont(family, variant);
-
-            if (fontEntry && fontEntry.hbFont) {
-              const buf = this._fontRegistry._hb.createBuffer();
-              buf.addText('-');
-              buf.guessSegmentProperties();
-              this._fontRegistry._hb.shape(fontEntry.hbFont, buf);
-              const shapedHyphen = buf.json(fontEntry.hbFont);
-              buf.destroy();
-
-              if (shapedHyphen && shapedHyphen.length > 0) {
-                const hGid = shapedHyphen[0].g;
-                const pathData = fontEntry.hbFont.glyphToPath(hGid);
-                if (pathData) {
-                  const scale = entryFontSize / fontEntry.upem;
-                  const gx = wx;
-                  const gy = y;
-
-                  const pathEl = document.createElementNS(SVG_NS, 'path');
-                  pathEl.setAttribute('d', pathData);
-                  pathEl.setAttribute('fill', '#222');
-                  pathEl.setAttribute('transform', `translate(${gx.toFixed(2)}, ${gy.toFixed(2)}) scale(${scale.toFixed(6)}, ${(-scale).toFixed(6)})`);
-                  svg.appendChild(pathEl);
+                if (fontEntry && fontEntry.hbFont) {
+                  const pathData = fontEntry.hbFont.glyphToPath(g.gid);
+                  if (pathData) {
+                    const scale = line.fontSize / fontEntry.upem;
+                    const pathEl = document.createElementNS(SVG_NS, 'path');
+                    pathEl.setAttribute('d', pathData);
+                    pathEl.setAttribute('fill', '#222');
+                    pathEl.setAttribute('transform', `translate(${g.absX.toFixed(2)}, ${g.absY.toFixed(2)}) scale(${scale.toFixed(6)}, ${(-scale).toFixed(6)})`);
+                    svg.appendChild(pathEl);
+                  }
                 }
               }
             }
           }
         } else {
-          let textEl = this._createTextEl(y, entryFontSize);
+          let textEl = this._createTextEl(line.y, line.fontSize);
 
-          for (const word of words) {
+          for (const word of line.words) {
             for (let fi = 0; fi < word.fragments.length; fi++) {
               const frag = word.fragments[fi];
 
-              // Inline image: render <image> instead of <tspan>
               if (frag.style && frag.style.inlineImage) {
-                // Flush any pending text element
                 if (textEl.childNodes.length > 0) {
                   svg.appendChild(textEl);
-                  textEl = this._createTextEl(y, entryFontSize);
+                  textEl = this._createTextEl(line.y, line.fontSize);
                 }
-                const imgSize = entryFontSize * 3;
-                const imgX = box.x + this._padding + word.x;
-                const imgY = y - entryFontSize;
+                const imgSize = line.fontSize * 3;
+                const imgX = word.absX;
+                const imgY = line.y - line.fontSize;
                 const imgEl = document.createElementNS(SVG_NS, 'image');
                 imgEl.setAttribute('href', frag.style.inlineImage);
                 imgEl.setAttribute('x', imgX.toFixed(2));
@@ -334,8 +228,8 @@ export class SvgRenderer {
               }
 
               const tspan = document.createElementNS(SVG_NS, 'tspan');
-              if (fi === 0) tspan.setAttribute('x', (box.x + this._padding + word.x).toFixed(2));
-              const attrs = svgAttrsForStyle(frag.style, entryFontFamily);
+              if (fi === 0) tspan.setAttribute('x', word.absX.toFixed(2));
+              const attrs = svgAttrsForStyle(frag.style, line.fontFamily);
               for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
               tspan.textContent = frag.text;
               textEl.appendChild(tspan);
@@ -344,27 +238,10 @@ export class SvgRenderer {
 
           svg.appendChild(textEl);
         }
-
-        const baseX = box.x + this._padding;
-        const positions = buildPositions(entry, baseX);
-
-        lineMap.push({
-          lineIndex: globalLineIdx++,
-          paraIndex: entry.paraIndex,
-          positions,
-          colX: box.x,
-          boxY: box.y,
-          boxWidth: box.width,
-          boxHeight: box.height,
-          y,
-          fontSize: entryFontSize,
-        });
-
-        y += lineHeight;
       }
     }
 
-    return { svg, lineMap };
+    return { svg, lineMap: resolvedLayout.lineMap };
   }
 
   /**
@@ -434,7 +311,7 @@ export class SvgRenderer {
                 textEl = this._createTextEl(line.y, line.fontSize);
               }
               const imgSize = line.fontSize * 3;
-              const imgX = box.x + this._padding + word.x;
+              const imgX = word.absX;
               const imgY = line.y - line.fontSize;
               const imgEl = document.createElementNS(SVG_NS, 'image');
               imgEl.setAttribute('href', frag.style.inlineImage);
@@ -450,8 +327,7 @@ export class SvgRenderer {
 
             const tspan = document.createElementNS(SVG_NS, 'tspan');
             if (fi === 0) {
-              const absX = box.x + this._padding + word.x;
-              tspan.setAttribute('x', absX.toFixed(2));
+              tspan.setAttribute('x', word.absX.toFixed(2));
             }
             const attrs = svgAttrsForStyle(frag.style, line.fontFamily);
             for (const [k, v] of Object.entries(attrs)) tspan.setAttribute(k, v);
