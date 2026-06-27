@@ -6,7 +6,7 @@ All implementation planning should live under `docs/plans/`.
 
 ## Active plans
 
-- `story-editor-do-not-implement-yet-plan.md` — Deferred Story Editor roadmap and gap analysis. Not approved for implementation yet.
+None.
 
 
 ## Reference specifications live in `../../specs/`.
