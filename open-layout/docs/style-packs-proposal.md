@@ -62,9 +62,10 @@ Before implementing this design, several architectural and behavioral edge cases
     *   *Option B (Explicit Linking)*: No, inheritance is determined strictly by a parent ID reference (e.g. `parent: "root-normal-id"`). Shadowing only affects what is visible when querying the list of available styles.
 *   **Recommendation**: **Option B**. Explicit ID references are far more robust for serialization and avoid circular loops or name-collision bugs when styles are renamed.
 
-### Ambiguity 2: Style Packs vs. Document Boundary
-*   **Problem**: Do Style Packs live globally in the editor workspace, or are they bound to individual documents?
-*   **Recommendation**: Style Packs should be registered in the document model metadata. This ensures that when a document is saved and loaded via the [document-store](file:///home/martino/git/scribus/open-layout/document-store/), its inheritance chain remains intact.
+### Architectural Boundary: Global vs. Document-Bound Style Packs
+*   **Decision**:
+    *   The **Root Style Pack** and the **HTML Element Style Pack** live globally in the application runtime as read-only presets.
+    *   **All other style packs** live strictly within documents. They are serialized directly inside the document JSON model. This ensures that when a document is saved and loaded via the [document-store](file:///home/martino/git/scribus/open-layout/document-store/), its specific style inheritance configurations are self-contained and fully preserved.
 
 ### Ambiguity 3: Unlinked Styles & Default Fallbacks
 *   **Problem**: If a user creates a new paragraph style `"Sidebar Body"` in a child pack and does *not* assign a parent style, what does it inherit from?
