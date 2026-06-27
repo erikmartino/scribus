@@ -58,10 +58,11 @@ Before implementing this design, several architectural and behavioral edge cases
 
 ### Architectural Boundary: Shadowing vs. Style Inheritance
 *   **Decision**:
+    *   **Style Name as ID**: A style's name is its unique identifier (ID) within its style pack. There are no separate ID fields.
     *   **Shadowing (Name-Based)**: If a child style pack defines a style with the same name as a style in the parent pack, the parent style is hidden (shadowed) from the child pack's namespace.
+    *   **Rename Impact on Shadowing**: Since the style name is the ID, renaming a child style that shadows a parent style will cause the parent style to reappear (become visible again) in the child pack's namespace.
     *   **Unshadowable Root**: The root style has the reserved name `[default]`. The system restricts users from using bracketed names (e.g. `[...]`) for custom styles, ensuring the root default style can never be shadowed.
-    *   **Inheritance (ID-Based)**: Shadowing does not dictate inheritance. A shadowed parent style is often, but not necessarily, the parent of the child style that shadows it.
-    *   **Resolution**: Inheritance is determined strictly by explicit ID reference (e.g. `parent: "root-default"`). This ensures robust serialization and allows a child style to inherit from a completely different parent style (or have no parent) despite shadowing another style by name.
+    *   **Inheritance Reference**: Shadowing does not dictate inheritance. A shadowed parent style is often, but not necessarily, the parent of the child style that shadows it. Inheritance references point to the parent style's name. Renaming a parent style requires updating the `parent` reference strings in its children to prevent broken links.
 
 ### Architectural Boundary: Global vs. Document-Bound Style Packs
 *   **Decision**:
@@ -82,7 +83,7 @@ Before implementing this design, several architectural and behavioral edge cases
 *   **Decision**:
     *   **Property Push-Down**: If a parent style is deleted, all resolved properties of that parent are pushed down (copied) to its immediate child styles.
     *   **No Overrides**: Pushed-down properties do *not* override any existing properties explicitly defined in the child styles.
-    *   **Hierarchy Repointing**: The deleted style is dropped, and the immediate child styles' `parent` references are updated to point to the deleted parent's parent style (the grandparent). If the deleted parent style was a direct child of the root style `[default]`, the child styles' `parent` references are repointed to `root-default`.
+    *   **Hierarchy Repointing**: The deleted style is dropped, and the immediate child styles' `parent` references are updated to point to the deleted parent's parent style (the grandparent). If the deleted parent style was a direct child of the root style `[default]`, the child styles' `parent` references are repointed to `[default]`.
 
 ---
 
@@ -99,7 +100,6 @@ To support serialization in the document store, we propose the following schema 
       "readOnly": true,
       "paragraphStyles": [
         {
-          "id": "root-default",
           "name": "[default]",
           "fontFamily": "Garamond",
           "fontSize": 10,
@@ -114,24 +114,21 @@ To support serialization in the document store, we propose the following schema 
       "readOnly": true,
       "paragraphStyles": [
         {
-          "id": "html-p",
           "name": "p",
-          "parent": "root-default"
+          "parent": "[default]"
         },
         {
-          "id": "html-h1",
           "name": "h1",
           "fontFamily": "Helvetica",
           "fontSize": 24,
           "fontWeight": "bold",
-          "parent": "root-default"
+          "parent": "[default]"
         },
         {
-          "id": "html-code",
           "name": "code",
           "fontFamily": "Courier New",
           "fontSize": 9,
-          "parent": "root-default"
+          "parent": "[default]"
         }
       ]
     },
@@ -141,16 +138,14 @@ To support serialization in the document store, we propose the following schema 
       "readOnly": false,
       "paragraphStyles": [
         {
-          "id": "brand-normal",
           "name": "Normal",
           "fontSize": 12,
-          "parent": "root-default"
+          "parent": "[default]"
         },
         {
-          "id": "brand-heading",
           "name": "h1",
           "fontSize": 20,
-          "parent": "html-h1"
+          "parent": "h1"
         }
       ]
     }
