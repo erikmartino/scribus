@@ -23,8 +23,3 @@ Custom tab stops or indentation rules (`Tab`/`Shift+Tab` formatting) are a non-g
 ### Keyboard Accent Compositions & IME
 Custom handling of composition event loops (`compositionstart`/`compositionend`) and visual preedit text rendering overlays are non-goals. The editor supports only standard native browser keyboard and input event sequences.
 
-## 3. Deferred Performance Goals
-The following performance optimizations for the story editor are deferred:
-*   **Incremental Relayout**: Redrawing and re-shaping only edited paragraphs/lines instead of reflowing the entire story on every keypress.
-*   **Cache Invalidation**: Defining stable cache invalidation rules for paragraph styles vs content changes.
-*   **Performance Metrics**: Establishing typing/selection latency benchmarks and CI guardrail tests to prevent rendering regressions.
