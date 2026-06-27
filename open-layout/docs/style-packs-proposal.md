@@ -196,3 +196,7 @@ To support serialization in the document store, we propose the following schema 
 5.  **Shaping Cache Invalidation**:
     *   *Risk*: Swapping or editing parent style properties changes font parameters, which requires re-evaluating glyph layout.
     *   *Mitigation*: The [LayoutEngine](../story-editor/lib/layout-engine.js) must fully invalidate its shaping cache on style update. Because text layout is highly localized, this operation typically takes only a few milliseconds and does not block the UI thread.
+
+6.  **Missing Style References on Pack Swapping**:
+    *   *Risk*: If a document swaps to a new style pack, some text stories might reference style names (e.g. `"Brand Quote"`) that were defined in the old pack but do not exist in the new pack.
+    *   *Mitigation*: The resolver must gracefully fall back to the root `[default]` style for any text runs referencing unrecognized style names, ensuring rendering does not crash.
