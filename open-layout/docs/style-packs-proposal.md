@@ -198,5 +198,5 @@ To support serialization in the document store, we propose the following schema 
     *   *Mitigation*: The [LayoutEngine](../story-editor/lib/layout-engine.js) must fully invalidate its shaping cache on style update. Because text layout is highly localized, this operation typically takes only a few milliseconds and does not block the UI thread.
 
 6.  **Missing Style References on Pack Swapping**:
-    *   *Risk*: If a document swaps to a new style pack, some text stories might reference style names (e.g. `"Brand Quote"`) that were defined in the old pack but do not exist in the new pack.
-    *   *Mitigation*: The resolver must gracefully fall back to the root `[default]` style for any text runs referencing unrecognized style names, ensuring rendering does not crash.
+    *   *Risk*: If a document swaps to a new style pack, some text stories might reference style names (e.g. `"Brand Quote"`) that were defined in the old pack but do not exist in the new pack. Simply stripping or losing the style reference name leads to data loss.
+    *   *Mitigation*: The system dynamically instantiates a **virtual empty paragraph style** with that name (e.g., `"Brand Quote"`) in the active style pack. This virtual style contains no overrides and points to `[default]` as its parent (meaning it resolves to default parameters). This preserves the styling metadata name on save. If the user subsequently modifies its properties in the style editor, it is promoted to a fully serialized custom style.
