@@ -70,12 +70,13 @@ Before implementing this design, several architectural and behavioral edge cases
 
 ### Architectural Boundary: Inheritance Tree Root (Null Parent)
 *   **Decision**:
-    *   **Mandatory Parent**: All paragraph and character styles must have a parent reference.
+    *   **Mandatory Parent**: All paragraph styles must have a parent reference.
     *   **Root Fallback**: The **Root Paragraph Style** (Garamond 10pt) in the root style pack acts as the "null" parent (the absolute root of the inheritance tree). Any style that does not inherit from another custom style must explicitly set its parent reference to this root style.
 
-### Ambiguity 4: Character Styles Integration
-*   **Problem**: How do character style runs (inline overrides) interact with Style Packs?
-*   **Recommendation**: Style Packs should contain both a `paragraphStyles` collection and a `characterStyles` collection. Character styles should follow the same inheritance/shadowing rules as paragraph styles.
+### Architectural Boundary: Character Styles Excluded from Inheritance
+*   **Decision**:
+    *   **Scope**: This inheritance and style pack hierarchy applies strictly to **Paragraph Styles**.
+    *   **No Character Root / Inheritance**: Character styles (inline overrides) do not require a root style pack or parent/child inheritance relationships. Instead, they act as flat property bags of formatting overrides applied directly on top of the resolved paragraph style.
 
 ---
 
