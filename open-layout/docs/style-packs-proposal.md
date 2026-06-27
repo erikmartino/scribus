@@ -78,6 +78,12 @@ Before implementing this design, several architectural and behavioral edge cases
     *   **Scope**: This inheritance and style pack hierarchy applies strictly to **Paragraph Styles**.
     *   **No Character Root / Inheritance**: Character styles (inline overrides) do not require a root style pack or parent/child inheritance relationships. Instead, they act as flat property bags of formatting overrides applied directly on top of the resolved paragraph style.
 
+### Architectural Boundary: Parent Style Deletion (Push-Down Mitigation)
+*   **Decision**:
+    *   **Property Push-Down**: If a parent style is deleted, all resolved properties of that parent are pushed down (copied) to its immediate child styles.
+    *   **No Overrides**: Pushed-down properties do *not* override any existing properties explicitly defined in the child styles.
+    *   **Hierarchy Repointing**: The deleted style is dropped, and the immediate child styles' `parent` references are updated to point to the deleted parent's parent style (the grandparent). If the deleted parent style was a direct child of the root style `[default]`, the child styles' `parent` references are repointed to `root-default`.
+
 ---
 
 ## 3. Proposed JSON Schema Representation
@@ -161,5 +167,5 @@ To support serialization in the document store, we propose the following schema 
 *   **Decoupled Style Sets**: By swapping the active style pack reference, you can completely restyle a document without altering the text models.
 
 ### Cons & Risks
-*   **Broken Inheritance Chains**: If a parent style pack is deleted or edited, children styles referencing those parents could break. The document model must include validation rules to prevent parent pack deletion if active child references exist.
+*   **Broken Inheritance Chains (Mitigated)**: Swapping or deleting parent style packs could potentially break children styles referencing them. The parent style deletion push-down mechanism completely mitigates this for style deletion.
 *   **Shaping Cache Invalidation**: The [LayoutEngine](file:///home/martino/git/scribus/open-layout/story-editor/lib/layout-engine.js) caches character shaping. Swapping or updating parent style pack properties must trigger a full cache invalidation to re-shape text runs.
