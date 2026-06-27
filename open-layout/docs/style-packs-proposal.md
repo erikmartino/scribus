@@ -66,7 +66,7 @@ Before implementing this design, several architectural and behavioral edge cases
 ### Architectural Boundary: Global vs. Document-Bound Style Packs
 *   **Decision**:
     *   The **Root Style Pack** and the **HTML Element Style Pack** live globally in the application runtime as read-only presets.
-    *   **All other style packs** live strictly within documents. They are serialized directly inside the document JSON model. This ensures that when a document is saved and loaded via the [document-store](file:///home/martino/git/scribus/open-layout/document-store/), its specific style inheritance configurations are self-contained and fully preserved.
+    *   **All other style packs** live strictly within documents. They are serialized directly inside the document JSON model. This ensures that when a document is saved and loaded via the [document-store](../document-store/), its specific style inheritance configurations are self-contained and fully preserved.
 
 ### Architectural Boundary: Inheritance Tree Root (Null Parent)
 *   **Decision**:
@@ -168,4 +168,4 @@ To support serialization in the document store, we propose the following schema 
 
 ### Cons & Risks
 *   **Broken Inheritance Chains (Mitigated)**: Swapping or deleting parent style packs could potentially break children styles referencing them. The parent style deletion push-down mechanism completely mitigates this for style deletion.
-*   **Shaping Cache Invalidation**: The [LayoutEngine](file:///home/martino/git/scribus/open-layout/story-editor/lib/layout-engine.js) caches character shaping. Swapping or updating parent style pack properties must trigger a full cache invalidation to re-shape text runs. *Note: Since layout shaping is highly optimized and localized to affected stories, this one-off invalidation is fast (a few milliseconds) and does not present a real-world performance bottleneck.*
+*   **Shaping Cache Invalidation**: The [LayoutEngine](../story-editor/lib/layout-engine.js) caches character shaping. Swapping or updating parent style pack properties must trigger a full cache invalidation to re-shape text runs. *Note: Since layout shaping is highly optimized and localized to affected stories, this one-off invalidation is fast (a few milliseconds) and does not present a real-world performance bottleneck.*
