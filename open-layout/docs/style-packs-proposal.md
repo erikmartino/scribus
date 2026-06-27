@@ -12,6 +12,7 @@ There are two read-only global style packs that live permanently in the editor w
 1.  **Root Style Pack**:
     *   **Description**: The system-level root representing the absolute fallback parent of all styles.
     *   **Root Paragraph Style**: Included in the Root Style Pack. Defines base typographic defaults:
+        *   **Name**: `[default]` (Special bracketed pattern to prevent shadowing; user-defined style names are forbidden from using brackets).
         *   **Font Family**: `Garamond` (Serif fallback)
         *   **Font Size**: `10pt`
         *   **Font Weight/Style**: `Regular`
@@ -43,7 +44,7 @@ A child style pack inherits all styles defined in its parent chain. If a style i
 ### C. Hierarchical Paragraph Styles (Styles Inheritance)
 Paragraph styles within a pack can inherit properties from a parent style (usually the corresponding style in the parent pack, though this is not strictly required):
 ```
-[ Default Para Style (Root) ] ── (Name: "Normal", Font: Garamond 10)
+[ Default Para Style (Root) ] ── (Name: "[default]", Font: Garamond 10)
             ▲
             │ (usually inherits, but customizable)
 [ Child Para Style (A) ] ──────── (Name: "Normal", Font Size: 12)
@@ -58,6 +59,7 @@ Before implementing this design, several architectural and behavioral edge cases
 ### Architectural Boundary: Shadowing vs. Style Inheritance
 *   **Decision**:
     *   **Shadowing (Name-Based)**: If a child style pack defines a style with the same name as a style in the parent pack, the parent style is hidden (shadowed) from the child pack's namespace.
+    *   **Unshadowable Root**: The root style has the reserved name `[default]`. The system restricts users from using bracketed names (e.g. `[...]`) for custom styles, ensuring the root default style can never be shadowed.
     *   **Inheritance (ID-Based)**: Shadowing does not dictate inheritance. A shadowed parent style is often, but not necessarily, the parent of the child style that shadows it.
     *   **Resolution**: Inheritance is determined strictly by explicit ID reference (e.g. `parent: "root-default"`). This ensures robust serialization and allows a child style to inherit from a completely different parent style (or have no parent) despite shadowing another style by name.
 
@@ -91,7 +93,7 @@ To support serialization in the document store, we propose the following schema 
       "paragraphStyles": [
         {
           "id": "root-default",
-          "name": "Normal",
+          "name": "[default]",
           "fontFamily": "Garamond",
           "fontSize": 10,
           "fontWeight": "regular",
