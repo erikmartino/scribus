@@ -6,6 +6,7 @@ import { renderPropertyGroups } from './property-descriptors.js';
 import '../../ui-components/index.js';
 import './components/command-palette.js';
 import './components/create-menu.js';
+import './components/layers-panel.js';
 
 
 export class AppShell extends EventTarget {
@@ -492,109 +493,13 @@ export class AppShell extends EventTarget {
     }
   }
 
-  _getItemIconSvg(type) {
-    const svgStyles = 'width: 14px; height: 14px; flex-shrink: 0; fill: currentColor;';
-    switch (type) {
-      case 'text-frame':
-      case 'text':
-      case 'Story':
-        return `<svg style="${svgStyles}" viewBox="0 0 24 24">
-          <path d="M4 19h16v2H4zm0-4h16v-2H4zm0-4h16V9H4zm0-4h16V3H4z"/>
-        </svg>`;
-      case 'image-frame':
-        return `<svg style="${svgStyles}" viewBox="0 0 24 24">
-          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/>
-        </svg>`;
-      case 'rect':
-        return `<svg style="${svgStyles}" viewBox="0 0 24 24">
-          <path d="M3 3v18h18V3H3zm16 16H5V5h14v14z"/>
-        </svg>`;
-      case 'ellipse':
-        return `<svg style="${svgStyles}" viewBox="0 0 24 24">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-        </svg>`;
-      case 'triangle':
-        return `<svg style="${svgStyles}" viewBox="0 0 24 24">
-          <path d="M12 6L5.3 18h13.4L12 6zm0-4L2 20h20L12 2z"/>
-        </svg>`;
-      default:
-        return `<svg style="${svgStyles}" viewBox="0 0 24 24">
-          <path d="M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16z"/>
-        </svg>`;
-    }
-  }
-
   _renderLayersPanel(container) {
-    const items = this.doc.getAll();
-    if (items.length === 0) {
-      container.innerHTML = '<span class="panel-empty">No objects in document.</span>';
-      return;
+    let panel = container.querySelector('scribus-layers-panel');
+    if (!panel) {
+      panel = document.createElement('scribus-layers-panel');
+      container.appendChild(panel);
     }
-
-    const list = document.createElement('ul');
-    list.className = 'layers-list';
-
-    const selectedItems = selection.all;
-    const currentItem = selection.current;
-
-    for (const item of items) {
-      const li = document.createElement('li');
-      let className = 'layer-item';
-      if (selectedItems.includes(item)) {
-        className += ' selected';
-      }
-      if (item === currentItem) {
-        className += ' primary-selected';
-      }
-      li.className = className;
-      li.dataset.itemId = item.id;
-
-      // Icon Wrapper (colored with the object color)
-      const iconWrapper = document.createElement('span');
-      iconWrapper.className = 'layer-icon-wrapper';
-      iconWrapper.innerHTML = this._getItemIconSvg(item.type);
-      const color = this._getItemColor(item);
-      iconWrapper.style.color = color || 'var(--text-dim)';
-      li.appendChild(iconWrapper);
-
-      // Label
-      const label = document.createElement('span');
-      label.textContent = item.label || item.element?.textContent?.trim() || item.type || item.id;
-      li.appendChild(label);
-
-      // Click / Selection behavior
-      li.addEventListener('click', (e) => {
-        const allItems = this.doc.getAll();
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-        const isToggle = isMac ? e.metaKey : e.ctrlKey;
-
-        if (e.shiftKey) {
-          let idxA = allItems.findIndex(i => i.id === this._lastClickedId);
-          if (idxA === -1) idxA = 0;
-          const idxB = allItems.indexOf(item);
-          const min = Math.min(idxA, idxB);
-          const max = Math.max(idxA, idxB);
-          const range = allItems.slice(min, max + 1);
-          selection.selectMany(range);
-        } else if (isToggle) {
-          selection.toggle(item);
-          this._lastClickedId = item.id;
-        } else {
-          selection.select(item);
-          this._lastClickedId = item.id;
-        }
-      });
-
-      list.appendChild(li);
-    }
-
-    container.appendChild(list);
-  }
-
-  _getItemColor(item) {
-    if (!item.element) return null;
-    if (item.type === 'triangle') return item.element.style.borderBottomColor;
-    return item.element.style.background || item.element.style.backgroundColor || null;
+    panel.render();
   }
 
   // Helper factory for building ribbon elements
