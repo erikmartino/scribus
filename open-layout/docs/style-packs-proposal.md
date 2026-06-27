@@ -167,5 +167,23 @@ To support serialization in the document store, we propose the following schema 
 *   **Decoupled Style Sets**: By swapping the active style pack reference, you can completely restyle a document without altering the text models.
 
 ### Cons & Risks
-*   **Broken Inheritance Chains (Mitigated)**: Swapping or deleting parent style packs could potentially break children styles referencing them. The parent style deletion push-down mechanism completely mitigates this for style deletion.
-*   **Shaping Cache Invalidation**: The [LayoutEngine](../story-editor/lib/layout-engine.js) caches character shaping. Swapping or updating parent style pack properties must trigger a full cache invalidation to re-shape text runs. *Note: Since layout shaping is highly optimized and localized to affected stories, this one-off invalidation is fast (a few milliseconds) and does not present a real-world performance bottleneck.*
+
+1.  **Circular Style Dependencies**:
+    *   *Risk*: If a user sets Style `A` to inherit from Style `B`, and subsequently sets Style `B` to inherit from Style `A`, this forms a cyclic loop. Direct recursive resolution of such loops will lead to a call stack overflow (`RangeError`).
+    *   *Mitigation*: The document state mutations must run a Directed Acyclic Graph (DAG) validation check prior to saving any parent changes. If a cycle is detected, the change must be rejected in the editor.
+
+2.  **Lookup Performance Overhead in Deep Hierarchies**:
+    *   *Risk*: Resolving style attributes requires traversing the inheritance tree up to the `[default]` style. If the pack/style hierarchy is nested deeply (e.g. 5+ levels), traversing this tree during hot layout layout loops could degrade performance.
+    *   *Mitigation*: The system should implement a **Pre-Flattening Style Resolver** that builds a flat map of fully resolved style configurations at the start of the layout run. Property lookups then become $O(1)$ during layout operations.
+
+3.  **UI/UX Complexity for Inherited Values**:
+    *   *Risk*: If a child style inherits properties from a parent style, it may be confusing to the user in the formatting panel which values are local overrides vs. inherited defaults.
+    *   *Mitigation*: The properties panel UI must visually differentiate inherited values (e.g. using muted placeholders, tooltips, or warning badges like `Inherited from H1`). It should allow the user to easily click to "override" or "reset to parent default".
+
+4.  **Property Synchronization (Partial Serialization)**:
+    *   *Risk*: If child styles are serialized as fully populated objects, updating a parent style's properties will fail to propagate to the child style.
+    *   *Mitigation*: Child styles must be serialized using *partial schemas* (only recording properties that have been explicitly overridden). Non-overridden keys will be resolved dynamically at runtime by traversing the inheritance path.
+
+5.  **Shaping Cache Invalidation**:
+    *   *Risk*: Swapping or editing parent style properties changes font parameters, which requires re-evaluating glyph layout.
+    *   *Mitigation*: The [LayoutEngine](../story-editor/lib/layout-engine.js) must fully invalidate its shaping cache on style update. Because text layout is highly localized, this operation typically takes only a few milliseconds and does not block the UI thread.
