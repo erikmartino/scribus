@@ -69,8 +69,9 @@ Before implementing this design, several architectural and behavioral edge cases
     *   The **Root Style Pack** and the **HTML Element Style Pack** live globally in the application runtime as read-only presets.
     *   **All other style packs** live strictly within documents. They are serialized directly inside the document JSON model. This ensures that when a document is saved and loaded via the [document-store](../document-store/), its specific style inheritance configurations are self-contained and fully preserved.
 
-### Architectural Boundary: Inheritance Tree Root (Null Parent)
+### Architectural Boundary: Single-Parent Inheritance Tree Root (Null Parent)
 *   **Decision**:
+    *   **Strict Single-Parent Graph**: The style inheritance chain is a strict single-parent graph (a tree hierarchy). Multiple inheritance is not supported; every paragraph style has exactly one parent.
     *   **Mandatory Parent**: All paragraph styles must have a parent reference.
     *   **Root Fallback**: The **Root Paragraph Style** (Garamond 10pt) in the root style pack acts as the "null" parent (the absolute root of the inheritance tree). Any style that does not inherit from another custom style must explicitly set its parent reference to this root style.
 
@@ -165,7 +166,7 @@ To support serialization in the document store, we propose the following schema 
 
 1.  **Circular Style Dependencies**:
     *   *Risk*: If a user sets Style `A` to inherit from Style `B`, and subsequently sets Style `B` to inherit from Style `A`, this forms a cyclic loop. Direct recursive resolution of such loops will lead to a call stack overflow (`RangeError`).
-    *   *Mitigation*: The document state mutations must run a Directed Acyclic Graph (DAG) validation check prior to saving any parent changes. If a cycle is detected, the change must be rejected in the editor.
+    *   *Mitigation*: Because the inheritance chain is a strict single-parent graph, cycle detection is lightweight. The document state mutations must run a fast ancestor-traversal cycle detection check (verifying that a style's new parent does not already contain the style itself in its ancestor chain) prior to saving changes. If a loop is detected, the change must be rejected.
 
 2.  **Lookup Performance Overhead in Deep Hierarchies**:
     *   *Risk*: Resolving style attributes requires traversing the inheritance tree up to the `[default]` style. If the pack/style hierarchy is nested deeply (e.g. 5+ levels), traversing this tree during hot layout layout loops could degrade performance.
