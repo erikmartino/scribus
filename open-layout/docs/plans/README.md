@@ -6,7 +6,7 @@ All implementation planning should live under `docs/plans/`.
 
 ## Active plans
 
-None.
+- `layers-panel-ux-enhancements-plan.md` — Enhance layers side panel with type icons, multi-select, and selection indicator.
 
 
 ## Reference specifications live in `../../specs/`.
