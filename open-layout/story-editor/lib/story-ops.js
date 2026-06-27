@@ -508,8 +508,20 @@ export function deleteBackward(story, pos) {
     };
   }
 
+  const text = paragraphText(s, p.paraIndex);
+  const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  const segments = Array.from(segmenter.segment(text));
+
+  let deleteStart = p.charOffset - 1;
+  for (const seg of segments) {
+    if (seg.index + seg.segment.length === p.charOffset) {
+      deleteStart = seg.index;
+      break;
+    }
+  }
+
   const para = s[p.paraIndex];
-  const left = splitRunAtCharOffset(para, p.charOffset - 1).leftRuns;
+  const left = splitRunAtCharOffset(para, deleteStart).leftRuns;
   const right = splitRunAtCharOffset(para, p.charOffset).rightRuns;
   const nextPara = normalizeParagraph([...left, ...right]);
 
@@ -517,7 +529,7 @@ export function deleteBackward(story, pos) {
   nextStory[p.paraIndex] = nextPara;
   return {
     story: normalizeStory(nextStory),
-    cursor: { paraIndex: p.paraIndex, charOffset: p.charOffset - 1 },
+    cursor: { paraIndex: p.paraIndex, charOffset: deleteStart },
   };
 }
 
@@ -537,9 +549,21 @@ export function deleteForward(story, pos) {
     };
   }
 
+  const text = paragraphText(s, p.paraIndex);
+  const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  const segments = Array.from(segmenter.segment(text));
+
+  let deleteEnd = p.charOffset + 1;
+  for (const seg of segments) {
+    if (seg.index === p.charOffset) {
+      deleteEnd = seg.index + seg.segment.length;
+      break;
+    }
+  }
+
   const para = s[p.paraIndex];
   const left = splitRunAtCharOffset(para, p.charOffset).leftRuns;
-  const right = splitRunAtCharOffset(para, p.charOffset + 1).rightRuns;
+  const right = splitRunAtCharOffset(para, deleteEnd).rightRuns;
   const nextPara = normalizeParagraph([...left, ...right]);
 
   const nextStory = s.slice();

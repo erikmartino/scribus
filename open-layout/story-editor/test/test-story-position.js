@@ -155,3 +155,28 @@ describe('line boundary disambiguation', () => {
     assert.equal(lineIndex, 1);
   });
 });
+
+describe('grapheme-safe cursor movement', () => {
+  it('moveLeft steps over entire emoji ZWJ sequence', () => {
+    // 👨‍👩‍👧‍👦 has length 11 code units
+    const customStory = [
+      [{ text: 'Hey 👨‍👩‍👧‍👦', style: {} }]
+    ];
+    const lineMap = [
+      makeLine(0, 0, [{ charPos: 0, x: 0 }, { charPos: 4, x: 40 }, { charPos: 15, x: 100 }])
+    ];
+    const r = moveLeft({ paraIndex: 0, charOffset: 15, lineIndex: 0 }, customStory, lineMap);
+    assert.equal(r.charOffset, 4);
+  });
+
+  it('moveRight steps over entire emoji ZWJ sequence', () => {
+    const customStory = [
+      [{ text: 'Hey 👨‍👩‍👧‍👦', style: {} }]
+    ];
+    const lineMap = [
+      makeLine(0, 0, [{ charPos: 0, x: 0 }, { charPos: 4, x: 40 }, { charPos: 15, x: 100 }])
+    ];
+    const r = moveRight({ paraIndex: 0, charOffset: 4, lineIndex: 0 }, customStory, lineMap);
+    assert.equal(r.charOffset, 15);
+  });
+});

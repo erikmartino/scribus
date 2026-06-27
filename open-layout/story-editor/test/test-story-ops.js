@@ -449,3 +449,21 @@ describe('insertStoryFragment', () => {
     assert.equal(out.story[2].map(r => r.text).join(''), 'gh34');
   });
 });
+
+describe('grapheme-safe deletion', () => {
+  it('deleteBackward deletes entire emoji family ZWJ sequence', () => {
+    // 👨‍👩‍👧‍👦 has length 11 code units
+    const story = [[run('Hey 👨‍👩‍👧‍👦', N)]];
+    const len = 'Hey 👨‍👩‍👧‍👦'.length;
+    const out = deleteBackward(story, { paraIndex: 0, charOffset: len });
+    assert.deepEqual(out.story, [[run('Hey ', N)]]);
+    assert.deepEqual(out.cursor, { paraIndex: 0, charOffset: 4 });
+  });
+
+  it('deleteForward deletes entire emoji family ZWJ sequence', () => {
+    const story = [[run('Hey 👨‍👩‍👧‍👦 there', N)]];
+    const out = deleteForward(story, { paraIndex: 0, charOffset: 4 });
+    assert.deepEqual(out.story, [[run('Hey  there', N)]]);
+    assert.deepEqual(out.cursor, { paraIndex: 0, charOffset: 4 });
+  });
+});

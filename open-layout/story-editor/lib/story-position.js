@@ -75,6 +75,11 @@ export function resolveLineIndex(pos, lineMap) {
   return findLine(pos.paraIndex, pos.charOffset, lineMap);
 }
 
+function getParagraphText(story, paraIndex) {
+  if (!story[paraIndex]) return '';
+  return story[paraIndex].reduce((sum, run) => sum + run.text, '');
+}
+
 /**
  * Move cursor one character to the left.
  * @param {CursorPos} pos
@@ -84,7 +89,17 @@ export function resolveLineIndex(pos, lineMap) {
  */
 export function moveLeft(pos, story, lineMap) {
   if (pos.charOffset > 0) {
-    const co = pos.charOffset - 1;
+    const text = getParagraphText(story, pos.paraIndex);
+    const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+    const segments = Array.from(segmenter.segment(text));
+
+    let co = pos.charOffset - 1;
+    for (const seg of segments) {
+      if (seg.index + seg.segment.length === pos.charOffset) {
+        co = seg.index;
+        break;
+      }
+    }
     return { paraIndex: pos.paraIndex, charOffset: co, lineIndex: findLine(pos.paraIndex, co, lineMap) };
   }
   if (pos.paraIndex > 0) {
@@ -105,7 +120,17 @@ export function moveLeft(pos, story, lineMap) {
 export function moveRight(pos, story, lineMap) {
   const len = paraTextLength(story, pos.paraIndex);
   if (pos.charOffset < len) {
-    const co = pos.charOffset + 1;
+    const text = getParagraphText(story, pos.paraIndex);
+    const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+    const segments = Array.from(segmenter.segment(text));
+
+    let co = pos.charOffset + 1;
+    for (const seg of segments) {
+      if (seg.index === pos.charOffset) {
+        co = seg.index + seg.segment.length;
+        break;
+      }
+    }
     return { paraIndex: pos.paraIndex, charOffset: co, lineIndex: findLine(pos.paraIndex, co, lineMap) };
   }
   if (pos.paraIndex < story.length - 1) {
