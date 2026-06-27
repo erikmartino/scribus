@@ -168,4 +168,4 @@ To support serialization in the document store, we propose the following schema 
 
 ### Cons & Risks
 *   **Broken Inheritance Chains (Mitigated)**: Swapping or deleting parent style packs could potentially break children styles referencing them. The parent style deletion push-down mechanism completely mitigates this for style deletion.
-*   **Shaping Cache Invalidation**: The [LayoutEngine](file:///home/martino/git/scribus/open-layout/story-editor/lib/layout-engine.js) caches character shaping. Swapping or updating parent style pack properties must trigger a full cache invalidation to re-shape text runs.
+*   **Shaping Cache Invalidation**: The [LayoutEngine](file:///home/martino/git/scribus/open-layout/story-editor/lib/layout-engine.js) caches character shaping. Swapping or updating parent style pack properties must trigger a full cache invalidation to re-shape text runs. *Note: Since layout shaping is highly optimized and localized to affected stories, this one-off invalidation is fast (a few milliseconds) and does not present a real-world performance bottleneck.*
