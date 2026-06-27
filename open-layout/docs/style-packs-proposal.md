@@ -77,10 +77,12 @@ Before implementing this design, several architectural and behavioral edge cases
     *   **Unshadowable Root**: The root style has the reserved name `[default]`. The system restricts users from using bracketed names (e.g. `[...]`) for custom styles, ensuring the root default style can never be shadowed.
     *   **Inheritance Reference**: Shadowing does not dictate inheritance. A shadowed parent style is often, but not necessarily, the parent of the child style that shadows it. Inheritance references point to the parent style's name. Renaming a parent style requires updating the `parent` reference strings in its children to prevent broken links.
 
-### Architectural Boundary: Global vs. Document-Bound Style Packs
+### Architectural Boundary: Global vs. Document-Bound Style Packs & Story Overrides
 *   **Decision**:
-    *   The **Root Style Pack** and the **HTML Element Style Pack** live globally in the application runtime as read-only presets.
-    *   **All other style packs** live strictly within documents. They are serialized directly inside the document JSON model. This ensures that when a document is saved and loaded via the [document-store](../document-store/), its specific style inheritance configurations are self-contained and fully preserved.
+    *   **Global Presets**: The **Root Style Pack** and the **HTML Element Style Pack** live globally in the application runtime as read-only presets.
+    *   **Document Scope**: All other style packs live strictly within documents, serialized inside the document JSON model.
+    *   **Document-Global Default**: A document defines a default global active style pack.
+    *   **Story-Level Overrides**: Individual stories can override the document-global default by specifying their own active style pack reference (e.g. `stylePack: "brand-pack-a"`). This allows different stories within the same document to resolve text layout styling against completely different style pack sheets.
 
 ### Architectural Boundary: Single-Parent Inheritance Tree Root (Null Parent)
 *   **Decision**:
@@ -160,6 +162,23 @@ To support serialization in the document store, we propose the following schema 
           "name": "h1",
           "fontSize": 20,
           "parent": "h1"
+        }
+      ]
+    }
+  ],
+  "activeStylePack": "html-pack",
+  "stories": [
+    {
+      "id": "story-1",
+      "stylePack": "brand-pack-a",
+      "paragraphs": [
+        {
+          "style": "Normal",
+          "runs": [
+            {
+              "text": "This story overrides the document-global pack to use brand-pack-a."
+            }
+          ]
         }
       ]
     }
