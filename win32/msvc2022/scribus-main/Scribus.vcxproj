@@ -116,7 +116,10 @@
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>.\scribuspch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -152,7 +155,10 @@
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>.\scribuspch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -189,7 +195,10 @@
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>.\scribuspch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -227,7 +236,10 @@
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>.\scribuspch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) &gt;  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -667,6 +679,15 @@
     <moc Include="..\..\..\scribus\ui\opticalmargineditor.h" />
     <moc Include="..\..\..\scribus\ui\documentlogviewer.h" />
     <moc Include="..\..\..\scribus\ui\factories\scribusproxystyle.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\firststartwizard.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_appearance.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_experimental.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_finish.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_fontsscripts.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_language.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_newdocument.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_sidepanel.h" />
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_welcome.h" />
     <ClInclude Include="..\..\..\scribus\ui\propertywidgetbase.h" />
     <moc Include="..\..\..\scribus\pslib.h" />
     <moc Include="..\..\..\scribus\ui\query.h" />
@@ -1141,6 +1162,15 @@
     <ClCompile Include="..\..\..\scribus\text\frect.cpp" />
     <ClCompile Include="..\..\..\scribus\text\fsize.cpp" />
     <ClCompile Include="..\..\..\scribus\fonts\ftface.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\firststartwizard.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_appearance.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_experimental.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_finish.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_fontsscripts.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_language.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_newdocument.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_sidepanel.cpp" />
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_welcome.cpp" />
     <ClCompile Include="..\..\..\scribus\ui\gradientaddedit.cpp" />
     <ClCompile Include="..\..\..\scribus\ui\gradienteditor.cpp" />
     <ClCompile Include="..\..\..\scribus\ui\gradientpreview.cpp" />
@@ -1708,6 +1738,13 @@
     <uic Include="..\..\..\scribus\ui\documentlogviewerbase.ui" />
     <uic Include="..\..\..\scribus\ui\downloadspalettebase.ui" />
     <uic Include="..\..\..\scribus\ui\extimageprops.ui" />
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_appearance.ui" />
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_experimental.ui" />
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_finish.ui" />
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_fontsscripts.ui" />
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_language.ui" />
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_newdocument.ui" />
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_welcome.ui" />
     <uic Include="..\..\..\scribus\ui\gradientaddedit.ui" />
     <uic Include="..\..\..\scribus\ui\gradienteditor.ui" />
     <uic Include="..\..\..\scribus\ui\gtfiledialog.ui" />

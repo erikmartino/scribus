@@ -10599,11 +10599,15 @@ bool PageItem::disconnectFromGUI()
 {
 	if (!ScCore->usingGUI())
 		return false;
-	// Disconnecting only signals from PP will leave some remaining connections
-	// and cause progressive slowdowns
-	// PropertiesPalette* pp = m_Doc->scMW()->propertiesPalette;
-	// disconnect(this, 0, pp, 0);
-	this->disconnect();
+
+	// Disconnect exactly the GUI signals connected in connectToGUI(). A
+	// blanket this->disconnect() also tore down lifetime connections (e.g. the
+	// table/cell style-context listeners) and warned when disconnecting from
+	// already-destroyed item signals during multi-item teardown.
+	disconnect(this, SIGNAL(frameType(int)), m_Doc->scMW(), SLOT(HaveNewSel()));
+	disconnect(this, SIGNAL(frameType(int)), m_Doc, SLOT(selectionChanged()));
+	disconnect(this, SIGNAL(textStyle(int)), m_Doc->scMW(), SLOT(setStyleEffects(int)));
+
 	return true;
 }
 

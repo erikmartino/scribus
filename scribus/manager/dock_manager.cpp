@@ -65,30 +65,30 @@ DockManager::DockManager(QWidget *parent)
 
 void DockManager::setupDocks()
 {
-	pagePalette = new PagePalette((QWidget *) this->parent());
-	contentPalette = new ContentPalette(this);
-	propertiesPalette = new PropertiesPalette(this);
-	outlinePalette = new OutlinePalette(this);
-	layerPalette = new LayerPalette(this);
-	inlinePalette = new InlinePalette(this);
 	alignDistributePalette = new AlignDistributePalette();
-	scrapbookPalette = new Biblio(this);
 	bookPalette = new BookPalette(this);
-	undoPalette = new UndoPalette(this);
+	contentPalette = new ContentPalette(this);
+	inlinePalette = new InlinePalette(this);
+	layerPalette = new LayerPalette(this);
+	outlinePalette = new OutlinePalette(this);
+	pagePalette = new PagePalette((QWidget *) this->parent());
+	propertiesPalette = new PropertiesPalette(this);
+	scrapbookPalette = new Biblio(this);
 	symbolPalette = new SymbolPalette(this);
+	undoPalette = new UndoPalette(this);
 
 	// Apply common configuration for each palette
-	configureDock(pagePalette);
-	configureDock(contentPalette);
-	configureDock(propertiesPalette);
-	configureDock(layerPalette);
-	configureDock(pagePalette);
-	configureDock(inlinePalette);
 	configureDock(alignDistributePalette);
-	configureDock(scrapbookPalette);
 	configureDock(bookPalette);
-	configureDock(undoPalette);
+	configureDock(contentPalette);
+	configureDock(inlinePalette);
+	configureDock(layerPalette);
+	configureDock(outlinePalette);
+	configureDock(pagePalette);
+	configureDock(propertiesPalette);
+	configureDock(scrapbookPalette);
 	configureDock(symbolPalette);
+	configureDock(undoPalette);
 
 	// Panel ToolProperties
 	//    PanelToolProperties * panelTest = new PanelToolProperties();

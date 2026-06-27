@@ -24,13 +24,15 @@ FloatingWindow::FloatingWindow(QWidget *child, QWidget *parent)
 	buttonClose->setFixedSize(16, 16);
 	buttonClose->setAutoRaise(true);
 
-	QHBoxLayout *layoutHeader = new QHBoxLayout();
+	m_header = new QWidget();
+
+	QHBoxLayout *layoutHeader = new QHBoxLayout(m_header);
 	layoutHeader->addWidget(m_handle);
 	layoutHeader->addWidget(buttonClose);
 	layoutHeader->setContentsMargins(8, 8, 8, 8);
 
 	m_layout = new QVBoxLayout();
-	m_layout->addLayout(layoutHeader);
+	m_layout->addWidget(m_header);
 	m_layout->addWidget(m_child);
 	m_layout->setSpacing(0);
 	m_layout->setContentsMargins(1, 1, 1, 1);
@@ -52,6 +54,19 @@ QWidget *FloatingWindow::reference()
 	return m_reference;
 }
 
+void FloatingWindow::setIsMovable(bool movable)
+{
+	m_isMovable = movable;
+
+	m_header->setVisible(m_isMovable);
+
+	if(m_isMovable)
+		setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
+	else
+		setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
+
+}
+
 void FloatingWindow::iconSetChange()
 {
 	IconManager &iconManager = IconManager::instance();
@@ -64,7 +79,7 @@ bool FloatingWindow::eventFilter(QObject *obj, QEvent *event)
 	if (!wdg)
 		return QWidget::eventFilter(obj, event);
 
-	if (m_handle && (m_handle == wdg))
+	if (m_handle && (m_handle == wdg) && m_isMovable)
 	{
 		switch (event->type())
 		{
@@ -100,6 +115,22 @@ void FloatingWindow::hideEvent(QHideEvent *event)
 	emit closed();
 
 	QWidget::hideEvent(event);
+}
+
+void FloatingWindow::showEvent(QShowEvent *event)
+{
+	QWidget::showEvent(event);
+
+	this->raise();
+	this->activateWindow();
+}
+
+bool FloatingWindow::event(QEvent *event)
+{
+	if (!m_isMovable && event->type() == QEvent::WindowDeactivate)
+		hide();
+
+	return QWidget::event(event);
 }
 
 QSize FloatingWindow::screenSize() const
@@ -187,9 +218,8 @@ void FloatingWindow::calculatePosition()
 void FloatingWindow::show(QWidget *reference)
 {
 	m_reference = reference;
-	calculatePosition();	
+	calculatePosition();
 	QWidget::show();
-	QWidget::activateWindow();
 }
 
 void FloatingWindow::updateSize()

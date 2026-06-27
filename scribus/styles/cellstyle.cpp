@@ -63,6 +63,11 @@ void CellStyle::update(const StyleContext* context)
 
 void CellStyle::getNamedResources(ResourceCollection& lists) const
 {
+	// Collect the based-on style by name even when this style has no context
+	// to resolve it (e.g. a conditional cell style stored on a table style),
+	// then continue up any resolvable parent chain.
+	if (!parent().isEmpty())
+		lists.collectCellStyle(parent());
 	for (const BaseStyle* style = parentStyle(); style != nullptr; style = style->parentStyle())
 		lists.collectCellStyle(style->name());
 	lists.collectColor(fillColor());

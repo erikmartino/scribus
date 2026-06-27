@@ -66,7 +66,7 @@ Prefs_DocumentSetup::Prefs_DocumentSetup(QWidget* parent, ScribusDoc* doc)
 	bindingDirectionButtonGroup->setId(leftToRightRadioButton, 0);
 	bindingDirectionButtonGroup->setId(rightToLeftRadioButton, 1);
 	leftToRightRadioButton->setChecked(true);
-
+	textDirectionComboBox->setCurrentIndex(0);
 	pageWidthSpinBox->setMaximum(16777215);
 	pageHeightSpinBox->setMaximum(16777215);
 	languageChange();
@@ -188,6 +188,9 @@ void Prefs_DocumentSetup::restoreDefaults(struct ApplicationPrefs *prefsData)
 				rightToLeftRadioButton->setChecked(true);
 				break;
 	}
+	bool blocked = textDirectionComboBox->blockSignals(true);
+	textDirectionComboBox->setCurrentIndex(prefsData->docSetupPrefs.isRTL);
+	textDirectionComboBox->blockSignals(blocked);
 
 	pageWidthSpinBox->blockSignals(false);
 	pageHeightSpinBox->blockSignals(false);
@@ -234,7 +237,7 @@ void Prefs_DocumentSetup::saveGuiToPrefs(struct ApplicationPrefs *prefsData) con
 	prefsData->docSetupPrefs.pagePositioning = pageLayoutButtonGroup->checkedId();
 	prefsData->docSetupPrefs.bindingDirection = bindingDirectionButtonGroup->checkedId();
 	prefsData->pageSets[prefsData->docSetupPrefs.pagePositioning].FirstPage = layoutFirstPageIsComboBox->currentIndex();
-
+	prefsData->docSetupPrefs.isRTL = (textDirectionComboBox->currentIndex() == 1);
 	prefsData->docSetupPrefs.margins = marginsWidget->margins();
 	prefsData->docSetupPrefs.bleeds = bleedsWidget->margins();
 	prefsData->docSetupPrefs.saveCompressed = saveCompressedCheckBox->isChecked();

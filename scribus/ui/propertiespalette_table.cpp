@@ -51,6 +51,7 @@ PropertiesPalette_Table::PropertiesPalette_Table(QWidget* parent) : QWidget(pare
 
 	connect(tableStyleCombo, SIGNAL(newStyle(QString)), this, SLOT(setTableStyle(QString)));
 	connect(cellStyleCombo, SIGNAL(newStyle(QString)), this, SLOT(setCellStyle(QString)));
+	connect(tableDirectionComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(on_tableDirectionComboBox_currentIndexChanged(int)));
 }
 
 void PropertiesPalette_Table::iconSetChange()
@@ -156,6 +157,7 @@ void PropertiesPalette_Table::handleSelectionChanged()
 		m_item = nullptr;
 
 	syncSideSelectorToCells();
+	on_sideSelector_selectionChanged();
 
 	updateFillControls();
 	updateStyleControls();
@@ -209,6 +211,9 @@ void PropertiesPalette_Table::updateStyleControls()
 //			showTableStyle(table->style());
 			showCellStyle(table->activeCell().styleName());
 		}
+		bool blocked = tableDirectionComboBox->blockSignals(true);
+		tableDirectionComboBox->setCurrentIndex(table->isRTL() ? 1 : 0);
+		tableDirectionComboBox->blockSignals(blocked);
 	}
 	else
 	{
@@ -782,6 +787,16 @@ void PropertiesPalette_Table::on_cellPaddingWidget_valuesChanged(const MarginStr
 
 	m_item->asTable()->adjustTable();
 	m_item->asTable()->update();
+}
+
+void PropertiesPalette_Table::on_tableDirectionComboBox_currentIndexChanged(int index)
+{
+	if (!m_item || !m_item->isTable())
+		return;
+	m_item->setRTL(index == 1);
+	m_item->asTable()->update();
+	if (m_doc)
+		m_doc->changed();
 }
 
 void PropertiesPalette_Table::syncSideSelectorToCells()

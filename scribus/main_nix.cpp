@@ -27,6 +27,7 @@ for which a new license (GPL+exception) is in place.
 
 #include <iostream>
 #include <csignal>
+#include <fontconfig/fontconfig.h>
 
 #include <QApplication>
 #include <QImageReader>
@@ -75,6 +76,8 @@ int mainApp(int argc, char **argv)
 	ScribusQApp app(argc, argv);
 	initCrashHandler();
 	app.parseCommandLine();
+
+	FcInit();
 	
 	if (QApplication::platformName() == "wayland")
 	{

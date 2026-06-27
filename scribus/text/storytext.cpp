@@ -363,91 +363,27 @@ void StoryText::clear()
 
 int StoryText::indexOf(const QString &str, int from, Qt::CaseSensitivity cs, int* pLen) const
 {
-	int foundIndex = -1;
 	if (pLen)
 		*pLen = 0;
-
 	if (str.isEmpty() || (from < 0))
 		return -1;
 
-	QString qStr = str;
-	if (cs == Qt::CaseInsensitive)
-		qStr = qStr.toLower();
-	QChar ch = qStr.at(0);
+	QString qStr = (cs == Qt::CaseInsensitive) ? str.toLower() : str;
+	const QChar ch = qStr.at(0);
 
-	int strLen   = qStr.length();
-	int storyLen = length();
-	if (cs == Qt::CaseSensitive)
+	int i = indexOf(ch, from, cs);
+	while (i >= 0 && i < (int) d->len)
 	{
-		int i = indexOf(ch, from, cs);
-		while (i >= 0 && i < (int) d->len)
+		int len = 0;
+		if (matchAt(i, qStr, cs, &len) >= 0)
 		{
-			int index = 0;
-			while ((index < strLen) && ((index + i) < storyLen))
-			{
-				if (qStr.at(index) != d->at(index + i)->ch)
-					break;
-				++index;
-			}
-			if (index == strLen)
-			{
-				foundIndex = i;
-				if (pLen)
-					*pLen = strLen;
-				break;
-			}
-			i = indexOf(ch, i + 1, cs);
+			if (pLen)
+				*pLen = len;
+			return i;
 		}
+		i = indexOf(ch, i + 1, cs);
 	}
-	else
-	{
-		bool qCharIsDiacritic;
-		bool curCharIsDiacritic;
-		int i = indexOf(ch, from, cs);
-		while (i >= 0 && i < (int) d->len)
-		{
-			int index = 0;
-			int diacriticsCounter = 0; //counter for diacritics
-			while ((index < strLen) && ((index + i + diacriticsCounter) < storyLen))
-			{
-				const QChar &qChar = qStr.at(index);
-				const QChar &curChar = d->at(index + diacriticsCounter + i)->ch;
-				qCharIsDiacritic   = SpecialChars::isArabicModifierLetter(qChar.unicode()) || (qChar.category() == QChar::Mark_NonSpacing);
-				curCharIsDiacritic = SpecialChars::isArabicModifierLetter(curChar.unicode()) || (curChar.category() == QChar::Mark_NonSpacing);
-				if (qCharIsDiacritic || curCharIsDiacritic)
-				{
-					if (qCharIsDiacritic)
-					{
-						++index;
-						--diacriticsCounter;
-					}
-					if (curCharIsDiacritic)
-						++diacriticsCounter;
-					continue;
-				}
-				if (qChar != curChar.toLower())
-					break;
-				++index;
-			}
-			if (index == strLen)
-			{
-				foundIndex = i;
-				while ((index + i + diacriticsCounter) < storyLen)
-				{
-					const QChar &curChar = d->at(index + diacriticsCounter + i)->ch;
-					if (!SpecialChars::isArabicModifierLetter(curChar.unicode()) && (curChar.category() != QChar::Mark_NonSpacing))
-						break;
-					++diacriticsCounter;
-				}
-
-				if (pLen)
-					*pLen = strLen + diacriticsCounter;
-				break;
-			}
-			i = indexOf(ch, i + 1, cs);
-		}
-	}
-	return foundIndex;
+	return -1;
 }
 
 int StoryText::indexOf(QChar ch, int from, Qt::CaseSensitivity cs) const
@@ -478,6 +414,50 @@ int StoryText::indexOf(QChar ch, int from, Qt::CaseSensitivity cs) const
 		}
 	}
 	return foundIndex;
+}
+
+int StoryText::lastIndexOf(const QString &str, int from, Qt::CaseSensitivity cs, int* pLen) const
+{
+	if (pLen)
+		*pLen = 0;
+	if (str.isEmpty())
+		return -1;
+
+	QString qStr = (cs == Qt::CaseInsensitive) ? str.toLower() : str;
+	const QChar ch = qStr.at(0);
+
+	int i = lastIndexOf(ch, from, cs);
+	while (i >= 0)
+	{
+		int len = 0;
+		if (matchAt(i, qStr, cs, &len) >= 0)
+		{
+			if (pLen)
+				*pLen = len;
+			return i;
+		}
+		i = lastIndexOf(ch, i - 1, cs);
+	}
+	return -1;
+}
+
+int StoryText::lastIndexOf(QChar ch, int from, Qt::CaseSensitivity cs) const
+{
+	const int storyLen = length();
+	int start = (from < 0 || from >= storyLen) ? storyLen - 1 : from;
+	if (cs == Qt::CaseSensitive)
+	{
+		for (int i = start; i >= 0; --i)
+			if (d->at(i)->ch == ch)
+				return i;
+	}
+	else
+	{
+		for (int i = start; i >= 0; --i)
+			if (d->at(i)->ch.toLower() == ch)
+				return i;
+	}
+	return -1;
 }
 
 void StoryText::insert(const StoryText& other, bool onlySelection)
@@ -566,6 +546,24 @@ void StoryText::insert(int pos, const StoryText& other, bool onlySelection)
 
 
 /**
+	 need to remove the ParagraphStyle structure and replace all pointers
+	 to it...
+ */
+void StoryText::removeParSep(int pos)
+{
+	ScText* it = item(pos);
+	if (it->parstyle)
+	{
+		delete it->parstyle;
+		it->parstyle = nullptr;
+	}
+	// demote this parsep so the assert code in replaceCharStyleContextInParagraph()
+	// doesn't choke:
+	it->ch = QChar();
+	d->replaceCharStyleContextInParagraph(pos, paragraphStyle(pos+1).charStyleContext());
+}
+
+/**
     Make sure that the paragraph CharStyle's point to the new ParagraphStyle
  */
 void StoryText::insertParSep(int pos)
@@ -584,23 +582,69 @@ void StoryText::insertParSep(int pos)
 	}
 	d->replaceCharStyleContextInParagraph(pos, it->parstyle->charStyleContext());
 }
-/**
-     need to remove the ParagraphStyle structure and replace all pointers
-     to it...
- */
-void StoryText::removeParSep(int pos)
+
+// Returns the matched story length (including skipped diacritics), or -1.
+int StoryText::matchAt(int pos, const QString& qStr, Qt::CaseSensitivity cs, int* pLen) const
 {
-	ScText* it = item(pos);
-	if (it->parstyle)
+	const int strLen   = qStr.length();
+	const int storyLen = length();
+	if (pLen)
+		*pLen = 0;
+
+	if (cs == Qt::CaseSensitive)
 	{
-		delete it->parstyle;
-		it->parstyle = nullptr;
+		int index = 0;
+		while ((index < strLen) && ((index + pos) < storyLen))
+		{
+			if (qStr.at(index) != d->at(index + pos)->ch)
+				break;
+			++index;
+		}
+		if (index != strLen)
+			return -1;
+		if (pLen)
+			*pLen = strLen;
+		return strLen;
 	}
-	// demote this parsep so the assert code in replaceCharStyleContextInParagraph()
-	// doesn't choke:
-	it->ch = QChar();
-	d->replaceCharStyleContextInParagraph(pos, paragraphStyle(pos+1).charStyleContext());
+
+	int index = 0;
+	int diacriticsCounter = 0;
+	while ((index < strLen) && ((index + pos + diacriticsCounter) < storyLen))
+	{
+		const QChar& qChar   = qStr.at(index);
+		const QChar& curChar = d->at(index + diacriticsCounter + pos)->ch;
+		const bool qCharIsDiacritic   = SpecialChars::isArabicModifierLetter(qChar.unicode())   || (qChar.category()   == QChar::Mark_NonSpacing);
+		const bool curCharIsDiacritic = SpecialChars::isArabicModifierLetter(curChar.unicode()) || (curChar.category() == QChar::Mark_NonSpacing);
+		if (qCharIsDiacritic || curCharIsDiacritic)
+		{
+			if (qCharIsDiacritic)
+			{
+				++index;
+				--diacriticsCounter;
+			}
+			if (curCharIsDiacritic)
+				++diacriticsCounter;
+			continue;
+		}
+		if (qChar != curChar.toLower())
+			break;
+		++index;
+	}
+	if (index != strLen)
+		return -1;
+
+	// consume trailing diacritics so the reported length matches indexOf()
+	while ((index + pos + diacriticsCounter) < storyLen)
+	{
+		const QChar& curChar = d->at(index + diacriticsCounter + pos)->ch;
+		if (!SpecialChars::isArabicModifierLetter(curChar.unicode()) && (curChar.category() != QChar::Mark_NonSpacing))
+			break;
+		++diacriticsCounter;
+	}
+	if (pLen) *pLen = strLen + diacriticsCounter;
+	return strLen + diacriticsCounter;
 }
+
 
 void StoryText::removeChars(int pos, uint len)
 {

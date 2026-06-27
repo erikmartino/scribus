@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FSW_Appearance</class>
+ <widget class="QWizardPage" name="FSW_Appearance">
+  <property name="title"><string>Appearance</string></property>
+  <property name="subTitle"><string>Pick a theme and how much of the workspace to show.</string></property>
+  <layout class="QVBoxLayout" name="appLayout">
+   <item>
+    <widget class="QGroupBox" name="themeGroup">
+     <property name="title"><string>Theme</string></property>
+     <layout class="QHBoxLayout" name="themeRow">
+      <item><widget class="QRadioButton" name="themeLightRadio"><property name="text"><string>Light</string></property></widget></item>
+      <item><widget class="QRadioButton" name="themeDarkRadio"><property name="text"><string>Dark</string></property></widget></item>
+      <item><widget class="QRadioButton" name="themeAutoRadio"><property name="text"><string>Automatic</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="workspaceGroup">
+     <property name="title"><string>Workspace</string></property>
+     <layout class="QVBoxLayout" name="workspaceCol">
+      <item><widget class="QRadioButton" name="workspaceFullRadio"><property name="text"><string>Everything visible — all toolbars and docked panels</string></property></widget></item>
+      <item><widget class="QRadioButton" name="workspaceMinimalRadio"><property name="text"><string>Minimal — clean canvas, panels on demand</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item><spacer name="appSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

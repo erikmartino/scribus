@@ -94,7 +94,6 @@ private:
 
 private slots:
 	void slotFillColor();
-	void slotFillShade();
 	void slotParentChanged(const QString &parent);
 	void slotCellPaddingChanged(const MarginStruct &padding);
 	void slotBordersChanged(TableSides sides, const TableBorder& border);

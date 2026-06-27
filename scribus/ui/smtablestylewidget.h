@@ -66,13 +66,15 @@ class SMTableStyleWidget : public QWidget, public Ui::SMTableStyleWidget
 		 *
 		 * @param colors list of colors to populate the combo with.
 		 */
-		void fillFillColorCombo(ColorList &colors);
+		// void fillFillColorCombo(ColorList &colors);
 		void showColors(const QList<TableStyle*> &tableStyles);
 		void setBorders(const TableBorder& left, const TableBorder& right, const TableBorder& top, const TableBorder& bottom);
 		TableArea currentArea() const { return m_currentArea; }
 		void rebuildAreaCombo(TableStyle *tableStyle);
 		void showFillForCurrentArea(TableStyle *tableStyle);
+		void showBordersForCurrentArea(TableStyle *tableStyle);
 		void showParagraphStyleForCurrentArea(TableStyle *tableStyle);
+		void showBasedOnForCurrentArea(TableStyle *tableStyle);
 
 	signals:
 		// Emitted when the user changes the border on one or more sides.
@@ -104,6 +106,7 @@ class SMTableStyleWidget : public QWidget, public Ui::SMTableStyleWidget
 		QColor getColor(const QString& colorName, int shade) const;
 		void setCheck(QCheckBox* cb, bool v);
 		void setSpin(QSpinBox* sb, int v, bool enabled = true);
+		void setCombo(QComboBox* cb, int index);
 
 	private slots:
 		void handleUpdateRequest(int);
@@ -113,8 +116,7 @@ class SMTableStyleWidget : public QWidget, public Ui::SMTableStyleWidget
 		void on_addBorderLineButton_clicked();
 		void on_removeBorderLineButton_clicked();
 		void on_borderLineWidth_valueChanged(double width);
-		void on_borderLineShade_valueChanged(double shade);
-		void on_borderLineColor_textActivated(const QString& colorName);
+		void borderLineColorChanged();
 		void on_borderLineStyle_activated(int style);
 		void on_conditionalAreaComboBox_currentIndexChanged(int index);
 };

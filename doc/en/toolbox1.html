@@ -1,27 +1,35 @@
 <html>
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
-	<title>Adobe Reader </title>
+	<title>Adobe Reader or Okular?</title>
 </head>
 <style>
 @import "manual.css";
 </style>
 <body>
-<h2>Adobe Reader</h2>
+<h2>Acrobat Reader</h2>
 
-<p>Adobe Reader is one of the essential tools to have when using Scribus. Although mostly a viewing application, it has some advanced features that no other PDF viewer has, such as full support for JavaScript with a PDF and detailed information about what is embedded in the PDF. Some documents can only reliably be viewed in Adobe Reader.</p>
+<p>Acrobat Reader can be one of the essential tools to have when using Scribus. Although mostly a viewing application, it has some advanced features that no other PDF viewer has, such as full support for JavaScript with a PDF and detailed information about what is embedded in the PDF. Some documents can only reliably be viewed in Acrobat Reader, especially those with embedded 3D objects.</p>
 
-<p>As a general rule we cannot recommend judging color correctness in the Mac Preview application or any of the Open Source or gratis PDF viewers.</p>
-
-<p>Moreover, although PDF has become an ISO standard, Adobe invented PostScript and PDF, which is based on PostScript, and it has a commercial incentive to promote PDF, as well as standard compliance on all platforms.</p>
-<h3>Hints for Scribus users:</h3>
-<p><strong>We highly recommend upgrading to the latest Adobe Reader version</strong>. Simply put, there is nothing else more capable of rendering PDF correctly. Whatever your objections were to older versions (and there were some substantial ones, most notably on Linux), the later versions, especially after 7.0.9, ameliorate the vast majority of them. And while it&rsquo;s often being discarded as being a &ldquo;resource hog,&rdquo; it is still far more stable, bug-free and loads quicker than older versions. On Linux it now has a modern look and feel. Versions after 7.0.9 also have direct support for CUPS and offer many extra options for printing.  <strong>Any rendering issues with Scribus-exported PDFs in other viewers should be cross-checked with Reader 7 or higher before reporting bugs to us.</strong></p>
-<p>One of the major advantages of the latest Adobe Reader releases is the ability to &ldquo;flatten&rdquo; transparency in PDF 1.4+ files. This feature is important, because some printers still can&rsquo;t handle PDFs with transparency. Also, the PDF/X-3 standard, required by many printers these days, doesn&rsquo;t support transparency. While the PDF-to-PDF flattening remains a feature of Adobe&rsquo;s Acrobat program, Adobe Reader allows for creating a &ldquo;flattened&rdquo; PostScript file via the print dialog. The resulting PDF file can then be converted back to a PDF file with GSview or a command line tool.</p>
-<h4>Known Issues</h4>
-<p>We are aware of color mismatches when viewing PDFs which have some kinds of transparency in PDF 1.4+ files. This has been reported as a bug to Adobe.</p> 
-<p>It is always recommended to ensure your applications are patched to the latest version to prevent your system from becoming insecure. Despite its great benefits, the PDF format in general and Adobe Reader in particular have become a prominent target for malware creators and attacks via JavaScript. Disabling JavaScript execution in your PDF viewers when you don&rsquo;t need it may be advisable depending on your situation.</p>
-<h3>A note to OS/2 and eComStation users</h3>
-<p>Unfortunately, Adobe doesn&rsquo;t provide new versions of AR for OS/2 anymore. The latest version that reportedly works on these platforms is 5.1, and it requires an additional runtime environment. The runtime environment can be downloaded <a href="http://www.os2site.com/sw/dev/InnoTek/innotekruntime_112b20.exe">here</a>. The AR installer is available <a href="http://www.os2site.com/sw/util/pdf/os2kitacrobatreader51preview1.exe">here</a>.</p>
+<p>However, Adobe made a lot of changes to the software, some of which may not be to everyone's liking:</p>
+    
+<ul>
+    <li>AR is only available for Windows and macOS. The Linux version has been discontinued years ago.</li>
+    <li>The installers are huge, because you basically download Adobe Acrobat with many features disabled unless you sign up for an Acrobat subscription. However, Adobe also added many useful features over the years that were previously only available in Acrobat.</li>
+    <li>The user interface has changed significantly and faced a lot of critcism.</li>
+    <li>Acrobat Reader is "phoning home" a lot, and it's impossible to block automatic and often huge updates.</li>
+</ul>
+<p>Depending on your requirements, you may still want to use AR as your preferred PDF viewer.</p>
+    
+<h2>The alternative: Okular</h2>
+    
+<p>Fortunately, the Open Source community has developed a more than convincing alternative to AR, namely Okular. Okular isn't a crippled version of a major product focussed only on one or two file formats, but a real document viewer. It can open and display a wide range of file types, including images, eBooks, comic books, and also other DTP export formats like PostScript or XPS. Okular's UI is refreshingly elegant in its simplicity; advanced features are easily accessible via the menu bar.</p>
+<p>If you're working on Linux, Okular should be the PDF viewer of choice and is likely to be installed by default &ndash; at least if your DE is KDE. Unfortunately, the situation is different on Windows and macOS. As of this writing, the Okular team uses the Microsoft Store as the preferred way of installation on Windows. As an alternative it recommends <a href="https://chocolatey.org">Chocolatey</a>. There is, however, a <a href="https://cdn.kde.org/ci-builds/graphics/okular/master/">standalone installer</a> available, but these installers are always untested "nightly builds". Moreover, it doesn't even provide a portable app.</p>
+<p>On macOS the situation is even worse, because you also need to use a <a href="https://cdn.kde.org/ci-builds/graphics/okular/master/">"nightly build"</a> &ndash; without any alternative.</p>
+<h2>Haiku</h2>
+<p>Adobe has never released a version of Acrobat/Adobe Reader for BeOS or Haiku. As an alternative you can use <a href="https://depot.haiku-os.org/#!/pkg/bepdf/haikuports/haikuports_x86_64/2/1/4/-/6/x86_64?bcguid=bc2-TFKS">BePDF</a>.</p>
+<h2>OS/2 and Derivatives</h2>
+    <p>While there are ancient (and today largely useless) versions of Acrobat Reader for OS/2 available for download somewhere, the best choice seems to be <a href="https://trac.netlabs.org/lucide">Lucide</a>, which is already being shipped with ArcaOS.</p>
 <br>
 <br>
 </body>

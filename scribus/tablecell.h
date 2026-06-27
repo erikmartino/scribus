@@ -69,7 +69,7 @@ public:
 	CellStyle style;
 	/// The user-chosen named cell style. Persistent; this is what gets saved.
 	/// Distinct from style.parent(), which during layout may transiently hold
-	/// the synthetic name of the cell's conditional table-area style.
+	/// the name of the cell's conditional table-area style.
 	QString userStyleName;
 	/// Last paragraph style name applied to the cell text frame's default
 	/// style, used to avoid redundant setDefaultStyle() calls on relayout.

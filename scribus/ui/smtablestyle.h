@@ -93,7 +93,6 @@ private:
 
 private slots:
 	void slotFillColor();
-	void slotFillShade();
 	void slotParentChanged(const QString &parent);
 	void slotBordersChanged(TableSides sides, const TableBorder& border);
 	void slotHeaderRows();
@@ -104,6 +103,9 @@ private slots:
 	void slotLastColumn();
 	void slotAreaChanged(TableArea area);
 	void slotParagraphStyle(const QString& psName);
+	void slotBasedOnStyle(const QString& cellStyleName);
+	void slotResetToBasedOn();
+	void slotTableDirection();
 };
 
 #endif // SMTABLESTYLES_H

@@ -118,6 +118,10 @@ QString Scribus171Format::saveElements(double xp, double yp, double wp, double h
 			putPStyle(writer, paragraphStyle, "ParagraphStyle");
 	}
 
+	// Cell styles before table styles: table-style conditionals may be based
+	// on cell styles, which must load first.
+	writeCellStyles(writer, lists.cellStyleNames());
+	writeTableStyles(writer, lists.tableStyleNames());
 	writeLineStyles(writer, lists.lineStyleNames());
 	writeArrowStyles(writer);
 
@@ -339,6 +343,7 @@ bool Scribus171Format::saveFile(const QString & fileName, const FileFormat & /* 
 	docu.writeAttribute("FirstPageNumber", m_Doc->FirstPnum);
 	docu.writeAttribute("PagePositioning", m_Doc->pagePositioning());
 	docu.writeAttribute("BindingDirection", m_Doc->bindingDirection());
+	docu.writeAttribute("IsRTL", m_Doc->isRTL());
 	if (m_Doc->usesAutomaticTextFrames())
 		docu.writeAttribute("AutomaticTextFrames", 1);
 	docu.writeAttribute("AutomaticTextFrameColumnCount", m_Doc->PageSp);
@@ -1011,16 +1016,39 @@ void Scribus171Format::writeTableStyles(ScXmlStreamWriter& docu) const
 	}
 }
 
+void Scribus171Format::writeTableStyles(ScXmlStreamWriter& docu, const QStringList& styleNames) const
+{
+	QList<int> styleList = m_Doc->getSortedTableStyleList();
+	for (int i = 0; i < styleList.count(); ++i)
+	{
+		const TableStyle& style = m_Doc->tableStyles()[styleList[i]];
+		if (!styleNames.contains(style.name()))
+			continue;
+		docu.writeStartElement("TableStyle");
+		putTableStyle(docu, style);
+		docu.writeEndElement();
+	}
+}
+
 void Scribus171Format::writeCellStyles(ScXmlStreamWriter& docu) const
 {
 	QList<int> styleList = m_Doc->getSortedCellStyleList();
 	for (int i = 0; i < styleList.count(); ++i)
 	{
 		const CellStyle& style = m_Doc->cellStyles()[styleList[i]];
-		// Skip synthetic conditional cell styles -- they are runtime-only
-		// bridges, regenerated from each table style's <Conditional> children
-		// on load via syncConditionalStylesToContext().
-		if (style.name().startsWith(QLatin1String("__cond_")))
+		docu.writeStartElement("CellStyle");
+		putCellStyle(docu, style);
+		docu.writeEndElement();
+	}
+}
+
+void Scribus171Format::writeCellStyles(ScXmlStreamWriter& docu, const QStringList& styleNames) const
+{
+	QList<int> styleList = m_Doc->getSortedCellStyleList();
+	for (int i = 0; i < styleList.count(); ++i)
+	{
+		const CellStyle& style = m_Doc->cellStyles()[styleList[i]];
+		if (!styleNames.contains(style.name()))
 			continue;
 		docu.writeStartElement("CellStyle");
 		putCellStyle(docu, style);
@@ -1055,6 +1083,8 @@ void Scribus171Format::putTableStyle(ScXmlStreamWriter &docu, const TableStyle &
 		docu.writeAttribute("FirstColumn", QString::number(1));
 	if (style.lastColumn())
 		docu.writeAttribute("LastColumn", QString::number(1));
+	if (style.tableRTL())
+		docu.writeAttribute("RTL", QString::number(1));
 
 	if (!style.isInhLeftBorder())
 	{
@@ -2563,15 +2593,15 @@ void Scribus171Format::WriteObjects(ScribusDoc *doc, ScXmlStreamWriter& docu, co
 						docu.writeAttribute("FillColor", cell.fillColor());
 					if (!cell.style().isInhFillShade())
 						docu.writeAttribute("FillShade", cell.fillShade());
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhLeftPadding())))
+					if (!cell.style().isInhLeftPadding())
 						docu.writeAttribute("LeftPadding",cell.leftPadding());
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhRightPadding())))
+					if (!cell.style().isInhRightPadding())
 						docu.writeAttribute("RightPadding", cell.rightPadding());
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhTopPadding())))
+					if (!cell.style().isInhTopPadding())
 						docu.writeAttribute("TopPadding",cell.topPadding());
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhBottomPadding())))
+					if (!cell.style().isInhBottomPadding())
 						docu.writeAttribute("BottomPadding", cell.bottomPadding());
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhLeftBorder())))
+					if (!cell.style().isInhLeftBorder())
 					{
 						TableBorder tbLeft = cell.leftBorder();
 						docu.writeStartElement("TableBorderLeft");
@@ -2587,7 +2617,7 @@ void Scribus171Format::WriteObjects(ScribusDoc *doc, ScXmlStreamWriter& docu, co
 						}
 						docu.writeEndElement();
 					}
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhRightBorder())))
+					if (!cell.style().isInhRightBorder())
 					{
 						TableBorder tbRight = cell.rightBorder();
 						docu.writeStartElement("TableBorderRight");
@@ -2603,7 +2633,7 @@ void Scribus171Format::WriteObjects(ScribusDoc *doc, ScXmlStreamWriter& docu, co
 						}
 						docu.writeEndElement();
 					}
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhTopBorder())))
+					if (!cell.style().isInhTopBorder())
 					{
 						TableBorder tbTop = cell.topBorder();
 						docu.writeStartElement("TableBorderTop");
@@ -2619,7 +2649,7 @@ void Scribus171Format::WriteObjects(ScribusDoc *doc, ScXmlStreamWriter& docu, co
 						}
 						docu.writeEndElement();
 					}
-					if ((cstyle.isEmpty()) || ((!cstyle.isEmpty()) && ( !cs.isInhBottomBorder())))
+					if (!cell.style().isInhBottomBorder())
 					{
 						TableBorder tbBottom = cell.bottomBorder();
 						docu.writeStartElement("TableBorderBottom");
@@ -2689,6 +2719,8 @@ void Scribus171Format::SetItemProps(ScXmlStreamWriter& docu, PageItem* item, con
 		docu.writeAttribute("FlippedHorizontal", 1);
 	if (item->imageFlippedV())
 		docu.writeAttribute("FlippedVertical", 1);
+	if (item->isRTL())
+		docu.writeAttribute("RTL", QString::number(1));
 	if (!(item->isGroup() || item->isSymbol()))
 	{
 		docu.writeAttribute("LineWidth", item->lineWidth());

@@ -22,6 +22,8 @@ for which a new license (GPL+exception) is in place.
 #include "pageitem.h"
 #include "scribusapi.h"
 #include "scribusstructs.h"
+#include "styles/cellstyle.h"
+#include "styles/styleset.h"
 #include "styles/tablearea.h"
 #include "styles/tablestyle.h"
 #include "tablecell.h"
@@ -278,11 +280,16 @@ public:
 
 	/// Resizes the row to its natural content height, leaving the row
 	/// untouched if no cells contribute to the calculation. See
-	/// naturalRowHeight().
-	void adjustRowHeight(int row);
+	/// naturalRowHeight(). Returns true if the row height changed.
+	bool adjustRowHeight(int row, bool growOnly = false);
 
 	/// Calls adjustRowHeight() on every row.
 	void adjustAllRowHeights();
+
+	/// Returns true if the given row is shorter than the natural height its
+	/// own cell at @a probeColumn now requires (a cheap, single-cell check
+	/// used to decide whether a full row re-fit is needed after a keystroke).
+	bool rowNeedsGrowthForCell(int row, int column) const;
 
 	/**
 	 * Inserts @a numColumns columns before the column at @a index.
@@ -579,11 +586,16 @@ public:
 	/// Unsets direct formatting
 	void unsetDirectFormatting();
 
+	void rebuildAreaStyles();
+
 	/// Returns the style of this table.
 	const TableStyle& style() const;
 
 	/// Returns the style name of this table.
 	QString styleName() const;
+
+	/// The table's private conditional area-style context.
+	StyleContext& areaStyles() { return m_areaStyles; }
 
 	/**
 	 * Returns the structural area the cell at @a row, @a column occupies, used
@@ -653,10 +665,9 @@ public:
 	/** @brief Perform undo/redo action */
 	void restore(UndoState *state, bool isUndo) override;
 
-	/// Mirrors the table style's conditional map into the document cell style
-	/// context as synthetic named styles, so the name-based parent splice can
-	/// resolve them. Call after the conditional configuration changes.
-	void syncConditionalStylesToContext();
+	/// Returns the effective RTL state: the applied table style's RTL setting
+	/// if the style explicitly defines it, otherwise the item's own RTL flag.
+	bool effectiveRTL() const;
 
 signals:
 	/// This signal is emitted whenever the table changes.
@@ -695,10 +706,7 @@ private:
 	 * Returns the name of the (synthetic) conditional cell style for @a area,
 	 * or an empty string if the table style defines no conditional for it.
 	 */
-	QString areaStyleName(TableArea area) const;
-
-	/// Returns the synthetic context name used for @a area's conditional style.
-	QString conditionalSyntheticName(TableArea area) const;
+	QString areaStyleNameBare(TableArea area) const;
 
 	/// Activates the cell @a cell, or the cell at row 0, column 0 if @a cell is invalid.
 	void activateCell(const TableCell& cell);
@@ -873,6 +881,13 @@ private:
 
 	/// Style of the table.
 	TableStyle m_style;
+
+	/// Private style context holding this table's conditional area cell styles,
+	/// keyed by bare area name (e.g. "HeaderRow"). Chained to the document's
+	/// cell styles so an area style's parent can resolve to a user cell style.
+	/// Owned per-table (StyleSet is non-copyable); rebuilt from the table style.
+	StyleSet<CellStyle> m_areaStyles;
+
 	//>>End of data we need to save
 	//-----------------------------
 	//<<Live working variables/data
@@ -912,6 +927,7 @@ private:
 
 	/// The logical active column.
 	int m_activeColumn {0};
+
 	//>>End of live working variables/data
 };
 

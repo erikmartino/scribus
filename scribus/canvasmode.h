@@ -173,7 +173,7 @@ protected:
 	bool commonMouseMove(QMouseEvent *m);
 	void commonDrawControls(QPainter* p, bool drawHandles);
 	/// Draws the text cursor for @a textframe, offset by @a offset.
-	void commonDrawTextCursor(QPainter* p, PageItem_TextFrame* textframe, const QPointF& offset);
+	void commonDrawTextCursor(QPainter* p, PageItem_TextFrame* textframe, const QPointF& offset, double maxHeight = 0.0);
 
 	void commonkeyPressEvent_Default(QKeyEvent *e);
 	void commonkeyPressEvent_NormalNodeEdit(QKeyEvent *e);

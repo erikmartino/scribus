@@ -28,6 +28,7 @@ public:
 		ColumnResize, /**< Column resize handle. */
 		TableResize,  /**< Table resize handle. */
 		CellSelect,   /**< Cell selection handle. */
+		SelectAll,    /**< Select-all handle (top corners). */
 		None          /**< No handle was hit. */
 	};
 

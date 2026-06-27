@@ -45,6 +45,7 @@ for which a new license (GPL+exception) is in place.
 #include "scribus.h"
 #include "scribusapp.h"
 #include "textframespellchecker.h"
+#include "ui/fsw/firststartwizard.h"
 #include "ui/splash.h"
 #include "ui/factories/scribusproxystyle.h"
 #include "undomanager.h"
@@ -116,6 +117,19 @@ int ScribusCore::startGUI(bool showSplash, bool showFontInfo, bool showProfileIn
 
 	scribus->show();
 	scribus->setupMainWindow();
+
+	// First-run setup. Prefs are loaded, the main window exists and is shown, and
+	// this runs *before* the recover / startup (new-document) dialog so the defaults
+	// it sets (units, page size, text direction) are already in effect when those appear.
+	if (usingGUI() && m_Files.isEmpty() && PrefsManager::instance().appPrefs.uiPrefs.showFirstStartWizard)
+	{
+		struct ApplicationPrefs oldPrefs(PrefsManager::instance().appPrefs);
+		FirstStartWizard fsw(scribus);
+		fsw.exec();   // applies prefs at Finish (savePrefs), or marks-done on Skip
+
+		if (oldPrefs.uiPrefs.language != PrefsManager::instance().appPrefs.uiPrefs.language)
+			ScQApp->changeGUILanguage(PrefsManager::instance().appPrefs.uiPrefs.language);
+	}
 
 	QStringList recoverFiles = scribus->findRecoverableFile();
 	int subsRet = scribus->ShowSubs();

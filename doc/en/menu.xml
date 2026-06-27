@@ -86,8 +86,8 @@
 			<submenuitem text="Rendering Intents" file="cms3.html"/>
 		</submenuitem>
 		<submenuitem text="DTP Toolbox" file="toolbox.html">
-			<submenuitem text="Adobe Reader" file="toolbox1.html"/>
-			<submenuitem text="PDF/PostScript Tools" file="toolbox2.html"/>
+			<submenuitem text="Adobe Reader and Okular" file="toolbox1.html"/>
+			<submenuitem text="PDF Tools" file="toolbox2.html"/>
 			<submenuitem text="Ghostscript" file="toolbox5.html"/>
 			<submenuitem text="GSview" file="toolbox6.html"/>
 			<submenuitem text="GIMP" file="toolbox4.html"/>
@@ -100,7 +100,7 @@
 			<submenuitem text="LProf" file="toolbox14.html"/>
 			<submenuitem text="Fontmatrix" file="toolbox16.html"/>
 			<submenuitem text="SwatchBooker" file="toolbox17.html"/>
-			<submenuitem text="LibreOffice/OpenOffice.org" file="toolbox18.html"/>
+			<submenuitem text="LibreOffice" file="toolbox18.html"/>
 			<submenuitem text="Commandline Tools" file="toolbox19.html"/>
 		</submenuitem>
 		<area text="Help!!" file="help.html" >

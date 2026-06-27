@@ -27,7 +27,8 @@ public:
 	{
 		None = 0,
 		Floating = 1,
-		List = 2
+		Sticky = 2,
+		List = 3
 	};
 
 	enum InfoType

@@ -6,7 +6,7 @@
 SMColorButton::SMColorButton(QWidget *parent) : FormWidget(parent)
 {
 	colorButton = new ColorButton(this);
-	colorButton->setMenuContextType(ColorButton::Floating);
+	colorButton->setMenuContextType(ColorButton::Sticky);
 	addWidget( colorButton );
 
 	parentButton = new QToolButton(this);

@@ -93,10 +93,21 @@ void CellSelect::mouseMoveEvent(QMouseEvent* event)
 
 	m_endCell = newCell;
 
-	// Select the new area.
+	// Select the new area, extending by the gesture's unit.
 	table()->clearSelection();
-	table()->selectCells(
-		m_startCell.row(), m_startCell.column(), m_endCell.row(), m_endCell.column());
+	switch (m_mode)
+	{
+		case Columns:
+			table()->selectCells(0, m_startCell.column(), table()->rows() - 1, m_endCell.column());
+			break;
+		case Rows:
+			table()->selectCells(m_startCell.row(), 0, m_endCell.row(), table()->columns() - 1);
+			break;
+		case Cells:
+		default:
+			table()->selectCells(m_startCell.row(), m_startCell.column(), m_endCell.row(), m_endCell.column());
+			break;
+	}
 	table()->moveTo(newCell);
 	m_canvas->update();
 }
@@ -110,7 +121,7 @@ void CellSelect::drawControls(QPainter* p)
 	paintCellSelection(p);
 }
 
-void CellSelect::setup(PageItem_Table* table, const TableCell& cell)
+void CellSelect::setup(PageItem_Table* table, const TableCell& cell, SelectionMode mode)
 {
 	Q_ASSERT(table);
 	Q_ASSERT(cell.isValid());
@@ -119,6 +130,19 @@ void CellSelect::setup(PageItem_Table* table, const TableCell& cell)
 
 	m_startCell = cell;
 	m_endCell = cell;
+	m_mode = mode;
 
-	table->selectCell(cell.row(), cell.column());
+	switch (m_mode)
+	{
+		case Columns:
+			table->selectColumn(cell.column());
+			break;
+		case Rows:
+			table->selectRow(cell.row());
+			break;
+		case Cells:
+		default:
+			table->selectCell(cell.row(), cell.column());
+			break;
+	}
 }

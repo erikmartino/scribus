@@ -65,7 +65,10 @@ void RowResize::mouseReleaseEvent(QMouseEvent* event)
 		activeTransaction = UndoManager::instance()->beginTransaction(table()->getUName(), table()->getUPixmap(), Um::TableRowHeight, QString(), Um::ITable);
 
 	table()->doc()->dontResize = true;
-	table()->resizeRow(m_row, gridPoint.y() - table()->rowPosition(m_row), strategy);
+	double requestedHeight = gridPoint.y() - table()->rowPosition(m_row);
+	requestedHeight = qMax(requestedHeight, m_minRowHeight);
+	table()->resizeRow(m_row, requestedHeight, strategy);
+
 	if (strategy == PageItem_Table::MoveFollowing)
 	{
 		table()->adjustTableToFrame();
@@ -122,6 +125,21 @@ void RowResize::setup(PageItem_Table* table, int row)
 	setTable(table);
 	m_row = row;
 
+	// Cache the content-fit floors once -- text content can't change during
+	// the drag, so there's no need to recompute every mouse move.
+	bool hasContent = false;
+	double natural = table->naturalRowHeight(row, &hasContent);
+	m_minRowHeight = hasContent ? qMax(PageItem_Table::MinimumRowHeight, natural) : PageItem_Table::MinimumRowHeight;
+
+	if (row < table->rows() - 1)
+	{
+		bool nextHasContent = false;
+		double nextNatural = table->naturalRowHeight(row + 1, &nextHasContent);
+		m_nextMinRowHeight = nextHasContent ? qMax(PageItem_Table::MinimumRowHeight, nextNatural) : PageItem_Table::MinimumRowHeight;
+	}
+	else
+		m_nextMinRowHeight = PageItem_Table::MinimumRowHeight;
+
 	// Make copies of the row geometries to be used during resize.
 	m_rowHeights = table->rowHeights();
 	m_rowPositions = table->rowPositions();
@@ -130,7 +148,7 @@ void RowResize::setup(PageItem_Table* table, int row)
 double RowResize::resizeRowMoveFollowing(double height)
 {
 	// Set row height.
-	double newHeight = m_rowHeights[m_row] = qMax(PageItem_Table::MinimumRowHeight, height);
+	double newHeight = m_rowHeights[m_row] = qMax(m_minRowHeight, height);
 
 	// Move following rows.
 	double rowPosition = m_rowPositions.at(m_row);
@@ -150,10 +168,13 @@ double RowResize::resizeRowResizeFollowing(double height)
 
 	if (m_row < table()->rows() - 1)
 	{
-		// Following row exists, so height is bounded at both ends.
-		newHeight = m_rowHeights[m_row] = qBound(
-			PageItem_Table::MinimumRowHeight, height,
-			oldHeight + m_rowHeights.at(m_row + 1) - PageItem_Table::MinimumRowHeight);
+		// Following row exists, so height is bounded at both ends:
+		//  - lower bound: this row's own content-fit floor,
+		//  - upper bound: grow only until the following row hits its floor.
+		double upperBound = oldHeight + m_rowHeights.at(m_row + 1) - m_nextMinRowHeight;
+		if (upperBound < m_minRowHeight)
+			upperBound = m_minRowHeight;
+		newHeight = m_rowHeights[m_row] = qBound(m_minRowHeight, height, upperBound);
 
 		// Resize/move following row.
 		double heightChange = newHeight - oldHeight;
@@ -162,8 +183,8 @@ double RowResize::resizeRowResizeFollowing(double height)
 	}
 	else
 	{
-		// Last row, so height only bounded by MinimumRowHeight.
-		newHeight = m_rowHeights[m_row] = qMax(PageItem_Table::MinimumRowHeight, height);
+		// Last row, so height only bounded by this row's content-fit floor.
+		newHeight = m_rowHeights[m_row] = qMax(m_minRowHeight, height);
 	}
 
 	return newHeight;

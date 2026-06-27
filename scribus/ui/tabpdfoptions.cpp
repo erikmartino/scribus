@@ -413,6 +413,8 @@ void TabPDFOptions::restoreDefaults(const PDFOptions & Optionen,
 		for (int fe = 0; fe < m_docFonts.count(); ++ fe)
 		{
 			QString fontName = m_docFonts.at(fe);
+			if (!AllFonts.contains(fontName))
+				continue;
 			const ScFace fontFace = AllFonts[fontName];
 			if (Opts.EmbedList.contains(fontName) && (!fontFace.isOTF() || Opts.supportsEmbeddedOpenTypeFonts()) && !fontFace.subset())
 				addFontItem(fontName, EmbedList);
@@ -430,7 +432,8 @@ void TabPDFOptions::restoreDefaults(const PDFOptions & Optionen,
 			if (itEmbed.isEmpty())
 			{
 				QListWidgetItem* item = addFontItem(itAnn.key(), EmbedList);
-				item->setFlags(Qt::ItemIsEnabled);
+				if (item)
+					item->setFlags(Qt::ItemIsEnabled);
 			}
 			QList<QListWidgetItem *> itSubset = SubsetList->findItems(itAnn.key(), Qt::MatchExactly);
 			for (int itOut = 0; itOut < itSubset.count(); ++itOut)
@@ -1315,17 +1318,20 @@ void TabPDFOptions::EmbedAll()
 	for (int i = 0; i < m_docFonts.count(); ++i)
 	{
 		QString fontName = m_docFonts.at(i);
+		if (!AllFonts.contains(fontName))
+			continue;
 		const ScFace fontFace = AllFonts[fontName];
 		if (!fontFace.subset() && (!fontFace.isOTF() || pdfVer.supportsEmbeddedOpenTypeFonts()))
 		{
 			QListWidgetItem* item = addFontItem(fontName, EmbedList);
-			if (m_annotationFonts.contains(item->text()))
+			if (item && m_annotationFonts.contains(item->text()))
 				item->setFlags(Qt::ItemIsEnabled);
 		}
 		else if (m_annotationFonts.contains(fontName))
 		{
 			QListWidgetItem* item = addFontItem(fontName, EmbedList);
-			item->setFlags(Qt::ItemIsEnabled);
+			if (item)
+				item->setFlags(Qt::ItemIsEnabled);
 		}
 		else
 		{
@@ -1343,10 +1349,13 @@ void TabPDFOptions::SubsetAll()
 	for (int a = 0; a < m_docFonts.count(); ++a)
 	{
 		QString fontName = m_docFonts.at(a);
+		if (!AllFonts.contains(fontName))
+			continue;
 		if (m_annotationFonts.contains(fontName))
 		{
 			QListWidgetItem* item = addFontItem(fontName, EmbedList);
-			item->setFlags(Qt::ItemIsEnabled);
+			if (item)
+				item->setFlags(Qt::ItemIsEnabled);
 		}
 		else
 		{
@@ -1382,16 +1391,19 @@ QListWidgetItem* TabPDFOptions::addFontItem(const QString& fontName, QListWidget
 		return nullptr;
 
 	const ScFace& face = AllFonts.value(fontName);
+	QString iconName;
 	if (face.isReplacement())
-		item = new QListWidgetItem( IconManager::instance().loadIcon("font-substitute"), fontName, fontList );
+		iconName = "font-substitute";
 	else if (face.type() == ScFace::TYPE1)
-		item = new QListWidgetItem( IconManager::instance().loadIcon("font-postscript"), fontName, fontList );
+		iconName = "font-postscript";
 	else if (face.type() == ScFace::TTF)
-		item = new QListWidgetItem( IconManager::instance().loadIcon("font-truetype"), fontName, fontList );
+		iconName = "font-truetype";
 	else if (face.type() == ScFace::OTF)
-		item = new QListWidgetItem( IconManager::instance().loadIcon("font-otf"), fontName, fontList );
+		iconName = "font-otf";
 
-	return item;
+	return iconName.isEmpty()
+		? new QListWidgetItem(fontName, fontList)
+		: new QListWidgetItem(IconManager::instance().loadIcon(iconName), fontName, fontList);
 }
 
 void TabPDFOptions::unitChange(int docUnitIndex)

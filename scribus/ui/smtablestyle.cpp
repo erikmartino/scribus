@@ -427,8 +427,8 @@ void SMTableStyle::setupConnections()
 {
 	if (!m_page)
 		return;
-	connect(m_page->fillColor, SIGNAL(currentTextChanged(QString)), this, SLOT(slotFillColor()));
-	connect(m_page->fillShade, SIGNAL(clicked()), this, SLOT(slotFillShade()));
+	connect(m_page->buttonFillColor->colorButton, SIGNAL(changed()), this, SLOT(slotFillColor()));
+	connect(m_page->buttonFillColor->parentButton, SIGNAL(clicked()), this, SLOT(slotFillColor()));
 	connect(m_page->parentCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(slotParentChanged(QString)));
 	connect(m_page, SIGNAL(bordersChanged(TableSides, TableBorder)), this, SLOT(slotBordersChanged(TableSides, TableBorder)));
 	connect(m_page->headerRowsSpinBox, SIGNAL(valueChanged(int)), this, SLOT(slotHeaderRows()));
@@ -437,16 +437,19 @@ void SMTableStyle::setupConnections()
 	connect(m_page->bandedColumnsCheckBox, SIGNAL(toggled(bool)), this, SLOT(slotBandedColumns()));
 	connect(m_page->firstColumnCheckBox, SIGNAL(toggled(bool)), this, SLOT(slotFirstColumn()));
 	connect(m_page->lastColumnCheckBox, SIGNAL(toggled(bool)), this, SLOT(slotLastColumn()));
+	connect(m_page->tableDirectionComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(slotTableDirection()));
 	connect(m_page, SIGNAL(conditionalAreaChanged(TableArea)), this, SLOT(slotAreaChanged(TableArea)));
 	connect(m_page->paragraphStyleComboBox, SIGNAL(newStyle(QString)), this, SLOT(slotParagraphStyle(QString)));
+	connect(m_page->basedOnComboBox, SIGNAL(newStyle(QString)), this, SLOT(slotBasedOnStyle(QString)));
+	connect(m_page->cellStyleClearButton, SIGNAL(clicked()), this, SLOT(slotResetToBasedOn()));
 }
 
 void SMTableStyle::removeConnections()
 {
 	if (!m_page)
 		return;
-	disconnect(m_page->fillColor, SIGNAL(currentTextChanged(QString)), this, SLOT(slotFillColor()));
-	disconnect(m_page->fillShade, SIGNAL(clicked()), this, SLOT(slotFillShade()));
+	disconnect(m_page->buttonFillColor->colorButton, SIGNAL(changed()), this, SLOT(slotFillColor()));
+	disconnect(m_page->buttonFillColor->parentButton, SIGNAL(clicked()), this, SLOT(slotFillColor()));
 	disconnect(m_page->parentCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(slotParentChanged(QString)));
 	disconnect(m_page, SIGNAL(bordersChanged(TableSides, TableBorder)), this, SLOT(slotBordersChanged(TableSides, TableBorder)));
 	disconnect(m_page->headerRowsSpinBox, SIGNAL(valueChanged(int)), this, SLOT(slotHeaderRows()));
@@ -455,56 +458,46 @@ void SMTableStyle::removeConnections()
 	disconnect(m_page->bandedColumnsCheckBox, SIGNAL(toggled(bool)), this, SLOT(slotBandedColumns()));
 	disconnect(m_page->firstColumnCheckBox, SIGNAL(toggled(bool)), this, SLOT(slotFirstColumn()));
 	disconnect(m_page->lastColumnCheckBox, SIGNAL(toggled(bool)), this, SLOT(slotLastColumn()));
+	disconnect(m_page->tableDirectionComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(slotTableDirection()));
 	disconnect(m_page, SIGNAL(conditionalAreaChanged(TableArea)), this, SLOT(slotAreaChanged(TableArea)));
 	disconnect(m_page->paragraphStyleComboBox, SIGNAL(newStyle(QString)), this, SLOT(slotParagraphStyle(QString)));
+	disconnect(m_page->basedOnComboBox, SIGNAL(newStyle(QString)), this, SLOT(slotBasedOnStyle(QString)));
+	disconnect(m_page->cellStyleClearButton, SIGNAL(clicked()), this, SLOT(slotResetToBasedOn()));
 }
 
 void SMTableStyle::slotFillColor()
 {
 	TableArea area = m_page->currentArea();
-	QString col = m_page->fillColor->currentText();
+	QString col = m_page->buttonFillColor->colorButton->colorName();
+	int fs = m_page->buttonFillColor->colorButton->colorData().Shade;
 
 	for (int i = 0; i < m_selection.count(); ++i)
 	{
 		if (area == TableArea::WholeTable)
 		{
-			if (m_page->fillColor->useParentValue())
+			if (m_page->buttonFillColor->useParentValue())
+			{
 				m_selection[i]->resetFillColor();
+				m_selection[i]->resetFillShade();
+			}
 			else
+			{
 				m_selection[i]->setFillColor(col);
+				m_selection[i]->setFillShade(fs);
+			}
 		}
 		else
 		{
 			CellStyle cs = m_selection[i]->conditionalStyle(area);
 			cs.setFillColor(col);
-			m_selection[i]->setConditionalStyle(area, cs);
-		}
-	}
-	if (!m_selectionIsDirty)
-	{
-		m_selectionIsDirty = true;
-		emit selectionDirty();
-	}
-}
-
-void SMTableStyle::slotFillShade()
-{
-	TableArea area = m_page->currentArea();
-	int fs = m_page->fillShade->getValue();
-
-	for (int i = 0; i < m_selection.count(); ++i)
-	{
-		if (area == TableArea::WholeTable)
-		{
-			if (m_page->fillShade->useParentValue())
-				m_selection[i]->resetFillShade();
-			else
-				m_selection[i]->setFillShade(fs);
-		}
-		else
-		{
-			CellStyle cs = m_selection[i]->conditionalStyle(area);
 			cs.setFillShade(fs);
+
+			if (m_page->buttonFillColor->useParentValue())
+			{
+				cs.resetFillColor();
+				cs.resetFillShade();
+			}
+
 			m_selection[i]->setConditionalStyle(area, cs);
 		}
 	}
@@ -559,16 +552,33 @@ void SMTableStyle::slotParentChanged(const QString &parent)
 
 void SMTableStyle::slotBordersChanged(TableSides sides, const TableBorder &border)
 {
+	TableArea area = m_page->currentArea();
 	for (int i = 0; i < m_selection.count(); ++i)
 	{
-		if (sides & TableSide::Left)
-			m_selection[i]->setLeftBorder(border);
-		if (sides & TableSide::Right)
-			m_selection[i]->setRightBorder(border);
-		if (sides & TableSide::Top)
-			m_selection[i]->setTopBorder(border);
-		if (sides & TableSide::Bottom)
-			m_selection[i]->setBottomBorder(border);
+		if (area == TableArea::WholeTable)
+		{
+			if (sides & TableSide::Left)
+				m_selection[i]->setLeftBorder(border);
+			if (sides & TableSide::Right)
+				m_selection[i]->setRightBorder(border);
+			if (sides & TableSide::Top)
+				m_selection[i]->setTopBorder(border);
+			if (sides & TableSide::Bottom)
+				m_selection[i]->setBottomBorder(border);
+		}
+		else
+		{
+			CellStyle cs = m_selection[i]->conditionalStyle(area);
+			if (sides & TableSide::Left)
+				cs.setLeftBorder(border);
+			if (sides & TableSide::Right)
+				cs.setRightBorder(border);
+			if (sides & TableSide::Top)
+				cs.setTopBorder(border);
+			if (sides & TableSide::Bottom)
+				cs.setBottomBorder(border);
+			m_selection[i]->setConditionalStyle(area, cs);
+		}
 	}
 	if (!m_selectionIsDirty)
 	{
@@ -668,6 +678,8 @@ void SMTableStyle::slotAreaChanged(TableArea area)
 	{
 		m_page->showFillForCurrentArea(m_selection[0]);
 		m_page->showParagraphStyleForCurrentArea(m_selection[0]);
+		m_page->showBordersForCurrentArea(m_selection[0]);
+		m_page->showBasedOnForCurrentArea(m_selection[0]);
 	}
 }
 
@@ -687,6 +699,67 @@ void SMTableStyle::slotParagraphStyle(const QString& psName)
 			m_selection[i]->setConditionalStyle(area, cs);
 		}
 	}
+	if (!m_selectionIsDirty)
+	{
+		m_selectionIsDirty = true;
+		emit selectionDirty();
+	}
+}
+
+void SMTableStyle::slotBasedOnStyle(const QString& cellStyleName)
+{
+	TableArea area = m_page->currentArea();
+	if (area == TableArea::WholeTable)
+		return;   // Based-on applies to cell areas only, not the table frame.
+
+	for (int i = 0; i < m_selection.count(); ++i)
+	{
+		CellStyle cs = m_selection[i]->conditionalStyle(area);
+		cs.setParent(cellStyleName);
+		m_selection[i]->setConditionalStyle(area, cs);
+	}
+	if (!m_selectionIsDirty)
+	{
+		m_selectionIsDirty = true;
+		emit selectionDirty();
+	}
+}
+
+void SMTableStyle::slotResetToBasedOn()
+{
+	TableArea area = m_page->currentArea();
+	if (area == TableArea::WholeTable)
+		return;
+	for (int i = 0; i < m_selection.count(); ++i)
+	{
+		CellStyle cs = m_selection[i]->conditionalStyle(area);
+		QString keepParent = cs.parent();
+		cs.erase();
+		cs.setParent(keepParent);
+		m_selection[i]->setConditionalStyle(area, cs);
+	}
+	if (!m_selectionIsDirty)
+	{
+		m_selectionIsDirty = true;
+		emit selectionDirty();
+	}
+
+	// Refresh the per-area widgets so they reflect the cleared overrides,
+	// otherwise Apply would write the stale widget values straight back.
+	if (m_selection.count() == 1)
+	{
+		m_page->showFillForCurrentArea(m_selection[0]);
+		m_page->showParagraphStyleForCurrentArea(m_selection[0]);
+		m_page->showBordersForCurrentArea(m_selection[0]);
+		m_page->showBasedOnForCurrentArea(m_selection[0]);
+	}
+}
+
+void SMTableStyle::slotTableDirection()
+{
+	bool rtl = (m_page->tableDirectionComboBox->currentIndex() == 1);
+	for (int i = 0; i < m_selection.count(); ++i)
+		m_selection[i]->setTableRTL(rtl);
 	if (!m_selectionIsDirty)
 	{
 		m_selectionIsDirty = true;

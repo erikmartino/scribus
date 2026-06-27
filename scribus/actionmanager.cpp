@@ -242,6 +242,8 @@ void ActionManager::initEditMenuActions()
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 	name = "editSelectAllOnLayer";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "itemSelectChain";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 	name = "editDeselectAll";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 	name = "editSearchReplace";
@@ -678,6 +680,16 @@ void ActionManager::initTableMenuActions()
 	name = "tableAdjustTableToFrame";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 	name = "tableAdjustRowHeights";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "tableSelectCell";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "tableSelectAllCells";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "tableSelectRow";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "tableSelectColumn";
+	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
+	name = "tableSelectTable";
 	scrActions->insert(name, new ScrAction("", defaultKey(name), mainWindow));
 }
 
@@ -1264,6 +1276,12 @@ void ActionManager::disconnectNewDocActions()
 	(*scrActions)["tableAdjustFrameToTable"]->disconnect();
 	(*scrActions)["tableAdjustTableToFrame"]->disconnect();
 	(*scrActions)["tableAdjustRowHeights"]->disconnect();
+	(*scrActions)["tableSelectCell"]->disconnect();
+	(*scrActions)["tableSelectAllCells"]->disconnect();
+	(*scrActions)["tableSelectRow"]->disconnect();
+	(*scrActions)["tableSelectColumn"]->disconnect();
+	(*scrActions)["tableSelectTable"]->disconnect();
+	(*scrActions)["itemSelectChain"]->disconnect();
 	(*scrActions)["itemAdjustFrameHeightToText"]->disconnect();
 	(*scrActions)["itemAdjustFrameToImage"]->disconnect();
 	(*scrActions)["itemAdjustImageToFrame"]->disconnect();
@@ -1324,6 +1342,12 @@ void ActionManager::connectNewDocActions(ScribusDoc *currDoc)
 	connect( (*scrActions)["tableAdjustFrameToTable"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustFrameToTable()));
 	connect( (*scrActions)["tableAdjustTableToFrame"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustTableToFrame()));
 	connect( (*scrActions)["tableAdjustRowHeights"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustTableRowHeights()));
+	connect( (*scrActions)["tableSelectCell"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_SelectTableCell()));
+	connect( (*scrActions)["tableSelectAllCells"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_SelectTableAllCells()));
+	connect( (*scrActions)["tableSelectRow"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_SelectTableRow()));
+	connect( (*scrActions)["tableSelectColumn"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_SelectTableColumn()));
+	connect( (*scrActions)["tableSelectTable"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_SelectWholeTable()));
+	connect( (*scrActions)["itemSelectChain"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_SelectChain()) );
 	connect( (*scrActions)["itemAdjustFrameHeightToText"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustFrameHeightToText()) );
 	connect( (*scrActions)["itemAdjustFrameToImage"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustFrametoImageSize()) );
 	connect( (*scrActions)["itemAdjustImageToFrame"], SIGNAL(triggered()), currDoc, SLOT(itemSelection_AdjustImagetoFrameSize()) );
@@ -1654,6 +1678,12 @@ void ActionManager::languageChange()
 	(*scrActions)["tableAdjustFrameToTable"]->setTexts(tr("Adjust Frame to Table"));
 	(*scrActions)["tableAdjustTableToFrame"]->setTexts(tr("Adjust Table to Frame"));
 	(*scrActions)["tableAdjustRowHeights"]->setTexts( tr("Adjust Row Height to Text"));
+	(*scrActions)["tableSelectCell"]->setTexts(tr("Cell"));
+	(*scrActions)["tableSelectAllCells"]->setTexts(tr("All Cells"));
+	(*scrActions)["tableSelectRow"]->setTexts(tr("Row"));
+	(*scrActions)["tableSelectColumn"]->setTexts(tr("Column"));
+	(*scrActions)["tableSelectTable"]->setTexts(tr("Table"));
+	(*scrActions)["itemSelectChain"]->setTexts( tr("Select All in Text Chain"));
 	(*scrActions)["itemAdjustFrameHeightToText"]->setTexts( tr("Adjust Frame Height to Text"));
 	(*scrActions)["itemAdjustFrameToImage"]->setTexts( tr("Adjust Frame to Image"));
 	(*scrActions)["itemAdjustImageToFrame"]->setTexts( tr("Adjust Image to Frame"));
@@ -2427,7 +2457,14 @@ void ActionManager::createDefaultMenus()
 		<< "tableDistributeColumnsEvenly"
 		<< "tableAdjustFrameToTable"
 		<< "tableAdjustTableToFrame"
-		<< "tableAdjustRowHeights";
+		<< "tableAdjustRowHeights"
+		<< "tableAdjustRowHeights"
+		<< "tableSelectCell"
+		<< "tableSelectAllCells"
+		<< "tableSelectRow"
+		<< "tableSelectColumn"
+		<< "tableSelectTable"
+		<< "itemSelectChain";
 	//Extras
 	++itmenu;
 	itmenu->second

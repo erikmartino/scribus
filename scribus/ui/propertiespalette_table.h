@@ -97,6 +97,7 @@ private slots:
 	void on_buttonClearTableStyle_clicked();
 	void on_buttonClearCellStyle_clicked();
 	void on_cellPaddingWidget_valuesChanged(const MarginStruct& padding);
+	void on_tableDirectionComboBox_currentIndexChanged(int index);
 
 	/// Syncs the side selector's visual state to reflect the actual borders
 	/// on the currently-selected (or all) cells.

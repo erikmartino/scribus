@@ -21,10 +21,13 @@ SMCellStyleWidget::SMCellStyleWidget(QWidget *parent)
 {
 	setupUi(this);
 
-	fillColor->setPixmapType(ColorCombo::fancyPixmaps);
-	fillColor->addItem(CommonStrings::tr_NoneColor);
-	borderLineColor->setPixmapType(ColorCombo::fancyPixmaps);
-	borderLineColor->addItem(CommonStrings::tr_NoneColor);
+	buttonLineColor->colorButton->setContext(Context::TableCellStroke);
+	buttonLineColor->setColor(CommonStrings::tr_NoneColor);
+	buttonLineColor->setText(tr("Color"));
+
+	buttonFillColor->colorButton->setContext(Context::TableCellFill);
+	buttonFillColor->setColor(CommonStrings::tr_NoneColor);
+	buttonFillColor->setText(tr("Color"));
 
 	sideSelector->setInnerActive(false);
 	sideSelector->setStyle(TableSideSelector::CellStyle);
@@ -36,6 +39,7 @@ SMCellStyleWidget::SMCellStyleWidget(QWidget *parent)
 	iconSetChange();
 
 	connect(ScQApp, SIGNAL(iconSetChanged()), this, SLOT(iconSetChange()));
+	connect(buttonLineColor->colorButton, &ColorButton::changed, this, &SMCellStyleWidget::borderLineColorChanged);
 }
 
 void SMCellStyleWidget::changeEvent(QEvent *e)
@@ -49,8 +53,8 @@ void SMCellStyleWidget::changeEvent(QEvent *e)
 void SMCellStyleWidget::iconSetChange()
 {
 	IconManager& iconManager = IconManager::instance();
-	fillColorIcon->setPixmap(iconManager.loadPixmap("color-fill"));
-	fillShadeLabel->setPixmap(iconManager.loadPixmap("shade") );
+	buttonFillColor->setPixmap(iconManager.loadPixmap("color-fill"));
+	buttonLineColor->setPixmap(iconManager.loadPixmap("color-stroke"));
 	addBorderLineButton->setIcon(iconManager.loadIcon("stroke-add"));
 	removeBorderLineButton->setIcon(iconManager.loadIcon("stroke-remove"));
 }
@@ -59,18 +63,14 @@ void SMCellStyleWidget::languageChange()
 {
 	retranslateUi(this);
 
-	if (fillColor->count() > 0)
-	{
-		bool fillColorBlocked = fillColor->blockSignals(true);
-		fillColor->setItemText(0, CommonStrings::tr_NoneColor);
-		fillColor->blockSignals(fillColorBlocked);
-	}
-	if (borderLineColor->count() > 0)
-	{
-		bool borderColorBlocked = borderLineColor->blockSignals(true);
-		borderLineColor->setItemText(0, CommonStrings::tr_NoneColor);
-		borderLineColor->blockSignals(borderColorBlocked);
-	}
+	buttonLineColor->colorButton->setPersistentToolTip( tr("Border color of table cell"));
+	buttonLineColor->setText(tr("Color"));
+
+	buttonFillColor->colorButton->setPersistentToolTip( tr("Fill color of table cell"));
+	buttonFillColor->setText(tr("Color"));
+
+	borderLineStyleLabel->setText(tr("Type"));
+	borderLineWidthLabel->setText(tr("Width"));
 }
 
 void SMCellStyleWidget::updateBorderLineList()
@@ -99,9 +99,9 @@ void SMCellStyleWidget::updateBorderLineListItem()
 		return;
 
 	QString text = QString(" %1%2 %3").arg(borderLineWidth->getValue()).arg(borderLineWidth->suffix(), CommonStrings::translatePenStyleName(static_cast<Qt::PenStyle>(borderLineStyle->currentIndex() + 1)));
-	if (borderLineColor->currentColor() != CommonStrings::None)
+	if (buttonLineColor->colorButton->colorName() != CommonStrings::None)
 	{
-		QPixmap icon = getWidePixmap(getColor(borderLineColor->currentColor(), borderLineShade->value()));
+		QPixmap icon = getWidePixmap(getColor(buttonLineColor->colorButton->colorName(), buttonLineColor->colorButton->colorData().Shade));
 		item->setIcon(icon);
 	}
 	item->setText(text);
@@ -131,8 +131,6 @@ void SMCellStyleWidget::handleUpdateRequest(int updateFlags)
 {
 	if (!m_Doc)
 		return;
-	if (updateFlags & reqColorsUpdate)
-		fillFillColorCombo(m_Doc->PageColors);
 }
 
 void SMCellStyleWidget::setDoc(ScribusDoc* doc)
@@ -148,7 +146,9 @@ void SMCellStyleWidget::setDoc(ScribusDoc* doc)
 	m_unitIndex = m_Doc->unitIndex();
 	cellPaddingWidget->setNewUnit(m_unitIndex);
 
-	fillFillColorCombo(m_Doc->PageColors);
+	buttonLineColor->colorButton->setDoc(m_Doc);
+	buttonFillColor->colorButton->setDoc(m_Doc);
+
 	connect(m_Doc->scMW(), SIGNAL(UpdateRequest(int)), this , SLOT(handleUpdateRequest(int)));
 }
 
@@ -163,17 +163,9 @@ void SMCellStyleWidget::show(CellStyle *cellStyle, QList<CellStyle> &cellStyles,
 	const CellStyle *parent = dynamic_cast<const CellStyle*>(cellStyle->parentStyle());
 	bool hasParent =  cellStyle->hasParent() && parent != nullptr && parent->hasName() && cellStyle->parent() != "";
 	if (hasParent)
-	{
-		fillColor->setCurrentText(cellStyle->fillColor(), cellStyle->isInhFillColor());
-		fillColor->setParentText(parent->fillColor());
-		fillShade->setValue(qRound(cellStyle->fillShade()), cellStyle->isInhFillShade());
-		fillShade->setParentValue(qRound(parent->fillShade()));
-	}
+		buttonFillColor->setColor(cellStyle->fillColor(), qRound(cellStyle->fillShade()), parent->fillColor(), qRound(parent->fillShade()), cellStyle->isInhFillColor() && cellStyle->isInhFillShade());
 	else
-	{
-		fillColor->setCurrentText(cellStyle->fillColor());
-		fillShade->setValue(qRound(cellStyle->fillShade()));
-	}
+		buttonFillColor->setColor(cellStyle->fillColor(), qRound(cellStyle->fillShade()));
 
 	setBorders(cellStyle->leftBorder(), cellStyle->rightBorder(), cellStyle->topBorder(), cellStyle->bottomBorder());
 
@@ -234,10 +226,6 @@ void SMCellStyleWidget::showColors(const QList<CellStyle*> &cellStyles)
 		}
 		d = cellStyles[i]->fillShade();
 	}
-	if (d == -30000)
-		fillShade->setText( tr("Shade"));
-	else
-		fillShade->setValue(qRound(d));
 	QString s;
 	for (int i = 0; i < cellStyles.count(); ++i)
 	{
@@ -248,14 +236,8 @@ void SMCellStyleWidget::showColors(const QList<CellStyle*> &cellStyles)
 		}
 		s = cellStyles[i]->fillColor();
 	}
-	if (s.isEmpty())
-	{
-		if (fillColor->itemText(fillColor->count() - 1) != "")
-			fillColor->addItem("");
-		fillColor->setCurrentIndex(fillColor->count() - 1);
-	}
-	else
-		fillColor->setCurrentText(s);
+
+	buttonFillColor->setColor(s, qRound(d));
 }
 
 void SMCellStyleWidget::setBorders(const TableBorder& left, const TableBorder& right,
@@ -267,15 +249,6 @@ void SMCellStyleWidget::setBorders(const TableBorder& left, const TableBorder& r
 	m_bottomBorder = bottom;
 	on_sideSelector_selectionChanged();
 }
-
-void SMCellStyleWidget::fillFillColorCombo(const ColorList &colors)
-{
-	fillColor->clear();
-	fillColor->setColors(colors, true);
-	borderLineColor->clear();
-	borderLineColor->setColors(colors, true);
-}
-
 
 void SMCellStyleWidget::on_sideSelector_selectionChanged()
 {
@@ -353,12 +326,9 @@ void SMCellStyleWidget::on_borderLineList_currentRowChanged(int row)
 	{
 		borderLineWidth->setEnabled(false);
 		borderLineWidthLabel->setEnabled(false);
-		borderLineColor->setEnabled(false);
-		borderLineColorLabel->setEnabled(false);
+		buttonLineColor->setEnabled(false);
 		borderLineStyle->setEnabled(false);
 		borderLineStyleLabel->setEnabled(false);
-		borderLineShade->setEnabled(false);
-		borderLineShadeLabel->setEnabled(false);
 		return;
 	}
 
@@ -369,17 +339,13 @@ void SMCellStyleWidget::on_borderLineList_currentRowChanged(int row)
 
 	borderLineWidth->setEnabled(true);
 	borderLineWidthLabel->setEnabled(true);
-	borderLineColor->setEnabled(true);
-	borderLineColorLabel->setEnabled(true);
+	buttonLineColor->setEnabled(true);
 	borderLineStyle->setEnabled(true);
 	borderLineStyleLabel->setEnabled(true);
-	borderLineShade->setEnabled(true);
-	borderLineShadeLabel->setEnabled(true);
 
 	borderLineWidth->showValue(line.width());
-	setCurrentComboItem(borderLineColor, line.color());
+	buttonLineColor->setColor(line.color(), line.shade());
 	borderLineStyle->setCurrentIndex(static_cast<int>(line.style()) - 1);
-	borderLineShade->setValue(line.shade());
 }
 
 void SMCellStyleWidget::on_addBorderLineButton_clicked()
@@ -414,29 +380,17 @@ void SMCellStyleWidget::on_borderLineWidth_valueChanged(double width)
 	emit bordersChanged(sideSelector->selection(), m_currentBorder);
 }
 
-void SMCellStyleWidget::on_borderLineShade_valueChanged(double shade)
+void SMCellStyleWidget::borderLineColorChanged()
 {
 	int index = borderLineList->currentRow();
 	if (index < 0)
 		return;
 	TableBorderLine line = m_currentBorder.borderLines().at(index);
-	line.setShade(shade);
-	m_currentBorder.replaceBorderLine(index, line);
-	mirrorCurrentBorderToSelectedSides();
-	updateBorderLineListItem();
-	emit bordersChanged(sideSelector->selection(), m_currentBorder);
-}
-
-void SMCellStyleWidget::on_borderLineColor_textActivated(const QString& colorName)
-{
-	int index = borderLineList->currentRow();
-	if (index < 0)
-		return;
-	TableBorderLine line = m_currentBorder.borderLines().at(index);
-	QString color = colorName;
-	if (colorName == CommonStrings::tr_NoneColor)
+	QString color = buttonLineColor->colorButton->colorName();
+	if (color == CommonStrings::tr_NoneColor)
 		color = CommonStrings::None;
 	line.setColor(color);
+	line.setShade(buttonLineColor->colorButton->colorData().Shade);
 	m_currentBorder.replaceBorderLine(index, line);
 	mirrorCurrentBorderToSelectedSides();
 	updateBorderLineListItem();

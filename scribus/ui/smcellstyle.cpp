@@ -80,8 +80,6 @@ QList<StyleName> SMCellStyle::styles(bool reloadFromDoc)
 	// Return a list of names of cached styles.
 	for (int i = 0; i < m_cachedStyles.count(); ++i)
 	{
-		if (m_cachedStyles[i].name().startsWith(QLatin1String("__cond_")))
-			continue;
 		if (m_cachedStyles[i].hasName())
 		{
 			QString styleName(m_cachedStyles[i].displayName());
@@ -424,8 +422,8 @@ void SMCellStyle::setupConnections()
 {
 	if (!m_page)
 		return;
-	connect(m_page->fillColor, SIGNAL(currentTextChanged(QString)), this, SLOT(slotFillColor()));
-	connect(m_page->fillShade, SIGNAL(clicked()), this, SLOT(slotFillShade()));
+	connect(m_page->buttonFillColor->colorButton, SIGNAL(changed()), this, SLOT(slotFillColor()));
+	connect(m_page->buttonFillColor->parentButton, SIGNAL(clicked()), this, SLOT(slotFillColor()));
 	connect(m_page->parentCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(slotParentChanged(QString)));
 	connect(m_page->cellPaddingWidget, SIGNAL(valuesChanged(MarginStruct)), this, SLOT(slotCellPaddingChanged(MarginStruct)));
 	connect(m_page, SIGNAL(bordersChanged(TableSides, TableBorder)), this, SLOT(slotBordersChanged(TableSides, TableBorder)));
@@ -435,8 +433,8 @@ void SMCellStyle::removeConnections()
 {
 	if (!m_page)
 		return;
-	disconnect(m_page->fillColor, SIGNAL(currentTextChanged(QString)), this, SLOT(slotFillColor()));
-	disconnect(m_page->fillShade, SIGNAL(clicked()), this, SLOT(slotFillShade()));
+	disconnect(m_page->buttonFillColor->colorButton, SIGNAL(changed()), this, SLOT(slotFillColor()));
+	disconnect(m_page->buttonFillColor->parentButton, SIGNAL(clicked()), this, SLOT(slotFillColor()));
 	disconnect(m_page->parentCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(slotParentChanged(QString)));
 	disconnect(m_page->cellPaddingWidget, SIGNAL(valuesChanged(MarginStruct)), this, SLOT(slotCellPaddingChanged(MarginStruct)));
 	disconnect(m_page, SIGNAL(bordersChanged(TableSides, TableBorder)), this, SLOT(slotBordersChanged(TableSides, TableBorder)));
@@ -444,40 +442,21 @@ void SMCellStyle::removeConnections()
 
 void SMCellStyle::slotFillColor()
 {
-	if (m_page->fillColor->useParentValue())
+	if (m_page->buttonFillColor->useParentValue())
 	{
 		for (int i = 0; i < m_selection.count(); ++i)
+		{
 			m_selection[i]->resetFillColor();
-	}
-	else
-	{
-		QString col(m_page->fillColor->currentText());
-		for (int i = 0; i < m_selection.count(); ++i)
-		{
-			m_selection[i]->setFillColor(col);
-		}
-	}
-	if (!m_selectionIsDirty)
-	{
-		m_selectionIsDirty = true;
-		emit selectionDirty();
-	}
-}
-
-void SMCellStyle::slotFillShade()
-{
-	if (m_page->fillShade->useParentValue())
-	{
-		for (int i = 0; i < m_selection.count(); ++i)
-		{
 			m_selection[i]->resetFillShade();
 		}
 	}
 	else
 	{
-		int fs = m_page->fillShade->getValue();
+		QString col = m_page->buttonFillColor->colorButton->colorName();
+		int fs = m_page->buttonFillColor->colorButton->colorData().Shade;
 		for (int i = 0; i < m_selection.count(); ++i)
 		{
+			m_selection[i]->setFillColor(col);
 			m_selection[i]->setFillShade(fs);
 		}
 	}

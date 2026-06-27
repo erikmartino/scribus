@@ -65,6 +65,7 @@ public:
 
 	QRect splashScreenRect() const;
 	QPixmap splashScreen() const;
+	QPixmap splashScreen(bool darkMode) const;
 
 protected:
 	const QString classDark = "onDark";

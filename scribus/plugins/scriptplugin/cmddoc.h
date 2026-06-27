@@ -387,6 +387,64 @@ Apply master page masterPageName on page pageNumber.\n\
 "));
 PyObject* scribus_applymasterpage(PyObject* self, PyObject* args);
 
+PyDoc_STRVAR(scribus_exportdocumentcheck__doc__,
+QT_TR_NOOP("exportDocumentCheck([jsonFilePath, checkProfileName=\"\", nonPrintingLayers=False])\n\
+\n\
+Export the result of the preflight verifier into a JSON string or a JSON file.\n\
+\n\
+jsonFilePath: the path to the json file to be written. If empty, a JSON string \n\
+is returned.\n\
+checkProfileName is the name of an existing preflight verifier profile.\n\
+\n\
+The resulting JSON always has five sections:\n\
+- freeItems: a list of page items that are in no page;\n\
+- layers: a list of errors in layers;\n\
+- marks: errors relating to the marks;\n\
+- masterPages: list of erroneous page items for each master page;\n\
+- pages: list of erroneous page items for each page.\n\
+\n\
+The errors are strings, mostly names from the PreflightError enum in scribusstruct.h:\n\
+- MissingGlyph\n\
+- TextOverflow\n\
+- ObjectNotOnPage\n\
+- MissingImage\n\
+- ImageDPITooLow\n\
+- Transparency\n\
+- PDFAnnotField\n\
+- PlacedPDF\n\
+- ImageDPITooHigh\n\
+- ImageIsGIF\n\
+- BlendMode\n\
+- WrongFontInAnnotation\n\
+- NotCMYKOrSpot\n\
+- DeviceColorsAndOutputIntent\n\
+- FontNotEmbedded\n\
+- EmbeddedFontIsOpenType\n\
+- OffConflictLayers\n\
+- PartFilledImageFrame\n\
+- MarksChanged\n\
+- AppliedMasterDifferentSide\n\
+- EmptyTextFrame\n\
+- ImageHasProgressiveEncoding\n\
+- DocumentModifiedAfterMarksUpdate\n\
+"));
+PyObject* scribus_exportdocumentcheck(PyObject* self, PyObject* args, PyObject* kw);
+
+
+PyDoc_STRVAR(scribus_getrtl__doc__,
+QT_TR_NOOP("getRTL() -> bool\n\
+\n\
+Returns whether the current document is right-to-left.\n\
+"));
+PyObject *scribus_getrtl(PyObject * /*self*/);
+
+PyDoc_STRVAR(scribus_setrtl__doc__,
+QT_TR_NOOP("setRTL(rtl)\n\
+\n\
+Sets whether the current document is right-to-left. \"rtl\" is a boolean.\n\
+"));
+PyObject *scribus_setrtl(PyObject * /*self*/, PyObject* args);
+
 #endif
 
 

@@ -60,13 +60,6 @@ class SMCellStyleWidget : public QWidget, public Ui::SMCellStyleWidget
 		 * This function is called when the language is changed.
 		 */
 		void languageChange();
-
-		/**
-		 * Populates the fill color combo with the given color list.
-		 *
-		 * @param colors list of colors to populate the combo with.
-		 */
-		void fillFillColorCombo(const ColorList &colors);
 		void showColors(const QList<CellStyle*> &cellStyles);
 		void setBorders(const TableBorder& left, const TableBorder& right, const TableBorder& top, const TableBorder& bottom);
 
@@ -107,8 +100,7 @@ class SMCellStyleWidget : public QWidget, public Ui::SMCellStyleWidget
 		void on_addBorderLineButton_clicked();
 		void on_removeBorderLineButton_clicked();
 		void on_borderLineWidth_valueChanged(double width);
-		void on_borderLineShade_valueChanged(double shade);
-		void on_borderLineColor_textActivated(const QString& colorName);
+		void borderLineColorChanged();
 		void on_borderLineStyle_activated(int style);
 };
 

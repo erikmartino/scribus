@@ -174,7 +174,10 @@ bool Scribus171Format::paletteSupported(QIODevice* /* file */, const QString & f
 		loadRawBytes(fileName, docBytes, 1024);
 	}
 
-	int startElemPos = docBytes.indexOf("<SCRIBUSCOLORS");
+	int startElemPos = docBytes.indexOf("<ScribusColors");
+	//Remove uppercase in 1.8 format
+	if (startElemPos == -1)
+		startElemPos = docBytes.indexOf("<SCRIBUSCOLORS");
 	return (startElemPos >= 0);
 }
 
@@ -2534,7 +2537,7 @@ void Scribus171Format::readDocAttributes(ScribusDoc* doc, const ScXmlStreamAttri
 		m_Doc->FirstPnum = attrs.valueAsInt("FIRSTNUM", 1);
 		m_Doc->setPagePositioning(attrs.valueAsInt("BOOK", 0));
 		m_Doc->setBindingDirection(attrs.valueAsInt("BINDINGDIRECTION", 0));
-
+		m_Doc->setRTL(attrs.valueAsBool("IsRTL", false));
 		m_Doc->setUsesAutomaticTextFrames( attrs.valueAsInt("AUTOTEXT") );
 		m_Doc->PageSp = attrs.valueAsInt("AUTOSPALTEN");
 		m_Doc->PageSpa = attrs.valueAsDouble("ABSTSPALTEN");
@@ -2601,7 +2604,7 @@ void Scribus171Format::readDocAttributes(ScribusDoc* doc, const ScXmlStreamAttri
 		m_Doc->FirstPnum = attrs.valueAsInt("FirstPageNumber", 1);
 		m_Doc->setPagePositioning(attrs.valueAsInt("PagePositioning", 0));
 		m_Doc->setBindingDirection(attrs.valueAsInt("BindingDirection", 0));
-
+		m_Doc->setRTL(attrs.valueAsBool("IsRTL", false));
 		m_Doc->setUsesAutomaticTextFrames( attrs.valueAsInt("AutomaticTextFrames") );
 		m_Doc->PageSp = attrs.valueAsInt("AutomaticTextFrameColumnCount");
 		m_Doc->PageSpa = attrs.valueAsDouble("AutomaticTextFrameColumnGap");
@@ -3843,6 +3846,8 @@ void Scribus171Format::readTableStyle(ScribusDoc *doc, ScXmlStreamReader& reader
 		newStyle.setFirstColumn(attrs.valueAsInt("FirstColumn", 0) != 0);
 	if (attrs.hasAttribute("LastColumn"))
 		newStyle.setLastColumn(attrs.valueAsInt("LastColumn", 0) != 0);
+	if (attrs.hasAttribute("RTL"))
+		newStyle.setTableRTL(attrs.valueAsInt("RTL", 0) != 0);
 
 	QString tagName(reader.nameAsString());
 	while (!reader.atEnd() && !reader.hasError())
@@ -3892,6 +3897,8 @@ void Scribus171Format::readTableStyle(ScribusDoc *doc, ScXmlStreamReader& reader
 void Scribus171Format::readConditionalCellStyle(ScribusDoc *doc, ScXmlStreamReader& reader, const ScXmlStreamAttributes& attrs, CellStyle& newStyle) const
 {
 	newStyle.erase();
+	if (attrs.hasAttribute("Parent"))
+		newStyle.setParent(attrs.valueAsString("Parent"));
 	if (attrs.hasAttribute("FillColor"))
 		newStyle.setFillColor(attrs.valueAsString("FillColor"));
 	if (attrs.hasAttribute("FillShade"))
@@ -6464,6 +6471,8 @@ PageItem* Scribus171Format::pasteItem(ScribusDoc *doc, const ScXmlStreamAttribut
 		currItem->setImageFlippedV( attrs.valueAsInt("FLIPPEDV", 0));
 	else
 		currItem->setImageFlippedV( attrs.valueAsInt("FlippedVertical", 0));
+	if (attrs.hasAttribute("RTL"))
+		currItem->setRTL(attrs.valueAsInt("RTL", 0));
 	if (attrs.hasAttribute("RADRECT"))
 		currItem->setCornerRadius( attrs.valueAsDouble("RADRECT", 0.0));
 	else

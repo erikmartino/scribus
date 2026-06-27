@@ -107,7 +107,11 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PrecompiledHeaderFile>$(TargetName)_pch.h</PrecompiledHeaderFile>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202302">stdcpp23</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202302">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -134,7 +138,11 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PrecompiledHeaderFile>$(TargetName)_pch.h</PrecompiledHeaderFile>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202302">stdcpp23</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202302">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -164,7 +172,11 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PrecompiledHeaderFile>$(TargetName)_pch.h</PrecompiledHeaderFile>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202302">stdcpp23</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202302">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -196,7 +208,11 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PrecompiledHeaderFile>$(TargetName)_pch.h</PrecompiledHeaderFile>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202302">stdcpp23</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202302">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>

@@ -304,6 +304,8 @@ void ColorPicker::setContext(Context config)
 	case Context::Text:
 	case Context::TextBackground:
 	case Context::TextOutline:
+	case Context::TableCellFill:
+	case Context::TableCellStroke:
 		buttonSolid->setVisible(false);
 		buttonGradient->setVisible(false);
 		buttonHatch->setVisible(false);

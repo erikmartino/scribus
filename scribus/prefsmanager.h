@@ -152,6 +152,7 @@ public:
 	const int& guiFontSize() const;
 	const int& paletteFontSize() const;
 	void setKeyEntry(const QString&, const QString&, const QKeySequence&, const int&);
+	void setShowFirstStartWizard(const bool);
 	void setShowStartupDialog(const bool);
 	bool showPageShadow() const;
 	//! \brief Sets the preferences' color set

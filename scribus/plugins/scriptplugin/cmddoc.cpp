@@ -6,6 +6,7 @@ for which a new license (GPL+exception) is in place.
 */
 #include "cmddoc.h"
 #include "cmdutil.h"
+#include "documentchecker.h"
 #include "documentinformation.h"
 #include "pyesstring.h"
 #include "scribuscore.h"
@@ -14,6 +15,11 @@ for which a new license (GPL+exception) is in place.
 #include "units.h"
 
 #include <QApplication>
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QObject>
 
 PyObject *scribus_newdocument(PyObject* /* self */, PyObject* args)
 {
@@ -557,6 +563,169 @@ PyObject* scribus_applymasterpage(PyObject* /* self */, PyObject* args)
 	Py_RETURN_NONE;
 }
 
+PyObject* scribus_exportdocumentcheck(PyObject* /* self */, PyObject* args, PyObject* kw)
+{
+	PyESString targetFilenameArg;
+	PyESString checkProfileNameArg;
+	bool showNonPrintingLayerErrors = false;
+	char *kwargs[] = {const_cast<char*>("jsonFilename"), const_cast<char*>("checkProfileName"),
+		const_cast<char*>("nonPrintingLayers"), nullptr};
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|es$esp", kwargs,
+			"utf-8", targetFilenameArg.ptr(), "utf-8", checkProfileNameArg.ptr(),
+			&showNonPrintingLayerErrors))
+		return nullptr;
+
+	if (!checkHaveDocument())
+		return nullptr;
+	const QString targetFileName(targetFilenameArg.c_str());
+	const QString checkProfileName(checkProfileNameArg.c_str());
+
+	ScribusDoc* currentDoc = ScCore->primaryMainWindow()->doc;
+
+	if (checkProfileName.isEmpty())
+		DocumentChecker::checkDocument(currentDoc);
+	else
+		DocumentChecker::checkDocument(currentDoc, checkProfileName);
+
+	// "Standard" Errors
+	// (Taken from PreflightError in scribusstruct.h)
+	QMap<PreflightError, QString> errorsList = {
+		{PreflightError::MissingGlyph, "MissingGlyph"},
+		{PreflightError::TextOverflow, "TextOverflow"},
+		{PreflightError::ObjectNotOnPage, "ObjectNotOnPage"},
+		{PreflightError::MissingImage, "MissingImage"},
+		{PreflightError::ImageDPITooLow, "ImageDPITooLow"},
+		{PreflightError::Transparency, "Transparency"},
+		{PreflightError::PDFAnnotField, "PDFAnnotField"},
+		{PreflightError::PlacedPDF, "PlacedPDF"},
+		{PreflightError::ImageDPITooHigh, "ImageDPITooHigh"},
+		{PreflightError::ImageIsGIF, "ImageIsGIF"},
+		{PreflightError::BlendMode, "BlendMode"},
+		{PreflightError::WrongFontInAnnotation, "WrongFontInAnnotation"},
+		{PreflightError::NotCMYKOrSpot, "NotCMYKOrSpot"},
+		{PreflightError::DeviceColorsAndOutputIntent, "DeviceColorsAndOutputIntent"},
+		{PreflightError::FontNotEmbedded, "FontNotEmbedded"},
+		{PreflightError::EmbeddedFontIsOpenType, "EmbeddedFontIsOpenType"},
+		{PreflightError::OffConflictLayers, "OffConflictLayers"},
+		{PreflightError::PartFilledImageFrame, "PartFilledImageFrame"},
+		{PreflightError::MarksChanged, "MarksChanged"},
+		{PreflightError::AppliedMasterDifferentSide, "AppliedMasterDifferentSide"},
+		{PreflightError::EmptyTextFrame, "EmptyTextFrame"},
+		{PreflightError::ImageHasProgressiveEncoding, "ImageHasProgressiveEncoding"},
+		{PreflightError::MissingStyle, "MissingStyle"},
+	};
+	// Custom Errors
+	// "DocumentModifiedAfterMarksUpdate"
+
+	QJsonObject json;
+
+	if (currentDoc->notesChanged())
+	{
+		json["marks"] = QJsonObject{{"", "DocumentModifiedAfterMarksUpdate"}};
+	}
+	else
+	{
+		json["marks"] = QJsonObject{};
+	}
+
+	QJsonArray jsonLayers;
+	for (const auto& [layerId, layerErrors]: currentDoc->docLayerErrors.asKeyValueRange())
+	{
+		for (const auto& [key, errorLevel]: layerErrors.asKeyValueRange())
+		{
+			jsonLayers.push_back(QJsonObject{{"layer", currentDoc->layerName(layerId)}, {"error", errorsList.value(key)}});
+		}
+	}
+	json["layers"] = jsonLayers;
+
+	QMap<int, QVector<QPair<QString, QString>>> pagesWithErrors;
+
+	for (auto [pageItem, itemError]: currentDoc->masterItemErrors.asKeyValueRange())
+	{
+		if (!showNonPrintingLayerErrors && !currentDoc->layerPrintable(pageItem->m_layerID))
+			continue;
+		const int pageNumber = pageItem->OwnPage;
+		for (auto [errorCode, errorLevel]: itemError.asKeyValueRange())
+			pagesWithErrors[pageNumber].push_back({pageItem->itemName(), errorsList.value(errorCode)});
+	}
+
+	QJsonObject jsonMasterPages;
+	for (auto [pageNumber, value]: pagesWithErrors.asKeyValueRange())
+	{
+		if (pageNumber < 0 || pageNumber >= currentDoc->MasterPages.count())
+			continue;
+		QJsonArray pageItems;
+		for (const auto& [item, error]: value)
+		{
+			pageItems.push_back(QJsonObject{{{"item", item}, {"error", error}}});
+		}
+		jsonMasterPages[currentDoc->MasterPages.at(pageNumber)->pageName()] = pageItems;
+	}
+	json["masterPages"] = jsonMasterPages;
+
+	pagesWithErrors.clear();
+
+	for (auto [pageNumber, pageErrors]: currentDoc->pageErrors.asKeyValueRange())
+	{
+		pagesWithErrors[pageNumber] = {};
+
+		for (auto [errorCode, value]: pageErrors.asKeyValueRange())
+		{
+			pagesWithErrors[pageNumber].push_back({"", errorsList.value(errorCode)});
+		}
+	}
+	QJsonArray jsonFreeItems;
+	for (auto [pageItem, itemErrors]: currentDoc->docItemErrors.asKeyValueRange())
+	{
+		if (!showNonPrintingLayerErrors && !currentDoc->layerPrintable(pageItem->m_layerID))
+			continue;
+		if (pageItem->OwnPage == -1)
+		{
+			jsonFreeItems.push_back(pageItem->itemName());
+			continue;
+		}
+		for (auto [errorCode, errorLevel]: itemErrors.asKeyValueRange())
+			pagesWithErrors[pageItem->OwnPage].push_back({pageItem->itemName(), errorsList.value(errorCode)});
+	}
+
+	QJsonObject jsonPages;
+	for (auto [pageNumber, value]: pagesWithErrors.asKeyValueRange())
+	{
+		QJsonArray pageItems;
+		for (const auto& [item, error]: value)
+		{
+			pageItems.push_back(QJsonObject{{{"item", item}, {"error", error}}});
+		}
+		jsonPages[QString::number(pageNumber + 1)] = pageItems;
+	}
+	json["pages"] = jsonPages;
+
+	QJsonObject jsonStyles;
+	for (auto [styleName, styleErrors] : currentDoc->docStyleErrors.asKeyValueRange())
+	{
+		QJsonArray styleErrorList;
+		for (auto [errorCode, value] : styleErrors.asKeyValueRange())
+			styleErrorList.push_back(errorsList.value(errorCode));
+		jsonStyles[styleName] = styleErrorList;
+	}
+	json["styles"] = jsonStyles;
+
+	json["freeItems"] = jsonFreeItems;
+
+	if (targetFileName.isEmpty())
+		return PyUnicode_FromString(QJsonDocument(json).toJson().constData());
+
+	QFile saveFile(targetFileName);
+	if (!saveFile.open(QIODevice::WriteOnly))
+	{
+		PyErr_SetString(ScribusException, QObject::tr("Failed to open the file '%1' for writing","python error").arg(targetFileName).toUtf8().constData());
+		return nullptr;
+	}
+	saveFile.write(QJsonDocument(json).toJson());
+
+	Py_RETURN_NONE;
+}
+
 /*! HACK: this removes "warning: 'blah' defined but not used" compiler warnings
 with header files structure untouched (docstrings are kept near declarations)
 PV */
@@ -591,4 +760,24 @@ void cmddocdocwarnings()
 	  << scribus_setinfo__doc__
 	  << scribus_setmargins__doc__
 	  << scribus_setunit__doc__;
+}
+
+PyObject *scribus_getrtl(PyObject* /* self */)
+{
+	if (!checkHaveDocument())
+		return nullptr;
+	return PyBool_FromLong(static_cast<long>(ScCore->primaryMainWindow()->doc->isRTL()));
+}
+
+PyObject *scribus_setrtl(PyObject* /* self */, PyObject* args)
+{
+	int rtl = 0;
+	if (!PyArg_ParseTuple(args, "p", &rtl))
+		return nullptr;
+	if (!checkHaveDocument())
+		return nullptr;
+	ScribusDoc* currentDoc = ScCore->primaryMainWindow()->doc;
+	currentDoc->setRTL(rtl != 0);
+	currentDoc->setModified(true);
+	Py_RETURN_NONE;
 }

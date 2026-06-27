@@ -115,6 +115,8 @@ public:
 	// Find text in story
 	int indexOf(const QString &str, int from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive, int* pLen = nullptr) const;
 	int indexOf(QChar ch, int from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+	int lastIndexOf(const QString &str, int from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive, int* pLen = nullptr) const;
+	int lastIndexOf(QChar ch, int from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 	
 	// Add, change, replace
 	// Insert chars from another StoryText object at current cursor position
@@ -313,11 +315,8 @@ signals:
 	void changed(int firstItem, int endItem);
 
 private:
-	ScText * item(int index);
-	const ScText * item(int index) const;
-	void fixSurrogateSelection();
-	
-private:
+	/// private data structure
+	ScText_Shared * d { nullptr };
 	ScribusDoc * m_doc { nullptr };
 	ShapedTextCache* m_shapedTextCache { nullptr };
 
@@ -326,27 +325,21 @@ private:
 	static inline icu::BreakIterator* m_sentenceIterator { nullptr };
 	static inline icu::BreakIterator* m_lineIterator { nullptr };
 
+
+	ScText * item(int index);
+	const ScText * item(int index) const;
+	void fixSurrogateSelection();
+
 	QString textWithSoftHyphens (int pos, uint len) const;
-	void    insertCharsWithSoftHyphens(int pos, const QString& txt, bool applyNeighbourStyle = false);
+	void insertCharsWithSoftHyphens(int pos, const QString& txt, bool applyNeighbourStyle = false);
 	
 	/// mark these runs as invalid, ie. need itemize and shaping
 	void invalidate(int firstRun, int lastRun);
 	void removeParSep(int pos);
 	void insertParSep(int pos);
 
-	// 	int splitRun(int pos);
-	
-	/** bring physical view in sync with logical one. 
-	 *  This gets called automatically from all physical view methods
- 	 */
-// 	void validate();
-	/// private data structure
-	ScText_Shared * d { nullptr };
-	/// gives the physical view which was last given to the layouter
-// 	uint layouterVersion;
- 	/// is true after layout() has been exercised
-// 	bool layouterValid;
+	// private:
+	int matchAt(int pos, const QString& qStr, Qt::CaseSensitivity cs, int* pLen) const;
  };
-
 
 #endif /*STORYTEXT_H_*/

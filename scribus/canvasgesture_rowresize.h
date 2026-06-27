@@ -65,6 +65,10 @@ private:
 	QList<double> m_rowHeights;
 	/// List of row positions for the table outline.
 	QList<double> m_rowPositions;
+	/// Smallest height m_row may be resized to (cached at setup).
+	double m_minRowHeight { 0.0 };
+	/// Smallest height the following row may be squeezed to (cached at setup).
+	double m_nextMinRowHeight { 0.0 };
 };
 
 #endif // CANVASGESTURE_ROWRESIZE_H

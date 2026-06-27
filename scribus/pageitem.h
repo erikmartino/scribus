@@ -1297,6 +1297,13 @@ public: // Start public functions
 	virtual bool hasFill() const { return ((fillColor() != CommonStrings::None) || (GrType != 0)); }
 	virtual bool hasStroke() const { return ((lineColor() != CommonStrings::None) || (GrTypeStroke != 0) || (!NamedLStyle.isEmpty()) || (!patternStrokeVal.isEmpty())); }
 
+
+	/// Returns whether the table uses right-to-left layout.
+	bool isRTL() const { return m_rtl; }
+
+	/// Sets whether the table uses right-to-left layout.
+	void setRTL(bool rtl) { m_rtl = rtl; }
+
 		// End public functions
 
 public:	// Start public variables
@@ -1911,6 +1918,10 @@ protected: // Start protected variables
 	int     m_softShadowBlendMode {0};
 	bool    m_softShadowErasedByObject {false};
 	bool    m_softShadowHasObjectTransparency {false};
+
+
+	///PageItem is LTR/RTL by default
+	bool m_rtl { false };
 
 	// End protected variables
 

@@ -129,6 +129,7 @@ struct UIPrefs
 	bool showLabels {true}; //! Hide UI additional labels (Professional Mode)
 	bool showLabelsOfInactiveTabs {true}; //! Hide text label of inactive tabs of Advanced Docking System
 	bool useTabs {false}; //! Use a tabbed MainWidget a la FireFox
+	bool showFirstStartWizard {true}; //! Show a first start wizard to collect basic preferences on first run
 	bool showStartupDialog {true}; //! Whether to show the startup dialog or not
 	bool showSplashOnStartup {true}; //! Whether to show the splashscreen or not
 	bool stickyTools {false}; //! Whether a user's tool section remains after use or the normal tool is reselected
@@ -169,6 +170,7 @@ struct DocumentSetupPrefs
 	QString AutoSaveDir;
 	bool saveCompressed;
 	int bindingDirection; //! 0 = LTR, 1 = RTL
+	bool isRTL; //! \brief Document is right-to-left
 };
 
 //Guides

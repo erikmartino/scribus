@@ -9,7 +9,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>668</width>
+    <width>709</width>
     <height>517</height>
    </rect>
   </property>
@@ -461,6 +461,13 @@
        </property>
        <property name="default">
         <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="previousButton">
+       <property name="text">
+        <string>Search Previous</string>
        </property>
       </widget>
      </item>

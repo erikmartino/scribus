@@ -82,14 +82,19 @@ void TableStyle::update(const StyleContext* context)
 
 void TableStyle::getNamedResources(ResourceCollection& lists) const
 {
+	if (!parent().isEmpty())
+		lists.collectTableStyle(parent());
 	for (const BaseStyle* style = parentStyle(); style != nullptr; style = style->parentStyle())
-		lists.collectCellStyle(style->name());
+		lists.collectTableStyle(style->name());
 	lists.collectColor(fillColor());
 	// TODO: Collect colors of borders.
 
-	// Conditional styles may reference fill (and border) colors.
-	for (auto it = m_conditionalStyles.constBegin(); it != m_conditionalStyles.constEnd(); ++it)
-		it.value().getNamedResources(lists);
+	// Collect resources for every conditional area resolved up the parent
+	// chain (not just this style's own), so a parent style's conditional
+	// based-on cell styles travel with the table too.
+	const QList<TableArea> areas = conditionalAreasResolved();
+	for (TableArea area : areas)
+		conditionalStyleResolved(area).getNamedResources(lists);
 }
 
 void TableStyle::replaceNamedResources(ResourceCollection& newNames)

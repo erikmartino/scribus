@@ -94,6 +94,7 @@ bool DocumentChecker::checkDocument(ScribusDoc *currDoc, const QString& checkerP
 	currDoc->docItemErrors.clear();
 	currDoc->masterItemErrors.clear();
 	currDoc->docLayerErrors.clear();
+	currDoc->docStyleErrors.clear();
 
 	checkPages(currDoc, checkerSettings);
 	checkLayers(currDoc, checkerSettings);
@@ -101,7 +102,7 @@ bool DocumentChecker::checkDocument(ScribusDoc *currDoc, const QString& checkerP
 	currDoc->setNotesChanged(currDoc->updateMarks(true));
 
 	checkItems(currDoc, checkerSettings);
-
+	checkStyles(currDoc, checkerSettings);
 	return (currDoc->hasPreflightErrors());
 }
 
@@ -399,6 +400,18 @@ void DocumentChecker::checkItems(ScribusDoc *currDoc, const CheckerPrefs& checke
 					if (!isEmptyAnnotation)
 						itemError.insert(PreflightError::EmptyTextFrame, 0);
 				}
+
+				// Dangling parent in the frame's own default style chain
+				// (the StoryText DefaultStyle Parent/CParent, which is not a
+				// named document style and so isn't caught by checkStyles()).
+				{
+					const QString cParent = currItem->itemText.defaultStyle().charStyle().parent();
+					if (!cParent.isEmpty() && currDoc->charStyles().find(cParent) < 0)
+						itemError.insert(PreflightError::MissingStyle, 0);
+					const QString pParent = currItem->itemText.defaultStyle().parent();
+					if (!pParent.isEmpty() && currDoc->paragraphStyles().find(pParent) < 0)
+						itemError.insert(PreflightError::MissingStyle, 0);
+				}
 				
 				if (currItem->isAnnotation())
 				{
@@ -666,6 +679,18 @@ void DocumentChecker::checkItems(ScribusDoc *currDoc, const CheckerPrefs& checke
 						itemError.insert(PreflightError::EmptyTextFrame, 0);
 				}
 
+				// Dangling parent in the frame's own default style chain
+				// (the StoryText DefaultStyle Parent/CParent, which is not a
+				// named document style and so isn't caught by checkStyles()).
+				{
+					const QString cParent = currItem->itemText.defaultStyle().charStyle().parent();
+					if (!cParent.isEmpty() && currDoc->charStyles().find(cParent) < 0)
+						itemError.insert(PreflightError::MissingStyle, 0);
+					const QString pParent = currItem->itemText.defaultStyle().parent();
+					if (!pParent.isEmpty() && currDoc->paragraphStyles().find(pParent) < 0)
+						itemError.insert(PreflightError::MissingStyle, 0);
+				}
+
 				if (currItem->isAnnotation())
 				{
 					ScFace::FontFormat fformat = currItem->itemText.defaultStyle().charStyle().font().format();
@@ -702,5 +727,40 @@ void DocumentChecker::checkItems(ScribusDoc *currDoc, const CheckerPrefs& checke
 				currDoc->docItemErrors.insert(currItem, itemError);
 		}
 		allItems.clear();
+	}
+}
+
+void DocumentChecker::checkStyles(ScribusDoc *currDoc, const CheckerPrefs& /*checkerSettings*/)
+{
+	errorCodes styleError;
+
+	// Paragraph styles: flag any whose parent (BasedOn) doesn't resolve in the set.
+	const StyleSet<ParagraphStyle>& paraStyles = currDoc->paragraphStyles();
+	for (int i = 0; i < paraStyles.count(); ++i)
+	{
+		const QString& parent = paraStyles[i].parent();
+		if (parent.isEmpty())
+			continue;
+		if (paraStyles.find(parent) < 0)
+		{
+			styleError.clear();
+			styleError.insert(PreflightError::MissingStyle, 0);
+			currDoc->docStyleErrors.insert(paraStyles[i].name(), styleError);
+		}
+	}
+
+	// Character styles: same check.
+	const StyleSet<CharStyle>& charStyles = currDoc->charStyles();
+	for (int i = 0; i < charStyles.count(); ++i)
+	{
+		const QString& parent = charStyles[i].parent();
+		if (parent.isEmpty())
+			continue;
+		if (charStyles.find(parent) < 0)
+		{
+			styleError.clear();
+			styleError.insert(PreflightError::MissingStyle, 0);
+			currDoc->docStyleErrors.insert(charStyles[i].name(), styleError);
+		}
 	}
 }

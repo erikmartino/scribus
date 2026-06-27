@@ -959,17 +959,19 @@ void CanvasMode_Normal::mousePressEvent(QMouseEvent *m)
 			}
 		}
 	}
-// Commented out to fix bug #7865
-//	if ((m_doc->m_Selection->count() != 0) && (m->button() == Qt::LeftButton) && (frameResizeHandle == 0))
-//	{
-//		m_view->startDragTimer();
-//	}
+	// Commented out to fix bug #7865
+	//	if ((m_doc->m_Selection->count() != 0) && (m->button() == Qt::LeftButton) && (frameResizeHandle == 0))
+	//	{
+	//		m_view->startDragTimer();
+	//	}
 
-
+	// r27554 / reverted for #17847. Could add a preference in the future.
+	//
 	// After selection processing, if we ended up with a single table item
 	// selected and the click was inside a cell interior, enter edit mode
 	// immediately. This avoids requiring a separate double-click to enter
-	//edit mode
+	// edit mode
+	/*
 	if (m->button() == Qt::LeftButton && m_doc->m_Selection->count() == 1)
 	{
 		currItem = m_doc->m_Selection->itemAt(0);
@@ -988,6 +990,7 @@ void CanvasMode_Normal::mousePressEvent(QMouseEvent *m)
 			}
 		}
 	}
+	*/
 
 	m_canvas->PaintSizeRect(QRect());
 }

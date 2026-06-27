@@ -45,6 +45,7 @@ class SCRIBUS_API DocumentChecker
 		static void checkPages(ScribusDoc *currDoc, const CheckerPrefs& checkerSettings);
 		static void checkLayers(ScribusDoc *currDoc, const CheckerPrefs& checkerSettings);
 		static void checkItems(ScribusDoc *currDoc, const CheckerPrefs& checkerSettings);
+		static void checkStyles(ScribusDoc *currDoc, const CheckerPrefs& checkerSettings);
 };
 
 #endif

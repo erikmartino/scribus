@@ -93,6 +93,7 @@ SearchReplace::SearchReplace(QWidget* parent, ScribusDoc *doc)
 	connect(replaceAllButton, &QPushButton::clicked, this, &SearchReplace::slotReplaceAll);
 	connect(replaceButton, &QPushButton::clicked, this, &SearchReplace::slotReplace);
 	connect(searchButton, &QPushButton::clicked, this, &SearchReplace::slotSearch);
+	connect(previousButton, &QPushButton::clicked, this, &SearchReplace::slotSearchPrevious);
 	connect(stopButton, &QPushButton::clicked, this, &SearchReplace::slotStop);
 
 	connect(searchAlignmentCheckBox, &QCheckBox::clicked, [this](){enableAlignmentSearch(); updateButtonState();});
@@ -199,9 +200,7 @@ void SearchReplace::searchInStoryEditor()
 void SearchReplace::searchOnCanvas()
 {
 	hideMessage();
-
 	auto options = getSearchOptions();
-
 	if (!initCanvasSelection())
 		return;
 
@@ -251,6 +250,156 @@ void SearchReplace::searchOnCanvas()
 
 	if (!matchFound)
 		showMessage(tr(messageNoMatch));
+}
+
+QPair<int, int> SearchReplace::searchStoryBackward(const StoryText& storyText, const int beforePos, const int length, const Options& options)
+{
+	if (length == 0 || beforePos <= 0)
+		return { -1, -1 };
+
+	// Text path: jump straight to the previous occurrence via lastIndexOf,
+	// then reuse getMatchRange() for wholeWords / format validation.
+	if (options.textEnabled)
+	{
+		const Qt::CaseSensitivity cs = options.ignoreCase ? Qt::CaseInsensitive : Qt::CaseSensitive;
+		int searchFrom = beforePos - 1;
+		while (searchFrom >= 0)
+		{
+			if (!m_searching)
+				break;
+			const int candidate = storyText.lastIndexOf(options.text, searchFrom, cs);
+			if (candidate < 0)
+				break;
+			const auto match = getMatchRange(storyText, candidate, length, options);
+			if (match.start == candidate)
+				return { match.start, match.end };
+			searchFrom = candidate - 1;   // first char matched but wholeWords/format rejected it
+		}
+		return { -1, -1 };
+	}
+
+	// Format-only path (no search text): the contiguous-region logic doesn't
+	// reverse cleanly, so keep the collect-and-keep-last sweep here.
+	QPair<int, int> result { -1, -1 };
+	int from = 0;
+	while (from < beforePos)
+	{
+		if (!m_searching)
+			break;
+		const auto pos = searchStory(storyText, from, length, options);
+		if (pos.first < 0 || pos.first >= beforePos)
+			break;
+		result = pos;
+		from = pos.second + 1;
+	}
+	return result;
+}
+
+void SearchReplace::searchInStoryEditorBackward()
+{
+	hideMessage();
+	auto options = getSearchOptions();
+	if (!m_doc || !m_doc->scMW()->CurrStED)
+		return;
+
+	SEditor* storyTextEdit = m_doc->scMW()->CurrStED->Editor;
+	StoryText& storyText = storyTextEdit->StyledText;
+	QTextCursor cursor = storyTextEdit->textCursor();
+
+	auto pos = searchStoryBackward(storyText, cursor.selectionStart(), storyText.length(), options);
+	if (pos.first < 0)
+	{
+		showMessage(tr(messageEndOfSelection));
+		pos = searchStoryBackward(storyText, storyText.length(), storyText.length(), options); // wrap to end
+	}
+
+	if (pos.first >= 0)
+	{
+		m_selectionStart = pos.first;
+		m_selectionEnd = pos.second + 1;
+		cursor.setPosition(pos.first);
+		cursor.setPosition(pos.second + 1, QTextCursor::KeepAnchor);
+		storyTextEdit->setTextCursor(cursor);
+	}
+	else
+		showMessage(tr(messageNoMatch));
+}
+
+void SearchReplace::searchOnCanvasBackward()
+{
+	hideMessage();
+	auto options = getSearchOptions();
+	if (!initCanvasSelection())
+		return;
+
+	PageItem* pageItem;
+	int itemsToBeProcessed = m_pageItems.size();
+	bool matchFound{false};
+
+	while ((pageItem = currentPageItem()))
+	{
+		if (itemsToBeProcessed < 0)
+			break;
+		--itemsToBeProcessed;
+
+		StoryText& storyText = pageItem->itemText;
+
+		if (m_doc->appMode != modeEdit)
+		{
+			m_doc->view()->requestMode(modeEdit);
+			storyText.setCursorPosition(storyText.length());
+		}
+
+		const int beforePos = storyText.selectionLength() > 0 ? storyText.startOfSelection() : storyText.cursorPosition();
+		auto pos = searchStoryBackward(storyText, beforePos, storyText.length(), options);
+
+		if (pos.first < 0)
+		{
+			previousPageItem();
+			if (pageItem != currentPageItem())
+				storyText.deselectAll();
+			if (m_endReached)
+				showMessage(tr(messageEndOfSelection));
+
+			// search the previous frame fully, from its end
+			if (PageItem* prev = currentPageItem())
+			{
+				prev->itemText.deselectAll();
+				prev->itemText.setCursorPosition(prev->itemText.length());
+			}
+			continue;
+		}
+
+		storyText.select(pos.first, pos.second + 1 - pos.first);
+		storyText.setCursorPosition(pos.first);   // cursor at match start so the next Previous goes further back
+		matchFound = true;
+		break;
+	}
+	updatePageItemSelection(pageItem);
+
+	if (!matchFound)
+		showMessage(tr(messageNoMatch));
+}
+
+void SearchReplace::previousPageItem()
+{
+	if (m_pageItems.empty())
+		return;
+
+	m_endReached = false;
+	if (m_currentPageItem == 0)
+	{
+		m_currentPageItem = m_pageItems.size() - 1;   // wrap to last
+		m_endReached = true;
+	}
+	else
+		--m_currentPageItem;
+
+	auto pageItem = m_pageItems.at(m_currentPageItem);
+	if (!m_endReached && pageItem == m_doc->m_Selection->itemAt(0))
+		return;
+
+	selectPageItem(pageItem);
 }
 
 bool SearchReplace::initCanvasSelection()
@@ -450,7 +599,6 @@ SearchReplace::MatchRange SearchReplace::getMatchRange(const StoryText& storyTex
 	return { matchStart, matchEnd, matchEnd + 1 };
 }
 
-// TODO: return std::optional<QPair> as soon as we have it.
 QPair<int, int> SearchReplace::searchStory(const StoryText& storyText, const int start, const int length, const Options& options)
 {
 	if (length == 0)
@@ -485,6 +633,8 @@ QPair<int, int> SearchReplace::searchStory(const StoryText& storyText, const int
 
 void SearchReplace::updatePageItemSelection(PageItem* pageItem)
 {
+	if (!pageItem)
+		return;
 	StoryText& storyText = pageItem->itemText;
 
 	int foundPos = storyText.cursorPosition();
@@ -880,6 +1030,19 @@ void SearchReplace::replaceAllOnCanvas()
 	m_doc->regionsChanged()->update(QRectF());
 }
 
+void SearchReplace::slotSearchPrevious()
+{
+	m_searching = true;
+	updateButtonState();
+
+	if (m_storyEditorMode)
+		searchInStoryEditorBackward();
+	else
+		searchOnCanvasBackward();
+
+	m_searching = false;
+	updateButtonState();
+}
 
 void SearchReplace::slotCollapseFormat()
 {
@@ -1194,12 +1357,14 @@ void SearchReplace::updateButtonState()
 	replaceButton->setVisible(!m_searching);
 	searchButton->setVisible(!m_searching);
 	stopButton->setVisible(m_searching);
+	previousButton->setVisible(!m_searching);
 
 	bool enabled = anySearchChecked();
 
 	replaceAllButton->setEnabled(enabled);
 	replaceButton->setEnabled(enabled);
 	searchButton->setEnabled(enabled);
+	previousButton->setEnabled(enabled);
 }
 
 void SearchReplace::hideMessage()

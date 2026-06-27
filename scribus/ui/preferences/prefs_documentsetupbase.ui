@@ -334,6 +334,27 @@
            </attribute>
           </widget>
          </item>
+         <item row="7" column="1">
+          <widget class="QComboBox" name="textDirectionComboBox">
+           <item>
+            <property name="text">
+             <string>Left-to-right</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Right-to-left</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="7" column="0">
+          <widget class="QLabel" name="textDirectionLabel">
+           <property name="text">
+            <string>Text Direction:</string>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
        <item>
@@ -387,8 +408,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>283</width>
-            <height>236</height>
+            <width>244</width>
+            <height>244</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -911,7 +932,7 @@
   </connection>
  </connections>
  <buttongroups>
-  <buttongroup name="pageLayoutButtonGroup"/>
   <buttongroup name="bindingDirectionButtonGroup"/>
+  <buttongroup name="pageLayoutButtonGroup"/>
  </buttongroups>
 </ui>

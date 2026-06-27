@@ -55,6 +55,9 @@ void CreateMode::drawControls(QPainter* p)
 {
 	if (!inItemCreation) return;
 
+	if (modifiers == Qt::ShiftModifier && createObjectMode == modeDrawTable2)
+		return;
+
 	QPointF topLeft(createObjectPos.x(), createObjectPos.y());
 	QPointF btRight(canvasCurrCoord.x(), canvasCurrCoord.y());
 	QColor  drawColor = QApplication::palette().color(QPalette::Active, QPalette::Highlight);
@@ -566,13 +569,13 @@ PageItem* CreateMode::doCreateNewObject()
 
 	double wSize = canvasCurrCoord.x() - createObjectPos.x();
 	double hSize = canvasCurrCoord.y() - createObjectPos.y();
-	bool   skipOneClick = (modifiers == Qt::ShiftModifier);
+	bool skipOneClick = (modifiers == Qt::ShiftModifier);
 	if ((createObjectMode == modeDrawLine) || (createObjectMode == modeDrawTable2) ||
-		(createObjectMode == modeInsertPDFButton) || (createObjectMode == modeInsertPDFTextfield) ||
-		(createObjectMode == modeInsertPDFTextfield) || (createObjectMode == modeInsertPDFCheckbox) ||
-		(createObjectMode == modeInsertPDFCombobox) || (createObjectMode == modeInsertPDFListbox) ||
-		(createObjectMode == modeInsertPDFTextAnnotation) || (createObjectMode == modeInsertPDFLinkAnnotation) ||
-		(createObjectMode == modeInsertPDF3DAnnotation) || (createObjectMode == modeInsertPDFRadioButton))
+			(createObjectMode == modeInsertPDFButton) || (createObjectMode == modeInsertPDFTextfield) ||
+			(createObjectMode == modeInsertPDFTextfield) || (createObjectMode == modeInsertPDFCheckbox) ||
+			(createObjectMode == modeInsertPDFCombobox) || (createObjectMode == modeInsertPDFListbox) ||
+			(createObjectMode == modeInsertPDFTextAnnotation) || (createObjectMode == modeInsertPDFLinkAnnotation) ||
+			(createObjectMode == modeInsertPDF3DAnnotation) || (createObjectMode == modeInsertPDFRadioButton))
 	{
 		skipOneClick = false;
 	}
@@ -620,203 +623,209 @@ PageItem* CreateMode::doCreateNewObject()
 
 	switch (createObjectMode)
 	{
-	case modeDrawShapes:
-		switch (createObjectSubMode)
-		{
-			case 0:
-				if (modifiers == Qt::ShiftModifier)
-					z = m_doc->itemAddArea(PageItem::Polygon, PageItem::Rectangle, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
-				else
-					z = m_doc->itemAdd(PageItem::Polygon, PageItem::Rectangle, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
-				m_doc->Items->at(z)->FrameType = 0;
-				break;
-			case 1:
-				if (modifiers == Qt::ShiftModifier)
-					z = m_doc->itemAddArea(PageItem::Polygon, PageItem::Ellipse, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
-				else
-					z = m_doc->itemAdd(PageItem::Polygon, PageItem::Ellipse, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
-				m_doc->Items->at(z)->FrameType = 1;
-				break;
-			default:
-				if (modifiers == Qt::ShiftModifier)
-					z = m_doc->itemAddArea(PageItem::Polygon, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
-				else
-					z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
-				m_doc->Items->at(z)->SetFrameShape(m_doc->ValCount, m_doc->ShapeValues);
-				m_doc->adjustItemSize(m_doc->Items->at(z));
-				m_doc->setRedrawBounding(m_doc->Items->at(z));
-				m_doc->Items->at(z)->FrameType = createObjectSubMode + 2;
-				break;
-		}
-		break;
-	case modeDrawLine:
-		Rxp = createObjectPos.x();
-		Ryp = createObjectPos.y();
-		m_doc->ApplyGuides(&Rxp, &Ryp);
-		m_doc->ApplyGuides(&Rxp, &Ryp,true);
-		rot = xy2Deg(Rxpd, Rypd);
-		if (rot < 0.0) 
-			rot += 360;
-		len = qMax(0.01, distance(Rxpd, Rypd));
-		z = m_doc->itemAdd(PageItem::Line, PageItem::Unspecified, Rxp, Ryp, len, 1, m_doc->itemToolPrefs().lineWidth, CommonStrings::None, m_doc->itemToolPrefs().lineColor);
-		m_doc->Items->at(z)->setRotation(rot);
-		m_doc->Items->at(z)->setRedrawBounding();
-		break;
-	case modeDrawLatex:
-		if (modifiers == Qt::ShiftModifier)
-			z = m_doc->itemAddArea(PageItem::LatexFrame, PageItem::Unspecified, Rxp, Ryp, 1, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
-		else
-			z = m_doc->itemAdd(PageItem::LatexFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
-		break;
-	case modeDrawImage:
-		if (modifiers == Qt::ShiftModifier)
-			z = m_doc->itemAddArea(PageItem::ImageFrame, PageItem::Unspecified, Rxp, Ryp, 1, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
-		else
-			z = m_doc->itemAdd(PageItem::ImageFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
-		break;
-	case modeDrawText:
-		if (modifiers == Qt::ShiftModifier)
-			z = m_doc->itemAddArea(PageItem::TextFrame, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().textFont);
-		else
-			z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().textFont);
-		break;
-	case modeDrawRegularPolygon:
-		if (modifiers == Qt::ShiftModifier)
-			z = m_doc->itemAddArea(PageItem::RegularPolygon, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
-		else
-			z = m_doc->itemAdd(PageItem::RegularPolygon, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
-		break;
-	case modeDrawArc:
-		if (modifiers == Qt::ShiftModifier)
-			z = m_doc->itemAddArea(PageItem::Arc, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
-		else
-			z = m_doc->itemAdd(PageItem::Arc, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
-		m_doc->setRedrawBounding(m_doc->Items->at(z));
-		break;
-	case modeDrawSpiral:
-		if (modifiers == Qt::ShiftModifier)
-			z = m_doc->itemAddArea(PageItem::Spiral, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().lineColor);
-		else
-			z = m_doc->itemAdd(PageItem::Spiral, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().lineColor);
-		m_doc->adjustItemSize(m_doc->Items->at(z));
-		m_doc->setRedrawBounding(m_doc->Items->at(z));
-		break;
-	case modeInsertPDFButton:
-	case modeInsertPDFRadioButton:
-	case modeInsertPDFTextfield:
-	case modeInsertPDFCheckbox:
-	case modeInsertPDFCombobox:
-	case modeInsertPDFListbox:
-	case modeInsertPDFTextAnnotation:
-	case modeInsertPDFLinkAnnotation:
-		z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().textColor);
-		currItem = m_doc->Items->at(z);
-		currItem->setIsAnnotation(true);
-		currItem->AutoName = false;
-		switch (m_doc->appMode)
-		{
-		case modeInsertPDFButton:
-			currItem->annotation().setType(Annotation::Button);
-			currItem->annotation().setFlag(Annotation::Flag_PushButton);
-			currItem->setItemName( CommonStrings::itemName_PushButton + QString("%1").arg(m_doc->TotalItems));
-			break;
-		case modeInsertPDFRadioButton:
-			currItem->annotation().setType(Annotation::RadioButton);
-			currItem->annotation().setFlag(Annotation::Flag_Radio | Annotation::Flag_NoToggleToOff);
-			currItem->setItemName( CommonStrings::itemName_RadioButton + QString("%1").arg(m_doc->TotalItems));
-			break;
-		case modeInsertPDFTextfield:
-			currItem->annotation().setType(Annotation::Textfield);
-			currItem->setItemName( CommonStrings::itemName_TextField + QString("%1").arg(m_doc->TotalItems));
-			break;
-		case modeInsertPDFCheckbox:
-			currItem->annotation().setType(Annotation::Checkbox);
-			currItem->setItemName( CommonStrings::itemName_CheckBox + QString("%1").arg(m_doc->TotalItems));
-			break;
-		case modeInsertPDFCombobox:
-			currItem->annotation().setType(Annotation::Combobox);
-			currItem->annotation().setFlag(Annotation::Flag_Combo);
-			currItem->setItemName( CommonStrings::itemName_ComboBox + QString("%1").arg(m_doc->TotalItems));
-			break;
-		case modeInsertPDFListbox:
-			currItem->annotation().setType(Annotation::Listbox);
-			currItem->setItemName( CommonStrings::itemName_ListBox + QString("%1").arg(m_doc->TotalItems));
-			break;
-		case modeInsertPDFTextAnnotation:
-			currItem->annotation().setType(Annotation::Text);
-			currItem->setItemName( CommonStrings::itemName_TextAnnotation + QString("%1").arg(m_doc->TotalItems));
-			break;
-		case modeInsertPDFLinkAnnotation:
-			currItem->annotation().setType(Annotation::Link);
-			currItem->annotation().setZiel(m_doc->currentPage()->pageNr());
-			currItem->annotation().setAction("0 0");
-			currItem->setItemName( CommonStrings::itemName_LinkAnnotation + QString("%1").arg(m_doc->TotalItems));
-			currItem->setTextFlowMode(PageItem::TextFlowDisabled);
-			break;
-		}
-		break;
-	case modeDrawTable2:
-		// TODO: Figure out what these conditions actually do.
-		if ((m_doc->m_Selection->isEmpty()) && (m_view->HaveSelRect) && (!m_view->MidButt))
-		{
-			m_view->HaveSelRect = false;
-			// Calculate table rectangle.
-			FRect tableRect = adjustedRect(canvasPressCoord, canvasCurrCoord);
-			if (tableRect.width() < 6 || tableRect.height() < 6)
+		case modeDrawShapes:
+			switch (createObjectSubMode)
 			{
-				// Ignore tiny tables.
-				m_view->requestMode(submodePaintingDone);
-				break;
+				case 0:
+					if (modifiers == Qt::ShiftModifier)
+						z = m_doc->itemAddArea(PageItem::Polygon, PageItem::Rectangle, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
+					else
+						z = m_doc->itemAdd(PageItem::Polygon, PageItem::Rectangle, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
+					m_doc->Items->at(z)->FrameType = 0;
+					break;
+				case 1:
+					if (modifiers == Qt::ShiftModifier)
+						z = m_doc->itemAddArea(PageItem::Polygon, PageItem::Ellipse, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
+					else
+						z = m_doc->itemAdd(PageItem::Polygon, PageItem::Ellipse, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
+					m_doc->Items->at(z)->FrameType = 1;
+					break;
+				default:
+					if (modifiers == Qt::ShiftModifier)
+						z = m_doc->itemAddArea(PageItem::Polygon, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
+					else
+						z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().shapeLineColor);
+					m_doc->Items->at(z)->SetFrameShape(m_doc->ValCount, m_doc->ShapeValues);
+					m_doc->adjustItemSize(m_doc->Items->at(z));
+					m_doc->setRedrawBounding(m_doc->Items->at(z));
+					m_doc->Items->at(z)->FrameType = createObjectSubMode + 2;
+					break;
 			}
-			// Show table insert dialog.
-		//	qApp->changeOverrideCursor(QCursor(Qt::ArrowCursor));
-			InsertTable *dia = new InsertTable(m_view, static_cast<int>(tableRect.height()/6), static_cast<int>(tableRect.width()/6));
-			if (!dia->exec())
+			break;
+		case modeDrawLine:
+			Rxp = createObjectPos.x();
+			Ryp = createObjectPos.y();
+			m_doc->ApplyGuides(&Rxp, &Ryp);
+			m_doc->ApplyGuides(&Rxp, &Ryp,true);
+			rot = xy2Deg(Rxpd, Rypd);
+			if (rot < 0.0)
+				rot += 360;
+			len = qMax(0.01, distance(Rxpd, Rypd));
+			z = m_doc->itemAdd(PageItem::Line, PageItem::Unspecified, Rxp, Ryp, len, 1, m_doc->itemToolPrefs().lineWidth, CommonStrings::None, m_doc->itemToolPrefs().lineColor);
+			m_doc->Items->at(z)->setRotation(rot);
+			m_doc->Items->at(z)->setRedrawBounding();
+			break;
+		case modeDrawLatex:
+			if (modifiers == Qt::ShiftModifier)
+				z = m_doc->itemAddArea(PageItem::LatexFrame, PageItem::Unspecified, Rxp, Ryp, 1, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
+			else
+				z = m_doc->itemAdd(PageItem::LatexFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
+			break;
+		case modeDrawImage:
+			if (modifiers == Qt::ShiftModifier)
+				z = m_doc->itemAddArea(PageItem::ImageFrame, PageItem::Unspecified, Rxp, Ryp, 1, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
+			else
+				z = m_doc->itemAdd(PageItem::ImageFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
+			break;
+		case modeDrawText:
+			if (modifiers == Qt::ShiftModifier)
+				z = m_doc->itemAddArea(PageItem::TextFrame, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().textFont);
+			else
+				z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().textFont);
+			break;
+		case modeDrawRegularPolygon:
+			if (modifiers == Qt::ShiftModifier)
+				z = m_doc->itemAddArea(PageItem::RegularPolygon, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
+			else
+				z = m_doc->itemAdd(PageItem::RegularPolygon, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
+			break;
+		case modeDrawArc:
+			if (modifiers == Qt::ShiftModifier)
+				z = m_doc->itemAddArea(PageItem::Arc, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
+			else
+				z = m_doc->itemAdd(PageItem::Arc, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().shapeFillColor, m_doc->itemToolPrefs().lineColor);
+			m_doc->setRedrawBounding(m_doc->Items->at(z));
+			break;
+		case modeDrawSpiral:
+			if (modifiers == Qt::ShiftModifier)
+				z = m_doc->itemAddArea(PageItem::Spiral, PageItem::Unspecified, Rxp, Ryp, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().lineColor);
+			else
+				z = m_doc->itemAdd(PageItem::Spiral, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().lineColor);
+			m_doc->adjustItemSize(m_doc->Items->at(z));
+			m_doc->setRedrawBounding(m_doc->Items->at(z));
+			break;
+		case modeInsertPDFButton:
+		case modeInsertPDFRadioButton:
+		case modeInsertPDFTextfield:
+		case modeInsertPDFCheckbox:
+		case modeInsertPDFCombobox:
+		case modeInsertPDFListbox:
+		case modeInsertPDFTextAnnotation:
+		case modeInsertPDFLinkAnnotation:
+			z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, CommonStrings::None, m_doc->itemToolPrefs().textColor);
+			currItem = m_doc->Items->at(z);
+			currItem->setIsAnnotation(true);
+			currItem->AutoName = false;
+			switch (m_doc->appMode)
 			{
-				m_view->requestMode(submodePaintingDone);
+				case modeInsertPDFButton:
+					currItem->annotation().setType(Annotation::Button);
+					currItem->annotation().setFlag(Annotation::Flag_PushButton);
+					currItem->setItemName( CommonStrings::itemName_PushButton + QString("%1").arg(m_doc->TotalItems));
+					break;
+				case modeInsertPDFRadioButton:
+					currItem->annotation().setType(Annotation::RadioButton);
+					currItem->annotation().setFlag(Annotation::Flag_Radio | Annotation::Flag_NoToggleToOff);
+					currItem->setItemName( CommonStrings::itemName_RadioButton + QString("%1").arg(m_doc->TotalItems));
+					break;
+				case modeInsertPDFTextfield:
+					currItem->annotation().setType(Annotation::Textfield);
+					currItem->setItemName( CommonStrings::itemName_TextField + QString("%1").arg(m_doc->TotalItems));
+					break;
+				case modeInsertPDFCheckbox:
+					currItem->annotation().setType(Annotation::Checkbox);
+					currItem->setItemName( CommonStrings::itemName_CheckBox + QString("%1").arg(m_doc->TotalItems));
+					break;
+				case modeInsertPDFCombobox:
+					currItem->annotation().setType(Annotation::Combobox);
+					currItem->annotation().setFlag(Annotation::Flag_Combo);
+					currItem->setItemName( CommonStrings::itemName_ComboBox + QString("%1").arg(m_doc->TotalItems));
+					break;
+				case modeInsertPDFListbox:
+					currItem->annotation().setType(Annotation::Listbox);
+					currItem->setItemName( CommonStrings::itemName_ListBox + QString("%1").arg(m_doc->TotalItems));
+					break;
+				case modeInsertPDFTextAnnotation:
+					currItem->annotation().setType(Annotation::Text);
+					currItem->setItemName( CommonStrings::itemName_TextAnnotation + QString("%1").arg(m_doc->TotalItems));
+					break;
+				case modeInsertPDFLinkAnnotation:
+					currItem->annotation().setType(Annotation::Link);
+					currItem->annotation().setZiel(m_doc->currentPage()->pageNr());
+					currItem->annotation().setAction("0 0");
+					currItem->setItemName( CommonStrings::itemName_LinkAnnotation + QString("%1").arg(m_doc->TotalItems));
+					currItem->setTextFlowMode(PageItem::TextFlowDisabled);
+					break;
+			}
+			break;
+		case modeDrawTable2:
+			// Create on a drag-out rectangle, or on a Shift-click (margin-sized).
+			if ((m_doc->m_Selection->isEmpty()) && (m_view->HaveSelRect || modifiers == Qt::ShiftModifier) && (!m_view->MidButt))
+			{
+				m_view->HaveSelRect = false;
+				FRect tableRect;
+				if (modifiers == Qt::ShiftModifier)
+				{
+					QRectF r = m_doc->pageAreaRect(canvasPressCoord.x(), canvasPressCoord.y());
+					tableRect = FRect(r.x(), r.y(), r.width(), r.height());
+				}
+				else
+					tableRect = adjustedRect(canvasPressCoord, canvasCurrCoord);
+
+				if (tableRect.width() < 6 || tableRect.height() < 6)
+				{
+					m_view->requestMode(submodePaintingDone);
+					break;
+				}
+				// Show table insert dialog.
+				//	qApp->changeOverrideCursor(QCursor(Qt::ArrowCursor));
+				InsertTable *dia = new InsertTable(m_view, static_cast<int>(tableRect.height()/6), static_cast<int>(tableRect.width()/6));
+				if (!dia->exec())
+				{
+					m_view->requestMode(submodePaintingDone);
+					delete dia;
+					dia = nullptr;
+					break;
+				}
+				int numRows = dia->Rows->value();
+				int numColumns = dia->Cols->value();
 				delete dia;
 				dia = nullptr;
-				break;
+				// Add the table item.
+				// TODO: This should be done in an undo transaction.
+				m_doc->dontResize = true;
+				z = m_doc->itemAdd(PageItem::Table, PageItem::Unspecified,
+								   tableRect.x(),
+								   tableRect.y(),
+								   tableRect.width(),
+								   tableRect.height(),
+								   0,                    // Unused.
+								   CommonStrings::None,  // Unused.
+								   CommonStrings::None); // Unused.
+				PageItem_Table *table = m_doc->Items->at(z)->asTable();
+				table->insertRows(0, numRows - 1);
+				table->insertColumns(0, numColumns - 1);
+				table->adjustTableToFrame();
+				table->adjustFrameToTable();
+				m_doc->dontResize = false;
+				m_doc->setRedrawBounding(table);
 			}
-			int numRows = dia->Rows->value();
-			int numColumns = dia->Cols->value();
-			delete dia;
-			dia = nullptr;
-			// Add the table item.
-			// TODO: This should be done in an undo transaction.
-			m_doc->dontResize = true;
-			z = m_doc->itemAdd(PageItem::Table, PageItem::Unspecified,
-						   tableRect.x(),
-						   tableRect.y(),
-						   tableRect.width(),
-						   tableRect.height(),
-						   0,                    // Unused.
-						   CommonStrings::None,  // Unused.
-						   CommonStrings::None); // Unused.
-			PageItem_Table *table = m_doc->Items->at(z)->asTable();
-			table->insertRows(0, numRows - 1);
-			table->insertColumns(0, numColumns - 1);
-			table->adjustTableToFrame();
-			table->adjustFrameToTable();
-			m_doc->dontResize = false;
-			m_doc->setRedrawBounding(table);
-		}
-		break;
-	case modeInsertPDF3DAnnotation:
-		if (modifiers == Qt::ShiftModifier)
-		{
-			z = m_doc->itemAddArea(PageItem::OSGFrame, PageItem::Unspecified, Rxp, Ryp, 1, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
-		}
-		else
-		{
-			z = m_doc->itemAdd(PageItem::OSGFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
-		}
-		currItem = m_doc->Items->at(z);
-		currItem->setIsAnnotation(true);
-		currItem->AutoName = false;
-		currItem->annotation().setType(Annotation::Annot3D);
-		currItem->setItemName( tr("3DAnnot") + QString("%1").arg(m_doc->TotalItems));
-		break;
+			break;
+		case modeInsertPDF3DAnnotation:
+			if (modifiers == Qt::ShiftModifier)
+			{
+				z = m_doc->itemAddArea(PageItem::OSGFrame, PageItem::Unspecified, Rxp, Ryp, 1, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
+			}
+			else
+			{
+				z = m_doc->itemAdd(PageItem::OSGFrame, PageItem::Unspecified, Rxp, Ryp, Rxpd, Rypd, m_doc->itemToolPrefs().shapeLineWidth, m_doc->itemToolPrefs().imageFillColor, m_doc->itemToolPrefs().imageStrokeColor);
+			}
+			currItem = m_doc->Items->at(z);
+			currItem->setIsAnnotation(true);
+			currItem->AutoName = false;
+			currItem->annotation().setType(Annotation::Annot3D);
+			currItem->setItemName( tr("3DAnnot") + QString("%1").arg(m_doc->TotalItems));
+			break;
 	}
 	if (z >= 0)
 	{

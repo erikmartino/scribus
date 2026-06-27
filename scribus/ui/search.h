@@ -75,6 +75,7 @@ public slots:
 	void slotSearch();
 	void slotReplace();
 	void slotReplaceAll();
+	void slotSearchPrevious();
 	void slotStop();
 	void clear();
 	void accept() override;
@@ -123,6 +124,11 @@ private:
 
 	void searchInStoryEditor();
 	void searchOnCanvas();
+	void searchInStoryEditorBackward();
+	void searchOnCanvasBackward();
+	void previousPageItem();
+	QPair<int, int> searchStoryBackward(const StoryText& storyText, int beforePos, const int length, const Options& options);
+
 	//! /brief Search storyText starting from start.
 	//! /param length The length of the story
 	//! /return The start and end position of the selection or (-1, -1) if nothing found.

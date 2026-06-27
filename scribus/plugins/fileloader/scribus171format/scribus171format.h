@@ -200,7 +200,9 @@ class PLUGIN_API Scribus171Format : public LoadSavePlugin
 		void writeParagraphStyles(ScXmlStreamWriter& docu) const;
 		void writeCharStyles(ScXmlStreamWriter& docu) const;
 		void writeTableStyles(ScXmlStreamWriter& docu) const;
+		void writeTableStyles(ScXmlStreamWriter& docu, const QStringList& styleNames) const;
 		void writeCellStyles(ScXmlStreamWriter& docu) const;
+		void writeCellStyles(ScXmlStreamWriter& docu, const QStringList& styleNames) const;
 		void putPStyle(ScXmlStreamWriter& docu, const ParagraphStyle & style, const QString &nodeName) const;
 		void putCStyle(ScXmlStreamWriter& docu, const CharStyle & style) const;
 		void putNamedCStyle(ScXmlStreamWriter& docu, const CharStyle & style) const;

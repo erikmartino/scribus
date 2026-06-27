@@ -108,7 +108,10 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4138;4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>plugins_pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -136,7 +139,10 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4138;4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>plugins_pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -167,7 +173,10 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4138;4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>plugins_pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -200,7 +209,10 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4138;4190;4251;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ForcedIncludeFiles>plugins_pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>

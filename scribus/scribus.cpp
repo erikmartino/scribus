@@ -1096,6 +1096,8 @@ void ScribusMainWindow::initMenuBar()
 	scrMenuMgr->addMenuItemString("toolsLinkTextFrame", "TextLinking");
 	scrMenuMgr->addMenuItemString("toolsUnlinkTextFrame", "TextLinking");
 	scrMenuMgr->addMenuItemString("toolsUnlinkTextFrameAndCutText", "TextLinking");
+	scrMenuMgr->addMenuItemString("SEPARATOR", "TextLinking");
+	scrMenuMgr->addMenuItemString("itemSelectChain", "TextLinking");
 	scrMenuMgr->createMenu("TextTransformation", tr("Text Transformation"), "Item");
 	scrMenuMgr->addMenuItemString("TextTransformation", "Item");
 	scrMenuMgr->addMenuItemString("itemTextTransformLowercase", "TextTransformation");
@@ -1294,6 +1296,14 @@ void ScribusMainWindow::initMenuBar()
 
 	// Table menu.
 	scrMenuMgr->createMenu("ItemTable", ActionManager::defaultMenuNameEntryTranslated("Table"));
+	scrMenuMgr->createMenu("TableSelect", tr("Select"), "ItemTable");
+	scrMenuMgr->addMenuItemString("TableSelect", "ItemTable");
+	scrMenuMgr->addMenuItemString("tableSelectCell", "TableSelect");
+	scrMenuMgr->addMenuItemString("tableSelectAllCells", "TableSelect");
+	scrMenuMgr->addMenuItemString("tableSelectRow", "TableSelect");
+	scrMenuMgr->addMenuItemString("tableSelectColumn", "TableSelect");
+	scrMenuMgr->addMenuItemString("tableSelectTable", "TableSelect");
+	scrMenuMgr->addMenuItemString("SEPARATOR", "ItemTable");
 	scrMenuMgr->addMenuItemString("tableInsertRows", "ItemTable");
 	scrMenuMgr->addMenuItemString("tableInsertColumns", "ItemTable");
 	scrMenuMgr->addMenuItemString("tableDeleteRows", "ItemTable");
@@ -2200,6 +2210,8 @@ ScribusDoc *ScribusMainWindow::doFileNew(double width, double height, double top
 				Cpfad = csm.paletteFileFromName(m_prefsManager.appPrefs.colorPrefs.DColorSet);
 			if (!Cpfad.isEmpty())
 				csm.loadPalette(Cpfad, doc, colorList, gradientsList, patternsList, false);
+			else
+				colorList = m_prefsManager.appPrefs.colorPrefs.DColors;
 			doc->PageColors = colorList;
 			doc->docGradients = gradientsList;
 			doc->docPatterns = patternsList;
@@ -5822,7 +5834,7 @@ void ScribusMainWindow::toggleNodeEdit()
 
 void ScribusMainWindow::enablePalettes(bool b)
 {
-	if (doc->appMode == modeEdit) //Keep Palettes enabled when editing text
+	if (doc->appMode == modeEdit || doc->appMode == modeEditTable) //Keep Palettes enabled when editing text
 		return;
 	layerPalette->setEnabled(b);
 	outlinePalette->setEnabled(b);

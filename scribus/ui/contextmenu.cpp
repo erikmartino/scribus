@@ -578,7 +578,8 @@ void ContextMenu::createMenuItems_Selection()
 	}
 //>>#14678
 
-
+	if (currItem->isTextFrame() && currItem->isInChain())
+		addAction(m_ScMW->scrActions["itemSelectChain"]);
 
 	//-->
 	//<-- Add undo

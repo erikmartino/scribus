@@ -373,6 +373,34 @@ Save PDF options to fileName.\n\
 "));
 PyObject *scribus_savepdfoptions(PyObject* /* self */, PyObject* args);
 
+/*! docstring */
+PyDoc_STRVAR(scribus_invokelater__doc__,
+QT_TR_NOOP("invokeLater(callable, *args)\n\
+\n\
+Schedules callable(*args) to run on the Scribus GUI thread and returns\n\
+immediately. Use this from background threads (e.g. socket listeners) to\n\
+hand mutating Scripter calls back to the main thread; calling Scripter\n\
+APIs that touch the document or GUI from another thread is unsafe and\n\
+will typically crash.\n\
+\n\
+The callable is invoked asynchronously via a queued Qt event, so by the\n\
+time invokeLater() returns the call has not yet happened. Exceptions\n\
+raised inside the callable are printed to the Scribus script error\n\
+stream; they cannot be propagated back to the caller.\n\
+"));
+/*! Schedule a Python callable on the GUI thread (queued). */
+PyObject *scribus_invokelater(PyObject * /*self*/, PyObject* args);
+
+/*! docstring */
+PyDoc_STRVAR(scribus_processevents__doc__,
+QT_TR_NOOP("processEvents()\n\
+\n\
+Process pending Qt events. Call this periodically from a long-running\n\
+Python loop running on the GUI thread to keep the interface responsive.\n\
+"));
+/*! Pump the Qt event loop. */
+PyObject *scribus_processevents(PyObject * /*self*/);
+
 PyDoc_STRVAR(scribus_readpdfoptions__doc__,
 QT_TR_NOOP("readPDFOptions(fileName)\n\
 \n\

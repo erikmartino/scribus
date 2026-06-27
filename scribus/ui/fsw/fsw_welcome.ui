@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FSW_Welcome</class>
+ <widget class="QWizardPage" name="FSW_Welcome">
+  <property name="title"><string>Welcome to Scribus</string></property>
+  <property name="subTitle"><string>Let's set a few defaults so Scribus feels right from the first document. You can change any of this later in Preferences.</string></property>
+  <layout class="QVBoxLayout" name="welcomeLayout">
+   <item>
+    <widget class="QLabel" name="splashLabel">
+     <property name="alignment"><set>Qt::AlignCenter</set></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="introLabel">
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="text"><string>Seven quick steps — about a minute. Skip any time to accept the defaults.</string></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

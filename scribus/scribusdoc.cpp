@@ -1580,13 +1580,13 @@ void ScribusDoc::redefineTableStyles(const StyleSet<TableStyle>& newStyles, bool
 	}
 	m_docTableStyles.invalidate();
 
-	// Register synthetic conditional cell styles for all tables BEFORE
+	// Register conditional cell styles for all tables BEFORE
 	// refreshing, so updateCells() resolves them with the styles present.
 	auto syncItems = [](const QList<PageItem*>& items)
 	{
 		for (PageItem *item : items)
 			if (item && item->isTable())
-				item->asTable()->syncConditionalStylesToContext();
+				item->asTable()->rebuildAreaStyles();
 	};
 	syncItems(DocItems);
 	syncItems(MasterItems);
@@ -5496,15 +5496,20 @@ int ScribusDoc::itemAdd(const PageItem::ItemType itemType, const PageItem::ItemF
 	return Items->count()-1;
 }
 
-
-int ScribusDoc::itemAddArea(const PageItem::ItemType itemType, const PageItem::ItemFrameType frameType, double x, double y, double w, const QString& fill, const QString& outline, PageItem::ItemKind itemKind)
+QRectF ScribusDoc::pageAreaRect(double x, double y) const
 {
 	double xo = m_currentPage->xOffset();
 	double yo = m_currentPage->yOffset();
 	QPair<double, double> tl = m_currentPage->guides.topLeft(x - xo, y - yo);
 	QPair<double, double> tr = m_currentPage->guides.topRight(x - xo, y - yo);
 	QPair<double, double> bl = m_currentPage->guides.bottomLeft(x - xo, y - yo);
-	return itemAdd(itemType, frameType, tl.first + xo, tl.second + yo, tr.first - tl.first, bl.second - tl.second, w, fill, outline, itemKind);
+	return QRectF(tl.first + xo, tl.second + yo, tr.first - tl.first, bl.second - tl.second);
+}
+
+int ScribusDoc::itemAddArea(const PageItem::ItemType itemType, const PageItem::ItemFrameType frameType, double x, double y, double w, const QString& fill, const QString& outline, PageItem::ItemKind itemKind)
+{
+	QRectF r = pageAreaRect(x, y);
+	return itemAdd(itemType, frameType, r.x(), r.y(), r.width(), r.height(), w, fill, outline, itemKind);
 }
 
 
@@ -5658,6 +5663,13 @@ void ScribusDoc::itemAddDetails(const PageItem::ItemType itemType, const PageIte
 {
 	ParagraphStyle defaultParagraphStyle;
 	Q_ASSERT(newItem->realItemType() == itemType);
+
+	// New items inherit the document's default text direction.
+	// Skip during load: items restore their own RTL state from the file,
+	// and the RTL attribute is only written/read when set.
+	if (!isLoading())
+		newItem->setRTL(isRTL());
+
 	switch (itemType)
 	{
 		case PageItem::ImageFrame:
@@ -16897,7 +16909,104 @@ void ScribusDoc::itemSelection_AdjustTableToFrame()
 	changedPagePreview();
 }
 
+void ScribusDoc::itemSelection_SelectTableCell()
+{
+	PageItem* item = m_Selection->itemAt(0);
+	if (!item || !item->isTable())
+		return;
+	PageItem_Table* table = item->asTable();
+	TableCell cell = table->activeCell();
+	if (appMode != modeEditTable && m_View)
+		m_View->requestMode(modeEditTable);
+	table->clearSelection();
+	table->selectCell(cell.row(), cell.column());
+	table->update();
+}
 
+void ScribusDoc::itemSelection_SelectTableAllCells()
+{
+	PageItem* item = m_Selection->itemAt(0);
+	if (!item || !item->isTable())
+		return;
+	PageItem_Table* table = item->asTable();
+	if (appMode != modeEditTable && m_View)
+		m_View->requestMode(modeEditTable);
+	table->clearSelection();
+	table->selectCells(0, 0, table->rows() - 1, table->columns() - 1);
+	table->update();
+}
+
+void ScribusDoc::itemSelection_SelectTableRow()
+{
+	PageItem* item = m_Selection->itemAt(0);
+	if (!item || !item->isTable())
+		return;
+	PageItem_Table* table = item->asTable();
+	int row = table->activeCell().row();
+	if (appMode != modeEditTable && m_View)
+		m_View->requestMode(modeEditTable);
+	table->clearSelection();
+	table->selectRow(row);
+	table->update();
+}
+
+void ScribusDoc::itemSelection_SelectTableColumn()
+{
+	PageItem* item = m_Selection->itemAt(0);
+	if (!item || !item->isTable())
+		return;
+	PageItem_Table* table = item->asTable();
+	int col = table->activeCell().column();
+	if (appMode != modeEditTable && m_View)
+		m_View->requestMode(modeEditTable);
+	table->clearSelection();
+	table->selectColumn(col);
+	table->update();
+}
+
+void ScribusDoc::itemSelection_SelectWholeTable()
+{
+	PageItem* item = m_Selection->itemAt(0);
+	if (!item || !item->isTable())
+		return;
+	PageItem_Table* table = item->asTable();
+	// Exit cell-edit mode so the table item itself is the selection.
+	if (appMode == modeEditTable && m_View)
+		m_View->requestMode(modeNormal);
+	table->clearSelection();
+	table->update();
+}
+
+void ScribusDoc::itemSelection_SelectChain()
+{
+	// Find any selected text frame that is part of a chain.
+	PageItem* item = nullptr;
+	for (int i = 0; i < m_Selection->count(); ++i)
+	{
+		PageItem* it = m_Selection->itemAt(i);
+		if (it && it->isTextFrame() && it->isInChain())
+		{
+			item = it;
+			break;
+		}
+	}
+	if (!item)
+		return;
+
+	m_Selection->delaySignalsOn();
+	m_Selection->clear();
+	PageItem* linkedFrame = item->firstInChain();
+	while (linkedFrame)
+	{
+		m_Selection->addItem(linkedFrame);
+		linkedFrame = linkedFrame->nextInChain();
+	}
+	m_Selection->delaySignalsOff();
+
+	if (m_View)
+		m_View->DrawNew();
+	emit selectionChanged();
+}
 
 void ScribusDoc::itemSelection_SetColorProfile(const QString & profileName, Selection * customSelection)
 {
@@ -17371,7 +17480,8 @@ bool ScribusDoc::hasPreflightErrors() const
 			(pageErrors.count() != 0) ||
 			(docItemErrors.count() != 0) ||
 			(masterItemErrors.count() != 0) ||
-			(docLayerErrors.count() != 0)
+			(docLayerErrors.count() != 0) ||
+			(docStyleErrors.count() != 0)
 			);
 }
 
@@ -19100,18 +19210,6 @@ void ScribusDoc::refreshTableItems()
 	refresh(MasterItems);
 }
 
-void ScribusDoc::registerSyntheticCellStyle(const CellStyle& style)
-{
-	// Lightweight insert/update of a (synthetic) cell style without the
-	// invalidate-and-refresh cascade that redefineCellStyles triggers. Used
-	// by table conditional-formatting sync, which runs during refresh and
-	// must not re-enter it.
-	int idx = m_docCellStyles.find(style.name());
-	if (idx >= 0)
-		m_docCellStyles[idx] = style;   // update in place
-	else
-		m_docCellStyles.create(style);  // add new
-}
 
 
 void ScribusDoc::syncAllTableConditionalStyles()
@@ -19121,7 +19219,7 @@ void ScribusDoc::syncAllTableConditionalStyles()
 		for (PageItem *item : items)
 		{
 			if (item && item->isTable())
-				item->asTable()->syncConditionalStylesToContext();
+				item->asTable()->rebuildAreaStyles();
 		}
 	};
 	sync(DocItems);

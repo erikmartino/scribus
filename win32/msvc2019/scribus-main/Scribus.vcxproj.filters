@@ -76,6 +76,9 @@
     <Filter Include="Source Files\ui\factories">
       <UniqueIdentifier>{1cbf267e-3556-46ea-b10a-06dbb3d8a922}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\ui\fsw">
+      <UniqueIdentifier>{1ac1de5c-0bc3-4ab1-acc8-e54e1b1b255b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\ui\preferences">
       <UniqueIdentifier>{739b3437-93f8-4f41-bde9-05d291d3f7cc}</UniqueIdentifier>
     </Filter>
@@ -2091,6 +2094,33 @@
     <ClCompile Include="..\..\..\scribus\ui\fontreplacedialog.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\firststartwizard.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_appearance.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_experimental.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_finish.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_fontsscripts.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_language.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_newdocument.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_sidepanel.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\scribus\ui\fsw\fsw_welcome.cpp">
+      <Filter>Source Files\ui\fsw</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\scribus\ui\gradientaddedit.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
@@ -2938,6 +2968,27 @@
       <Filter>Form Files</Filter>
     </uic>
     <uic Include="..\..\..\scribus\ui\extimageprops.ui">
+      <Filter>Form Files</Filter>
+    </uic>
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_appearance.ui">
+      <Filter>Form Files</Filter>
+    </uic>
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_experimental.ui">
+      <Filter>Form Files</Filter>
+    </uic>
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_finish.ui">
+      <Filter>Form Files</Filter>
+    </uic>
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_fontsscripts.ui">
+      <Filter>Form Files</Filter>
+    </uic>
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_language.ui">
+      <Filter>Form Files</Filter>
+    </uic>
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_newdocument.ui">
+      <Filter>Form Files</Filter>
+    </uic>
+    <uic Include="..\..\..\scribus\ui\fsw\fsw_welcome.ui">
       <Filter>Form Files</Filter>
     </uic>
     <uic Include="..\..\..\scribus\ui\gradientaddedit.ui">
@@ -4029,6 +4080,33 @@
     </moc>
     <moc Include="..\..\..\scribus\ui\fontreplacedialog.h">
       <Filter>Source Files\ui</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\firststartwizard.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_appearance.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_experimental.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_finish.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_fontsscripts.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_language.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_newdocument.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_sidepanel.h">
+      <Filter>Source Files\ui\fsw</Filter>
+    </moc>
+    <moc Include="..\..\..\scribus\ui\fsw\fsw_welcome.h">
+      <Filter>Source Files\ui\fsw</Filter>
     </moc>
     <moc Include="..\..\..\scribus\ui\gradientaddedit.h">
       <Filter>Source Files\ui</Filter>

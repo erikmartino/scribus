@@ -222,6 +222,8 @@ class SCRIBUS_API ScribusDoc : public QObject, public UndoObject, public Observa
 		void setPageOrientation(int o) { m_docPrefsData.docSetupPrefs.pageOrientation = o; }
 		int bindingDirection() const { return m_docPrefsData.docSetupPrefs.bindingDirection; }
 		void setBindingDirection(int d) { m_docPrefsData.docSetupPrefs.bindingDirection = d; m_docPrefsData.pdfPrefs.Binding = d;}
+		bool isRTL() const { return m_docPrefsData.docSetupPrefs.isRTL; }
+		void setRTL(bool rtl) { m_docPrefsData.docSetupPrefs.isRTL = rtl; }
 		int pagePositioning() const { return m_docPrefsData.docSetupPrefs.pagePositioning; }
 		void setPagePositioning(int p) { m_docPrefsData.docSetupPrefs.pagePositioning = p; }
 
@@ -901,6 +903,8 @@ class SCRIBUS_API ScribusDoc : public QObject, public UndoObject, public Observa
 		*/
 		int itemAdd(const PageItem::ItemType itemType, const PageItem::ItemFrameType frameType, double x, double y, double b, double h, double w, const QString& fill, const QString& outline, PageItem::ItemKind itemKind = PageItem::StandardItem);
 
+		/// Returns the guide/margin-bounded area on the current page containing point (x, y), in canvas coordinates.
+		QRectF pageAreaRect(double x, double y) const;
 		/** Add an item to the page based on the x/y position. Item will be fitted to the closest guides/margins */
 		int itemAddArea(const PageItem::ItemType itemType, const PageItem::ItemFrameType frameType, double x, double y, double w, const QString& fill, const QString& outline, PageItem::ItemKind itemKind = PageItem::StandardItem);
 
@@ -1527,6 +1531,7 @@ class SCRIBUS_API ScribusDoc : public QObject, public UndoObject, public Observa
 		QMap<int, errorCodes> docLayerErrors;
 		QMap<PageItem*, errorCodes> docItemErrors;
 		QMap<PageItem*, errorCodes> masterItemErrors;
+		QMap<QString, errorCodes> docStyleErrors;   // keyed by style name
 		FPointArray symReturn;
 		FPointArray symNewLine;
 		FPointArray symTab;
@@ -1807,6 +1812,12 @@ class SCRIBUS_API ScribusDoc : public QObject, public UndoObject, public Observa
 		 * If there are no tables in the current selection, then this slot does nothing.
 		 */
 		void itemSelection_AdjustTableToFrame();
+		void itemSelection_SelectTableCell();
+		void itemSelection_SelectTableAllCells();
+		void itemSelection_SelectTableRow();
+		void itemSelection_SelectTableColumn();
+		void itemSelection_SelectWholeTable();
+		void itemSelection_SelectChain();
 
 		void undoRedoBegin();
 		void undoRedoDone();
@@ -1926,7 +1937,6 @@ class SCRIBUS_API ScribusDoc : public QObject, public UndoObject, public Observa
 		PageItem* findFirstMarkItem(const Mark* mrk) const { PageItem* tmp = nullptr; return findMarkItem(mrk, tmp); }
 		void refreshTableItems();
 		void syncAllTableConditionalStyles();
-		void registerSyntheticCellStyle(const CellStyle& style);
 
 	private:
 		//QMap<PageItem_NoteFrame*, QList<TextNote *> > map of notesframes and its list of notes

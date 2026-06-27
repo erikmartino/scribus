@@ -143,6 +143,12 @@ void PageItem_Table::getNamedResources(ResourceCollection& lists) const
 	if (!tableStyleName.isEmpty())
 		lists.collectTableStyle(tableStyleName);
 
+	// Also collect the resources the applied table style itself references --
+	// in particular the cell styles its conditional areas are based on -- so
+	// they travel with the table when copied/pasted to another document.
+	if (m_Doc->tableStyles().contains(tableStyleName))
+		m_Doc->tableStyles().get(tableStyleName).getNamedResources(lists);
+
 	for (int row = 0; row < rows(); ++row)
 	{
 		int colSpan = 0;
@@ -554,13 +560,6 @@ void PageItem_Table::insertRows(int index, int numRows)
 	double rowHeight = m_rowHeights.at(qMax(index - 1, 0));
 	double rowPosition = index == 0 ? 0.0 : m_rowPositions.at(index - 1) + rowHeight;
 
-	// Inherit borders from the adjacent existing row (the row above the
-	// insertion point, or row 0 if inserting at the top). Table styles don't
-	// yet define borders; when they do, this should defer to the style's
-	// border definitions.
-	// const int templateRow = (index > 0) ? index - 1 : 0;
-	const bool haveTemplate = (rows() > 0);
-
 	UndoManager::instance()->setUndoEnabled(false);
 	for (int row = index; row < index + numRows; ++row)
 	{
@@ -727,7 +726,7 @@ void PageItem_Table::insertColumns(int index, int numColumns)
 	// Table styles don't yet define borders; when they do, this should defer
 	// to the style's border definitions.
 	// const int templateCol = (index > 0) ? index - 1 : 0;
-	const bool haveTemplate = (columns() > 0);
+	// const bool haveTemplate = (columns() > 0);
 
 	UndoManager::instance()->setUndoEnabled(false);
 	for (int col = index; col < index + numColumns; ++col)
@@ -991,7 +990,7 @@ double PageItem_Table::naturalRowHeight(int row, bool* hasContent)
 	return qMax(maxHeight, minHeight);
 }
 
-void PageItem_Table::adjustRowHeight(int row)
+bool PageItem_Table::adjustRowHeight(int row, bool growOnly)
 {
 	bool hasContent = false;
 	double natural = naturalRowHeight(row, &hasContent);
@@ -999,12 +998,19 @@ void PageItem_Table::adjustRowHeight(int row)
 	// Don't shrink rows that have no content -- the user's manual sizing
 	// should be preserved when there's nothing to fit.
 	if (!hasContent)
-		return;
+		return false;
 
 	if (qFuzzyCompare(natural, rowHeight(row)))
-		return;
+		return false;
+
+	// Grow-only: never shrink a row below its current height (e.g. when the
+	// user has deliberately made it taller than its content). Only enlarge to
+	// fit overflowing text.
+	if (growOnly && natural < rowHeight(row))
+		return false;
 
 	resizeRow(row, natural, MoveFollowing);
+	return true;
 }
 
 void PageItem_Table::adjustAllRowHeights()
@@ -1012,6 +1018,17 @@ void PageItem_Table::adjustAllRowHeights()
 	const int rowCount = rows();
 	for (int i = 0; i < rowCount; ++i)
 		adjustRowHeight(i);
+}
+
+bool PageItem_Table::rowNeedsGrowthForCell(int row, int column) const
+{
+	TableCell cell = cellAt(row, column);
+	if (!cell.isValid())
+		return false;
+	double cellOverhead = cell.topPadding() + cell.bottomPadding()
+		+ cell.maxTopBorderWidth() / 2.0 + cell.maxBottomBorderWidth() / 2.0;
+	double cellNeeded = cell.textFrame()->naturalContentHeight() + cellOverhead;
+	return cellNeeded > rowHeight(row);
 }
 
 double PageItem_Table::columnWidth(int column) const
@@ -1400,6 +1417,17 @@ TableHandle PageItem_Table::hitTest(const QPointF& point, double threshold) cons
 	// (Checked early because it can overlap with row/column resize on the right and bottom edges.)
 	if (x >= tableWidth - threshold && y >= tableHeight - threshold)
 		return TableHandle(TableHandle::TableResize);
+
+	// Select-all corner. In LTR this is the top-left corner of the grid
+	// (junction of the row-select and column-select strips). When RTL document/table
+	// layout is detected, switch this to the top-right corner based on the
+	// table's reading direction.
+	const bool isRTL = effectiveRTL();
+	const bool inSelectAllCorner = isRTL
+			? (x >= tableWidth - threshold && x <= tableWidth && y >= 0.0 && y <= threshold) /* RTL: top-right */
+			: (x >= 0.0 && x <= threshold && y >= 0.0 && y <= threshold); /* LTR: top-left */
+	if (inSelectAllCorner)
+		return TableHandle(TableHandle::SelectAll, isRTL ? 1 : 0);
 
 	// Test if hit is in the row-select strip (inside left edge of grid).
 	if (x >= 0.0 && x <= threshold)
@@ -1926,7 +1954,7 @@ void PageItem_Table::setStyle(const QString& style)
 	}
 	doc()->dontResize = true;
 	m_style.setParent(style);
-	syncConditionalStylesToContext();
+	rebuildAreaStyles();
 	updateCells();
 	doc()->dontResize = false;
 	emit changed();
@@ -1945,7 +1973,7 @@ void PageItem_Table::unsetStyle()
 
 	doc()->dontResize = true;
 	m_style.setParent("");
-	syncConditionalStylesToContext();
+	rebuildAreaStyles();
 	updateCells();
 	doc()->dontResize = false;
 	emit changed();
@@ -1964,6 +1992,30 @@ void PageItem_Table::unsetDirectFormatting()
 	updateCells();
 	doc()->dontResize = false;
 	emit changed();
+}
+
+void PageItem_Table::rebuildAreaStyles()
+{
+	m_areaStyles.clear(false);
+	m_areaStyles.setContext(&m_Doc->cellStyles());
+
+	const CellStyle* defCell = m_Doc->cellStyles().getDefault();
+	const QString defCellName = defCell ? defCell->name() : QString();
+
+	const QList<TableArea> areas = m_style.conditionalAreasResolved();
+	for (TableArea area : areas)
+	{
+		CellStyle cs = m_style.conditionalStyleResolved(area);
+		cs.setName(tableAreaToString(area));
+		// Inherit unset attributes (e.g. the default 1pt border) from the
+		// document's default cell style,
+		// where an empty parent resolved to the doc cell-style default.
+		// A user-chosen "based on" parent (later feature) is preserved.
+		if (cs.parent().isEmpty() && !defCellName.isEmpty())
+			cs.setParent(defCellName);
+		m_areaStyles.create(cs);
+	}
+	m_areaStyles.invalidate();
 }
 
 const TableStyle& PageItem_Table::style() const
@@ -2032,37 +2084,15 @@ TableArea PageItem_Table::areaAt(int row, int column) const
 		return (bodyCol % 2 == 0) ? TableArea::BandedColOdd : TableArea::BandedColEven;
 	}
 
-	return TableArea::WholeTable;
+	return TableArea::BodyCell;
 }
 
-QString PageItem_Table::areaStyleName(TableArea area) const
+QString PageItem_Table::areaStyleNameBare(TableArea area) const
 {
 	if (!m_style.hasConditionalStyleResolved(area))
 		return QString();
-	return conditionalSyntheticName(area);
+	return tableAreaToString(area);
 }
-
-QString PageItem_Table::conditionalSyntheticName(TableArea area) const
-{
-	// Synthetic, non-user-visible name. Keyed on the owning table style's name
-	// so that all tables using the same style share one set of synthetic
-	// conditional cell styles (rather than one set per table instance, which
-	// proliferates). The conditionals live on the named parent style, so for a
-	// direct (unnamed) m_style we key on its parent's name. Only a direct style
-	// with no parent at all falls back to the item pointer.
-	//
-	// NOTE: this synthetic-name bridge reuses the existing name-based parent
-	// resolution. Switching to a by-proxy parent (so a user-assigned cell style
-	// can sit between the cell and the conditional) is a potential later step.
-	QString owner = m_style.name();
-	if (owner.isEmpty())
-		owner = m_style.parent();
-	if (owner.isEmpty())
-		owner = QString::number(reinterpret_cast<quintptr>(this), 16);
-	return QStringLiteral("__cond_") + owner + QStringLiteral("_") + tableAreaToString(area);
-}
-
-
 
 void PageItem_Table::handleStyleChanged()
 {
@@ -2080,10 +2110,10 @@ void PageItem_Table::applicableActions(QStringList& actionList)
 	const int selectedColumns = tableEdit ? this->selectedColumns().size() : 0;
 	const int selectedCells = tableEdit ? this->selectedCells().size() : 0;
 
+	actionList << "tableInsertRows";
+	actionList << "tableInsertColumns";
 	if (!tableEdit || selectedCells<1)
 	{
-		actionList << "tableInsertRows";
-		actionList << "tableInsertColumns";
 		actionList << "fileImportText";
 		actionList << "fileImportAppendText";
 		actionList << "toolsEditWithStoryEditor";
@@ -2365,7 +2395,7 @@ void PageItem_Table::updateCells(int startRow, int startColumn, int endRow, int 
 	{
 		for (int column = 0; column < m_columns; ++column)
 		{
-			QString an = areaStyleName(areaAt(row, column));
+			QString an = areaStyleNameBare(areaAt(row, column));
 			m_cellRows[row][column].applyAreaStyle(an);
 		}
 	}
@@ -2884,22 +2914,18 @@ void PageItem_Table::restore(UndoState *state, bool isUndo)
 	}
 }
 
-void PageItem_Table::syncConditionalStylesToContext()
+bool PageItem_Table::effectiveRTL() const
 {
-	const QList<TableArea> areas = m_style.conditionalAreasResolved();
-	for (TableArea area : areas)
+	// A table style's RTL setting overrides the item's own flag, but only when
+	// the style (or an ancestor) explicitly defines it; otherwise the item's
+	// flag is used.
+	if (m_Doc && m_Doc->tableStyles().contains(styleName()))
 	{
-		CellStyle cs = m_style.conditionalStyleResolved(area);
-		for (TableArea area : areas)
-		{
-			CellStyle cs = m_style.conditionalStyleResolved(area);
-			cs.setName(conditionalSyntheticName(area));
-			m_Doc->registerSyntheticCellStyle(cs);
-		}
-		cs.setName(conditionalSyntheticName(area));
-		m_Doc->registerSyntheticCellStyle(cs);
+		const TableStyle& ts = m_Doc->tableStyles().get(styleName());
+		if (ts.isDefTableRTL())
+			return ts.tableRTL();
 	}
-	m_Doc->invalidateCellStyles();
+	return isRTL();
 }
 
 void PageItem_Table::restoreCellBorders(SimpleState *state, bool isUndo)

@@ -49,7 +49,10 @@ void ColorButton::setMenuContextType(MenuContextType type)
 	switch (m_contextType)
 	{
 	case MenuContextType::None:
+		setMenu(nullptr);
+		disconnect(this, &QToolButton::pressed, this, &ColorButton::toggleFloatingContext);
 		break;
+	case MenuContextType::Sticky:
 	case MenuContextType::Floating:
 		setPopupMode(QToolButton::InstantPopup);
 		setContextMenuPolicy(Qt::ContextMenuPolicy::NoContextMenu);
@@ -652,6 +655,11 @@ void ColorButton::toggleFloatingContext()
 	connect(colorPicker, &ColorPicker::hatchChanged, this, &ColorButton::updateHatch, Qt::UniqueConnection);
 	connect(colorPicker, &ColorPicker::patternChanged, this, &ColorButton::updatePattern, Qt::UniqueConnection);
 	connect(colorPicker, &ColorPicker::colorListChanged, this, &ColorButton::updateFloatingContext, Qt::UniqueConnection);
+
+	if (m_contextType == MenuContextType::Floating)
+		floatingWidget->setIsMovable(true);
+	else if (m_contextType == MenuContextType::Sticky)
+		floatingWidget->setIsMovable(false);
 
 	floatingWidget->show(this);
 }

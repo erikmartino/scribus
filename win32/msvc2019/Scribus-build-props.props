@@ -7,6 +7,13 @@
 	<SCRIBUS_LIB_ROOT>F:\Scribus Libs\scribus-1.7.x-libs-msvc</SCRIBUS_LIB_ROOT>
   </PropertyGroup>
   <Import Project="$(SCRIBUS_LIB_ROOT)\scribus-lib-paths.props" />
+  <!-- Define cpp standard used to build scribus binaries -->
+  <PropertyGroup>
+	<SCRIBUS_LIBS_MIN_CPP_STANDARD Condition="'$(SCRIBUS_LIBS_MIN_CPP_STANDARD)' == '' and '$(PlatformToolset)' == 'v142'">201703</SCRIBUS_LIBS_MIN_CPP_STANDARD>
+	<SCRIBUS_LIBS_MIN_CPP_STANDARD Condition="'$(SCRIBUS_LIBS_MIN_CPP_STANDARD)' == ''">201703</SCRIBUS_LIBS_MIN_CPP_STANDARD>
+	<SCRIBUS_CPP_STANDARD>201703</SCRIBUS_CPP_STANDARD>
+	<SCRIBUS_CPP_STANDARD Condition="$(SCRIBUS_LIBS_MIN_CPP_STANDARD) >= $(SCRIBUS_CPP_STANDARD)">$(SCRIBUS_LIBS_MIN_CPP_STANDARD)</SCRIBUS_CPP_STANDARD>
+  </PropertyGroup>
   <!-- Import Qt6 -->
   <PropertyGroup Label="UserMacros">
 	<!-- Qt6 -->

@@ -732,8 +732,12 @@ QRect IconManager::splashScreenRect() const
 
 QPixmap IconManager::splashScreen() const
 {
-	if (iconsForDarkMode())
+	return splashScreen(iconsForDarkMode());
+}
+
+QPixmap IconManager::splashScreen(bool darkMode) const
+{
+	if (darkMode)
 		return QPixmap(pathForIcon(m_iconSets[m_activeSetBasename].splashScreenDarkPath));
-	else
-		return QPixmap(pathForIcon(m_iconSets[m_activeSetBasename].splashScreenLightPath));
+	return QPixmap(pathForIcon(m_iconSets[m_activeSetBasename].splashScreenLightPath));
 }

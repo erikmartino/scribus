@@ -13,6 +13,7 @@ for which a new license (GPL+exception) is in place.
 #include <QElapsedTimer>
 #include <QObject>
 
+#include "canvasgesture_cellselect.h"
 #include "canvasmode.h"
 #include "cellarea.h"
 
@@ -122,6 +123,9 @@ private:
 	//Anchor cells for keyboard selection
 	int m_selectionAnchorRow { -1 };
 	int m_selectionAnchorColumn { -1 };
+
+	/// The selection unit a subsequent drag should extend by.
+	CellSelect::SelectionMode m_dragSelectionMode { CellSelect::Cells };
 };
 
 #endif // CANVASMODE_EDITTABLE_H

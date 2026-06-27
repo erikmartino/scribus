@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FSW_NewDocument</class>
+ <widget class="QWizardPage" name="FSW_NewDocument">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>388</width>
+    <height>202</height>
+   </rect>
+  </property>
+  <property name="title">
+   <string>New document defaults</string>
+  </property>
+  <property name="subTitle">
+   <string>The starting point for documents you create.</string>
+  </property>
+  <layout class="QVBoxLayout" name="ndLayout">
+   <item>
+    <layout class="QFormLayout" name="ndForm">
+     <item row="0" column="0">
+      <widget class="QLabel" name="pageSizeLabel">
+       <property name="text">
+        <string>Preferred page size:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="pageSizeCombo"/>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="dirGroup">
+     <property name="title">
+      <string>Default text direction</string>
+     </property>
+     <layout class="QVBoxLayout" name="dirCol">
+      <item>
+       <layout class="QHBoxLayout" name="dirRow">
+        <item>
+         <widget class="QRadioButton" name="ltrRadio">
+          <property name="text">
+           <string>Left to right</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="rtlRadio">
+          <property name="text">
+           <string>Right to left</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="advancedTextDirCheck">
+        <property name="text">
+         <string>Show advanced text-direction options in the interface</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="dirHint">
+        <property name="text">
+         <string>On by default for right-to-left languages. Leave off to keep the interface simpler — you can switch it on later.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="ndSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>0</width>
+       <height>0</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

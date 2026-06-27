@@ -182,6 +182,7 @@ void PrefsManager::initDefaults()
 	if (appPrefs.uiPrefs.language.isEmpty())
 		appPrefs.uiPrefs.language = "en_GB";
 	appPrefs.uiPrefs.userPreferredLocale = "System";
+	appPrefs.uiPrefs.showFirstStartWizard = true;
 	appPrefs.uiPrefs.showStartupDialog = true;
 	appPrefs.uiPrefs.showSplashOnStartup = true;
 	appPrefs.uiPrefs.useSmallWidgets = false;
@@ -462,6 +463,7 @@ void PrefsManager::initDefaults()
 	appPrefs.pageSets.append(pageS);
 	appPrefs.docSetupPrefs.pagePositioning = singlePage;
 	appPrefs.docSetupPrefs.bindingDirection = 0;
+	appPrefs.docSetupPrefs.isRTL = false;
 	appPrefs.fontPrefs.askBeforeSubstitute = true;
 	appPrefs.miscPrefs.haveStylePreview = true;
 	appPrefs.miscPrefs.saveEmergencyFile = true;
@@ -1112,6 +1114,11 @@ bool PrefsManager::GetAllFonts(bool showFontInfo)
 	return !appPrefs.fontPrefs.AvailFonts.isEmpty();
 }
 
+void PrefsManager::setShowFirstStartWizard(const bool showFSW)
+{
+	appPrefs.uiPrefs.showFirstStartWizard = showFSW;
+}
+
 void PrefsManager::setShowStartupDialog(const bool showDialog)
 {
 	appPrefs.uiPrefs.showStartupDialog = showDialog;
@@ -1361,6 +1368,7 @@ bool PrefsManager::writePref(const QString& filePath)
 	elem.setAttribute("VERSION", "1.7.0");
 
 	QDomElement dcUI = docu.createElement("UI");
+	dcUI.setAttribute("ShowFirstStartWizard", static_cast<int>(appPrefs.uiPrefs.showFirstStartWizard));
 	dcUI.setAttribute("ShowStartupDialog", static_cast<int>(appPrefs.uiPrefs.showStartupDialog));
 	dcUI.setAttribute("ShowSplashOnStartup", static_cast<int>(appPrefs.uiPrefs.showSplashOnStartup));
 	dcUI.setAttribute("UseSmallWidgets", static_cast<int>(appPrefs.uiPrefs.useSmallWidgets));
@@ -1394,6 +1402,7 @@ bool PrefsManager::writePref(const QString& filePath)
 	deDocumentSetup.setAttribute("MarginPreset", appPrefs.docSetupPrefs.marginPreset);
 	deDocumentSetup.setAttribute("PagePositioning", appPrefs.docSetupPrefs.pagePositioning);
 	deDocumentSetup.setAttribute("BindingDirection", appPrefs.docSetupPrefs.bindingDirection);
+	deDocumentSetup.setAttribute("IsRTL", static_cast<int>(appPrefs.docSetupPrefs.isRTL));
 	deDocumentSetup.setAttribute("AutoSave", static_cast<int>(appPrefs.docSetupPrefs.AutoSave));
 	deDocumentSetup.setAttribute("AutoSaveTime", appPrefs.docSetupPrefs.AutoSaveTime);
 	deDocumentSetup.setAttribute("AutoSaveCount", appPrefs.docSetupPrefs.AutoSaveCount);
@@ -2064,6 +2073,7 @@ bool PrefsManager::readPref(const QString& filePath)
 			appPrefs.uiPrefs.applicationFontSize = dc.attribute("ApplicationFontSize", "12").toInt();
 			appPrefs.uiPrefs.paletteFontSize = dc.attribute("PaletteFontSize", "10").toInt();
 			appPrefs.uiPrefs.recentDocCount = dc.attribute("RecentDocumentCount", "5").toUInt();
+			appPrefs.uiPrefs.showFirstStartWizard = static_cast<bool>(dc.attribute("ShowFirstStartWizard", "0").toInt()); //default to zero so only first time users see the wizard
 			appPrefs.uiPrefs.showStartupDialog = static_cast<bool>(dc.attribute("ShowStartupDialog", "1").toInt());
 			appPrefs.uiPrefs.showSplashOnStartup = static_cast<bool>(dc.attribute("UI_SHOWSPLASHSCREEN", "1").toInt());
 			appPrefs.uiPrefs.useSmallWidgets = dc.attribute("UseSmallWidgets").toInt();
@@ -2098,6 +2108,7 @@ bool PrefsManager::readPref(const QString& filePath)
 			appPrefs.docSetupPrefs.marginPreset   = dc.attribute("MarginPreset", "0").toInt();
 			appPrefs.docSetupPrefs.pagePositioning	= dc.attribute("PagePositioning", "0").toInt();
 			appPrefs.docSetupPrefs.bindingDirection	= dc.attribute("BindingDirection", "0").toInt();
+			appPrefs.docSetupPrefs.isRTL = static_cast<bool>(dc.attribute("IsRTL", "0").toInt());
 			appPrefs.docSetupPrefs.AutoSave	  = static_cast<bool>(dc.attribute("AutoSave", "0").toInt());
 			appPrefs.docSetupPrefs.AutoSaveTime  = dc.attribute("AutoSaveTime", "600000").toInt();
 			appPrefs.docSetupPrefs.AutoSaveCount  = dc.attribute("AutoSaveCount", "1").toInt();

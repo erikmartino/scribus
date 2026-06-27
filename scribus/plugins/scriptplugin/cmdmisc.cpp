@@ -10,7 +10,9 @@ for which a new license (GPL+exception) is in place.
 #include <string>
 
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QList>
+#include <QMetaObject>
 #include <QPixmap>
 
 #include "prefsmanager.h"
@@ -799,6 +801,59 @@ PyObject *scribus_readpdfoptions(PyObject* /* self */, PyObject* args)
 	Py_RETURN_NONE;
 }
 
+PyObject *scribus_invokelater(PyObject* /* self */, PyObject* args)
+{
+	Py_ssize_t n = PyTuple_GET_SIZE(args);
+	if (n < 1)
+	{
+		PyErr_SetString(PyExc_TypeError, "invokeLater() requires a callable");
+		return nullptr;
+	}
+	PyObject* callable = PyTuple_GET_ITEM(args, 0);
+	if (!PyCallable_Check(callable))
+	{
+		PyErr_SetString(PyExc_TypeError, "invokeLater() first argument must be callable");
+		return nullptr;
+	}
+	PyObject* callArgs = PyTuple_GetSlice(args, 1, n);
+	if (!callArgs)
+		return nullptr;
+	Py_INCREF(callable);
+
+	QObject* target = ScCore ? ScCore->primaryMainWindow() : nullptr;
+	if (!target)
+		target = QCoreApplication::instance();
+	if (!target)
+	{
+		Py_DECREF(callable);
+		Py_DECREF(callArgs);
+		PyErr_SetString(ScribusException, "invokeLater(): no Qt application available");
+		return nullptr;
+	}
+
+	QMetaObject::invokeMethod(target, [callable, callArgs]() {
+		PyGILState_STATE gs = PyGILState_Ensure();
+		PyObject* res = PyObject_Call(callable, callArgs, nullptr);
+		if (!res)
+			PyErr_Print();
+		else
+			Py_DECREF(res);
+		Py_DECREF(callable);
+		Py_DECREF(callArgs);
+		PyGILState_Release(gs);
+	}, Qt::QueuedConnection);
+
+	Py_RETURN_NONE;
+}
+
+PyObject *scribus_processevents(PyObject* /* self */)
+{
+	Py_BEGIN_ALLOW_THREADS
+	QCoreApplication::processEvents();
+	Py_END_ALLOW_THREADS
+	Py_RETURN_NONE;
+}
+
 /*! HACK: this removes "warning: 'blah' defined but not used" compiler warnings
 with header files structure untouched (docstrings are kept near declarations)
 PV */
@@ -818,10 +873,12 @@ void cmdmiscdocwarnings()
 	  << scribus_islayerlocked__doc__
 	  << scribus_islayeroutlined__doc__
 	  << scribus_islayerprintable__doc__
+	  << scribus_invokelater__doc__
 	  << scribus_islayervisible__doc__
 	  << scribus_loweractivelayer__doc__
 	  << scribus_moveselectiontoback__doc__ 
 	  << scribus_moveselectiontofront__doc__
+	  << scribus_processevents__doc__
 	  << scribus_raiseactivelayer__doc__
 	  << scribus_readpdfoptions__doc__
 	  << scribus_renderfont__doc__

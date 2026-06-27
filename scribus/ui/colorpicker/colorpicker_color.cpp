@@ -88,24 +88,11 @@ void ColorPickerColor::setContext(Context config)
 	case Context::Text:
 	case Context::TextBackground:
 	case Context::TextOutline:
-		sectionSwatches->setVisible(true);
-		numberShade->setVisible(true);
-		labelShade->setVisible(true);
-		sliderShade->setVisible(true);
-		numberAlpha->setVisible(false);
-		labelAlpha->setVisible(false);
-		sliderAlpha->setVisible(false);
-		break;
+	case Context::TableCellFill:
+	case Context::TableCellStroke:
 	case Context::Fill:
-		sectionSwatches->setVisible(true);
-		numberShade->setVisible(true);
-		labelShade->setVisible(true);
-		sliderShade->setVisible(true);
-		numberAlpha->setVisible(false);
-		labelAlpha->setVisible(false);
-		sliderAlpha->setVisible(false);
-		break;
 	case Context::Line:
+	case Context::DropShadow:
 		sectionSwatches->setVisible(true);
 		numberShade->setVisible(true);
 		labelShade->setVisible(true);
@@ -124,15 +111,6 @@ void ColorPickerColor::setContext(Context config)
 		labelAlpha->setVisible(true);
 		sliderAlpha->setVisible(true);
 		isMask = true;
-		break;
-	case Context::DropShadow:
-		sectionSwatches->setVisible(true);
-		numberShade->setVisible(true);
-		labelShade->setVisible(true);
-		sliderShade->setVisible(true);
-		numberAlpha->setVisible(false);
-		labelAlpha->setVisible(false);
-		sliderAlpha->setVisible(false);
 		break;
 	}
 

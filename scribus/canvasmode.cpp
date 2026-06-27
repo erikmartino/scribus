@@ -782,7 +782,7 @@ void CanvasMode::commonDrawControls(QPainter* p, bool drawHandles)
 		drawSelection(p, drawHandles);
 }
 
-void CanvasMode::commonDrawTextCursor(QPainter* p, PageItem_TextFrame* textframe, const QPointF& offset)
+void CanvasMode::commonDrawTextCursor(QPainter* p, PageItem_TextFrame* textframe, const QPointF& offset, double maxHeight)
 {
 	QLineF cursor;
 	QPen cPen (Qt::black, 0.9 , Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin);
@@ -791,6 +791,16 @@ void CanvasMode::commonDrawTextCursor(QPainter* p, PageItem_TextFrame* textframe
 	textframe->itemText.normalizeCursorPosition();
 	int textCursorPos (textframe->itemText.cursorPosition());
 	cursor = textframe->textLayout.positionToPoint(textCursorPos);
+
+	// Clamp the cursor height to the available height (used by table cells,
+	// where an empty cell's default font size can exceed a short row's height).
+	if (maxHeight > 0.0 && qAbs(cursor.dy()) > maxHeight)
+	{
+		if (cursor.y2() >= cursor.y1())
+			cursor.setP2(QPointF(cursor.x2(), cursor.y1() + maxHeight));
+		else
+			cursor.setP2(QPointF(cursor.x2(), cursor.y1() - maxHeight));
+	}
 
 	cPen.setColor(ScColorEngine::getRGBColor(m_doc->PageColors[textframe->itemText.charStyle(textCursorPos).fillColor()], m_doc));
 

@@ -119,6 +119,9 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -137,6 +140,9 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -155,6 +161,9 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -174,6 +183,9 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4005;4244;4251;4258;4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 201703">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >= 202002">stdcpp20</LanguageStandard>
+      <LanguageStandard Condition="$(SCRIBUS_CPP_STANDARD) >  202002">stdcpplatest</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>

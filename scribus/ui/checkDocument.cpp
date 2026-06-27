@@ -127,8 +127,7 @@ void CheckDocument::languageChange()
 
 	warnMap.clear();
 	warnMap.insert(PV_ANNOTATION,				qMakePair(tr("Object is a PDF Annotation or Field"),					tr("Indicates that editorial changes have been made to a PDF are still present or your PDF contains unprintable annotation items. They may cause issues in professional printing. Also helpful reminder if you are wanting to publish a final draft without editorial relics.")));
-	warnMap.insert(PV_APPLIED_MASTER_DIFF_SIDE,	qMakePair(tr("Applied master page has different page destination (left, middle, right side)"),
-																														tr("Have you applied the correct Master Page?")));
+	warnMap.insert(PV_APPLIED_MASTER_DIFF_SIDE,	qMakePair(tr("Applied master page has different page destination (left, middle, right side)"), tr("Have you applied the correct Master Page?")));
 	warnMap.insert(PV_EMPTY_IMAGE_FRAME,		qMakePair(tr("Empty Image Frame"),										tr("If you have created an image frame, there is the presumption that you planned to put an image in it")));
 	warnMap.insert(PV_EMPTY_TEXT_FRAME,			qMakePair(tr("Empty Text Frame"),										tr("If you have created a text frame, there is the presumption that you planned to put text in it")));
 	warnMap.insert(PV_FONT_NOT_EMBEDDED,		qMakePair(tr("Imported document contains non-embedded fonts"),			tr("When some imported document uses non-embedded fonts, then their rendering will be wrong, unless by chance you have them installed on their system, but that cannot be guaranteed in case you want to share the resulting document")));
@@ -147,7 +146,8 @@ void CheckDocument::languageChange()
 	warnMap.insert(PV_LAYER_TRANSPARENCY,		qMakePair(tr("Transparency used"),										tr("This layer uses transparency, only an issue if using older printing profiles. You may safely ignore this when using modern printing methods, or exporting to PDF version greater than 1.4.")));
 	warnMap.insert(PV_LAYER_BLENDMODE,			qMakePair(tr("Blendmode used"),											tr("This layer uses blendmodes which relies on transparency, only an issue if using older printing profiles. You may safely ignore this when using modern printing methods, or exporting to PDF version greater than 1.4.")));
 	warnMap.insert(PV_LAYER_PRINTVIS_MISMATCH,	qMakePair(tr("Print/Visible mismatch"),									tr("This layer uses transparency, only an issue if using older printing profiles. You may safely ignore this when using modern printing methods, or exporting to PDF version greater than 1.4.")));
-	warnMap.insert(PV_IMAGE_HAS_PROGRESSIVE_ENCODING,		qMakePair(tr("Image has progressive encoding"),							tr("The image uses progressive encoding which is useful for websites however does not process well when sending PDFs to professional printers.")));
+	warnMap.insert(PV_IMAGE_HAS_PROGRESSIVE_ENCODING,	qMakePair(tr("Image has progressive encoding"),					tr("The image uses progressive encoding which is useful for websites however does not process well when sending PDFs to professional printers.")));
+	warnMap.insert(PV_MISSING_STYLE,			qMakePair(tr("Style has a missing parent style"),						tr("A paragraph or character style is based on a parent style that no longer exists in the document. Text using this style may not render as intended. Edit the style and choose an existing parent, or recreate the missing style.")));
 
 }
 
@@ -283,10 +283,8 @@ void CheckDocument::clearErrorList()
 
 void CheckDocument::buildItem(QTreeWidgetItem * item, PreflightError errorType, PageItem * pageItem)
 {
-	Q_ASSERT_X(item != nullptr, "CheckDocument::buildItem",
-				"No reference to QTreeWidgetItem item");
-	Q_ASSERT_X(pageItem != nullptr, "CheckDocument::buildItem",
-				"No reference to PageItem pageItem");
+	Q_ASSERT_X(item != nullptr, "CheckDocument::buildItem", "No reference to QTreeWidgetItem item");
+	Q_ASSERT_X(pageItem != nullptr, "CheckDocument::buildItem", "No reference to PageItem pageItem");
 
 	switch (errorType)
 	{
@@ -398,6 +396,13 @@ void CheckDocument::buildItem(QTreeWidgetItem * item, PreflightError errorType, 
 			item->setIcon(COLUMN_ITEM, onlyWarning);
 			itemError = true;
 			break;
+		case PreflightError::MissingStyle:
+			item->setText(COLUMN_PROBLEM, warnMap[PV_MISSING_STYLE].first);
+			item->setToolTip(COLUMN_PROBLEM, warnMap[PV_MISSING_STYLE].second);
+			item->setIcon(COLUMN_ITEM, graveError);
+			pageGraveError = true;
+			itemError = true;
+			break;
 		default:
 			break;
 	}
@@ -501,6 +506,40 @@ void CheckDocument::buildErrorList(ScribusDoc *doc)
 			layerItem->setExpanded(true);
 		}
 		// END of LAYERS
+
+		// STYLES **********************************************
+		if (!doc->docStyleErrors.isEmpty())
+		{
+			QTreeWidgetItem * styleRootItem = new QTreeWidgetItem(reportDisplay);
+			styleRootItem->setText(COLUMN_ITEM, tr("Styles"));
+			for (auto styleErrorsIt = doc->docStyleErrors.begin();
+				 styleErrorsIt != doc->docStyleErrors.end();
+				 ++styleErrorsIt)
+			{
+				QTreeWidgetItem * style = new QTreeWidgetItem(styleRootItem);
+				for (auto errIt = styleErrorsIt.value().begin();
+					 errIt != styleErrorsIt.value().end(); ++errIt)
+				{
+					QTreeWidgetItem * errorText = new QTreeWidgetItem(style, 0);
+					switch (errIt.key())
+					{
+						case PreflightError::MissingStyle:
+							errorText->setText(COLUMN_ITEM, warnMap[PV_MISSING_STYLE].first);
+							errorText->setToolTip(COLUMN_ITEM, warnMap[PV_MISSING_STYLE].second);
+							errorText->setIcon(COLUMN_ITEM, graveError);
+							break;
+						default:
+							break;
+					}
+				}
+				style->setText(COLUMN_ITEM, tr("Style \"%1\"").arg(styleErrorsIt.key()));
+				style->setIcon(COLUMN_ITEM, graveError);
+				style->setText(COLUMN_PROBLEM, tr("Issues: %1").arg(styleErrorsIt.value().count()));
+				style->setExpanded(true);
+			}
+			styleRootItem->setExpanded(true);
+		}
+		// END of STYLES
 
 		// Master Pages *****************************************************
 		QTreeWidgetItem * masterPageRootItem = new QTreeWidgetItem(reportDisplay);

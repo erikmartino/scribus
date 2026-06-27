@@ -36,6 +36,9 @@ public:
 	explicit CellSelect(CanvasMode* parent) : TableGesture(parent) {}
 	~CellSelect() override = default;
 
+	/// Selection unit the drag extends by.
+	enum SelectionMode { Cells, Columns, Rows };
+
 	void activate(bool fromGesture) override;
 	void deactivate(bool forGesture) override;
 	void keyPressEvent(QKeyEvent* event) override;
@@ -45,13 +48,15 @@ public:
 	void drawControls(QPainter* p) override;
 
 	/// Sets up this gesture to select cells in @a table, starting with @a cell.
-	void setup(PageItem_Table* table, const TableCell& cell);
+	void setup(PageItem_Table* table, const TableCell& cell, SelectionMode mode);
 
 private:
 	/// The start cell of the current selection.
 	TableCell m_startCell;
 	/// The end cell of the current selection.
 	TableCell m_endCell;
+	/// The unit (cells/columns/rows) the drag extends by.
+	SelectionMode m_mode { Cells };
 };
 
 #endif // CANVASGESTURE_CELLSELECT_H

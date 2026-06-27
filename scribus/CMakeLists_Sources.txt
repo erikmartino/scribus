@@ -21,6 +21,18 @@ if (JXL_FOUND)
 	set(SCRIBUS_JPEGXL_SRC imagedataloaders/scimgdataloader_jpegxl.cpp)
 endif()
 
+set(SCRIBUS_FSW_SRC
+	ui/fsw/firststartwizard.cpp
+	ui/fsw/fsw_appearance.cpp
+	ui/fsw/fsw_experimental.cpp
+	ui/fsw/fsw_finish.cpp
+	ui/fsw/fsw_fontsscripts.cpp
+	ui/fsw/fsw_language.cpp
+	ui/fsw/fsw_newdocument.cpp
+	ui/fsw/fsw_sidepanel.cpp
+	ui/fsw/fsw_welcome.cpp
+)
+
 set(SCRIBUS_SOURCES
 	actionmanager.cpp
 	actionsearch.cpp
@@ -591,6 +603,7 @@ set(SCRIBUS_SOURCES
 	${SCRIBUS_OSG_SRC}
 	${SCRIBUS_GMAGICK_SRC}
 	${SCRIBUS_JPEGXL_SRC}
+	${SCRIBUS_FSW_SRC}
 )
 
 if(NOT HAVE_HYPHEN)

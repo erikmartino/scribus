@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FSW_Language</class>
+ <widget class="QWizardPage" name="FSW_Language">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>294</width>
+    <height>122</height>
+   </rect>
+  </property>
+  <property name="title">
+   <string>Language &amp; units</string>
+  </property>
+  <property name="subTitle">
+   <string>How Scribus talks to you, and the units new documents use.</string>
+  </property>
+  <layout class="QFormLayout" name="langLayout">
+   <item row="0" column="0">
+    <widget class="QLabel" name="uiLanguageLabel">
+     <property name="text">
+      <string>Interface language:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QComboBox" name="uiLanguageCombo"/>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="docLanguageLabel">
+     <property name="text">
+      <string>Default document language:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QComboBox" name="docLanguageCombo"/>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="unitsLabel">
+     <property name="text">
+      <string>Default units:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="unitsCombo"/>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

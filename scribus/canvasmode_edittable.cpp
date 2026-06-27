@@ -92,6 +92,8 @@ void CanvasMode_EditTable::keyPressEvent(QKeyEvent* event)
 {
 	event->accept();
 
+	bool textChanged = false;
+
 	// Escape: exit table edit mode.
 	if (event->key() == Qt::Key_Escape)
 	{
@@ -182,6 +184,7 @@ void CanvasMode_EditTable::keyPressEvent(QKeyEvent* event)
 			{
 				bool repeat;
 				m_table->activeCell().textFrame()->handleModeEditKey(event, repeat);
+				textChanged = true;
 			}
 		}
 	}
@@ -190,6 +193,22 @@ void CanvasMode_EditTable::keyPressEvent(QKeyEvent* event)
 	{
 		bool repeat;
 		m_table->activeCell().textFrame()->handleModeEditKey(event, repeat);
+		textChanged = true;
+	}
+
+	// Re-fit the active row to its content after a text-changing keystroke, so
+	// the row height -- and every cell's text frame and cursor in that row --
+	// tracks the text as it is typed. Skipped entirely for navigation keys, and
+	// the full row scan is avoided unless the edited cell now needs more height
+	// than the row provides (grow-only), to keep ordinary typing cheap.
+	if (textChanged && m_table->activeCell().isValid())
+	{
+		TableCell active = m_table->activeCell();
+		if (m_table->rowNeedsGrowthForCell(active.row(), active.column()))
+		{
+			if (m_table->adjustRowHeight(active.row(), true))
+				m_table->adjustFrameToTable();
+		}
 	}
 
 	makeLongTextCursorBlink();
@@ -229,6 +248,9 @@ void CanvasMode_EditTable::mouseMoveEvent(QMouseEvent* event)
 				break;
 			case TableHandle::TableResize:
 				cursor = Qt::SizeFDiagCursor;
+				break;
+			case TableHandle::SelectAll:
+				cursor = (handle.index() == 1) ? Qt::SizeBDiagCursor : Qt::SizeFDiagCursor;
 				break;
 			case TableHandle::CellSelect:
 				cursor = Qt::IBeamCursor;
@@ -274,6 +296,7 @@ void CanvasMode_EditTable::mousePressEvent(QMouseEvent* event)
 		switch (handle.type())
 		{
 			case TableHandle::RowSelect:
+				m_dragSelectionMode = CellSelect::Rows;
 				m_table->clearSelection();
 				// Deselect text in active frame.
 				activeFrame = m_table->activeCell().textFrame();
@@ -292,6 +315,7 @@ void CanvasMode_EditTable::mousePressEvent(QMouseEvent* event)
 				m_view->startGesture(m_rowResizeGesture);
 				break;
 			case TableHandle::ColumnSelect:
+				m_dragSelectionMode = CellSelect::Columns;
 				m_table->clearSelection();
 				activeFrame = m_table->activeCell().textFrame();
 				activeFrame->itemText.deselectAll();
@@ -313,6 +337,7 @@ void CanvasMode_EditTable::mousePressEvent(QMouseEvent* event)
 				m_view->startGesture(m_tableResizeGesture);
 				break;
 			case TableHandle::CellSelect:
+				m_dragSelectionMode = CellSelect::Cells;
 				// Move to the pressed cell and position the text cursor.
 				resetSelectionAnchor();
 				m_table->clearSelection();
@@ -323,6 +348,18 @@ void CanvasMode_EditTable::mousePressEvent(QMouseEvent* event)
 				m_view->horizRuler->setItem(m_table->activeCell().textFrame());
 				m_view->horizRuler->update();
 				makeLongTextCursorBlink();
+				updateCanvas(true);
+				break;
+			case TableHandle::SelectAll:
+				m_table->clearSelection();
+				// Deselect text in active frame.
+				activeFrame = m_table->activeCell().textFrame();
+				activeFrame->itemText.deselectAll();
+				activeFrame->HasSel = false;
+				// Select every cell in the table.
+				m_table->selectCells(0, 0, m_table->rows() - 1, m_table->columns() - 1);
+				m_view->slotSetCurs(globalPos.x(), globalPos.y());
+				m_lastCursorPos = -1;
 				updateCanvas(true);
 				break;
 			case TableHandle::None:
@@ -460,6 +497,18 @@ void CanvasMode_EditTable::drawTableHandleHints(QPainter* p)
 		p->drawLine(QPointF(offset.x() + tableW, offset.y() + rowY), QPointF(offset.x() + tableW + tickLength, offset.y() + rowY));
 	}
 
+	// Select-all corner marker. LTR: top-left corner; RTL: top-right corner.
+	// Matches the corner hit-tested in PageItem_Table::hitTest for SelectAll.
+	const bool rtl = false; // TODO: table RTL flag when RTL document/layout is added.
+	const double cornerSize = qMax(threshold * 2.0, 10.0 / m_canvas->scale());
+	const double cornerX = rtl ? (offset.x() + tableW - cornerSize) : offset.x();
+	const double cornerY = offset.y();
+	QRectF cornerRect(cornerX, cornerY, cornerSize, cornerSize);
+	QColor cornerFill(50, 150, 220, 90);
+	p->fillRect(cornerRect, cornerFill);
+	p->setPen(QPen(markerColor, tickWidth, Qt::SolidLine, Qt::FlatCap));
+	p->drawRect(cornerRect);
+
 	p->restore();
 }
 
@@ -543,7 +592,7 @@ void CanvasMode_EditTable::handleMouseDrag(QMouseEvent* event)
 		{
 			// Active cell changed mid-drag: start cell range selection.
 			m_lastCursorPos = -1;
-			m_cellSelectGesture->setup(m_table, activeCell);
+			m_cellSelectGesture->setup(m_table, activeCell, m_dragSelectionMode);
 			m_view->startGesture(m_cellSelectGesture);
 			rangeSelecting = true;
 		}
@@ -554,7 +603,7 @@ void CanvasMode_EditTable::handleMouseDrag(QMouseEvent* event)
 		activeFrame->itemText.deselectAll();
 		activeFrame->HasSel = false;
 
-		m_cellSelectGesture->setup(m_table, activeCell);
+		m_cellSelectGesture->setup(m_table, activeCell, m_dragSelectionMode);
 		m_view->startGesture(m_cellSelectGesture);
 		rangeSelecting = true;
 	}
@@ -591,7 +640,8 @@ void CanvasMode_EditTable::drawTextCursor(QPainter* p)
 		// Paint text cursor.
 		p->save();
 		p->setTransform(m_table->getTransform(), true);
-		commonDrawTextCursor(p, m_table->activeCell().textFrame(), m_table->gridOffset());
+		PageItem_TextFrame* cellFrame = m_table->activeCell().textFrame();
+		commonDrawTextCursor(p, cellFrame, m_table->gridOffset(), cellFrame->height());
 		p->restore();
 	}
 }
