@@ -55,6 +55,14 @@ A core guiding principle of this architecture is **Partial Schema Override**:
 *   **Property Subsets**: Styles must not duplicate properties defined by their parents. Child styles are serialized containing *only* the specific keys that have been explicitly overridden.
 *   **Dynamic Propagation**: Any property not locally defined in a child style is resolved dynamically at runtime by walking up the inheritance tree. This guarantees that updating a parent style's properties (e.g. changing the font size of `[default]`) instantly propagates to all descendants that have not explicitly overridden that property.
 
+### E. UI Representation: Style Side Panel
+The inheritance and partial schema override model is represented visually inside the style side panel:
+*   **Visual Tree Hierarchy**: Styles are displayed in an indented tree view or accompanied by visual hierarchy links indicating their `parent` relationships.
+*   **Inherited vs. Overridden Properties**:
+    *   *Inherited Values*: Properties inherited from parent styles are rendered in a read-only, muted state (e.g. using light placeholders) showing their current resolved value, labeled with their source (e.g., `[default]`).
+    *   *Local Overrides*: Properties overridden locally in the style are highlighted with active inputs and display a "reset" action to delete the override and restore parent inheritance.
+    *   *Global Presets*: System-level global style packs (Root, HTML) are badged as read-only (e.g. with a lock icon) to protect defaults while remaining inspectable.
+
 ---
 
 ## 2. Ambiguities & Clarifications Required
