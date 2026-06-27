@@ -6,23 +6,37 @@ This document elaborates on the proposal for representing paragraph and characte
 
 ## 1. Core Mechanics
 
-### A. Root Style Pack & Root Paragraph Style
-*   **Root Style Pack**: A system-level, read-only style pack. It acts as the absolute parent of all user-created style packs.
-*   **Root Paragraph Style**: Included in the Root Style Pack. It is read-only and defines the base typographic defaults:
-    *   **Font Family**: `Garamond`
-    *   **Font Size**: `10pt`
-    *   **Font Weight/Style**: `Regular`
+### A. Global Read-Only Style Packs
+There are two read-only global style packs that live permanently in the editor workspace:
+
+1.  **Root Style Pack**:
+    *   **Description**: The system-level root representing the absolute fallback parent of all styles.
+    *   **Root Paragraph Style**: Included in the Root Style Pack. Defines base typographic defaults:
+        *   **Font Family**: `Garamond` (Serif fallback)
+        *   **Font Size**: `10pt`
+        *   **Font Weight/Style**: `Regular`
+
+2.  **HTML Element Style Pack**:
+    *   **Description**: A direct child of the **Root Style Pack**.
+    *   **Purpose**: Maps standard HTML elements (e.g. `p`, `h1`, `h2`, `h3`, `pre`, `code`, `em`, `strong`) to default paragraph/character styles, allowing imported HTML to be styled appropriately.
+    *   **Font Pairings**:
+        *   *Serif text*: `Garamond` (inherits from root).
+        *   *Sans-serif text*: `Helvetica` (or `Arial`) as a clean sans-serif font pairing that complements Garamond.
+        *   *Monospace text*: `Courier New` (or `Monaco`) to pair cleanly with Garamond.
 
 ### B. Hierarchical Style Packs (Packs Inheritance)
 Users can create custom child style packs that reference a parent style pack:
 ```
-[ Root Style Pack ] (Read-only)
-       ▲
-       │ (inherits / references)
-[ Child Style Pack A ]
-       ▲
-       │ (inherits / references)
-[ Child Style Pack B ]
+ [ Root Style Pack ] (Read-only, Global)
+        ▲
+        │ (inherits / references)
+ [ HTML Element Style Pack ] (Read-only, Global)
+        ▲
+        │ (inherits / references)
+ [ User Style Pack A ]
+        ▲
+        │ (inherits / references)
+ [ User Style Pack B ]
 ```
 A child style pack inherits all styles defined in its parent chain. If a style in the child has the same name as a style in the parent, the parent style is **shadowed (hidden)** from the child pack's namespace.
 
@@ -64,7 +78,7 @@ Before implementing this design, several architectural and behavioral edge cases
 
 ## 3. Proposed JSON Schema Representation
 
-To support serialization in the document store, we propose the following schema for the Document Model:
+To support serialization in the document store, we propose the following schema for the Document Model incorporating the global read-only style packs:
 
 ```json
 {
@@ -85,8 +99,35 @@ To support serialization in the document store, we propose the following schema 
       ]
     },
     {
-      "id": "brand-pack-a",
+      "id": "html-pack",
       "parent": "root-pack",
+      "readOnly": true,
+      "paragraphStyles": [
+        {
+          "id": "html-p",
+          "name": "p",
+          "parent": "root-default"
+        },
+        {
+          "id": "html-h1",
+          "name": "h1",
+          "fontFamily": "Helvetica",
+          "fontSize": 24,
+          "fontWeight": "bold",
+          "parent": "root-default"
+        },
+        {
+          "id": "html-code",
+          "name": "code",
+          "fontFamily": "Courier New",
+          "fontSize": 9,
+          "parent": "root-default"
+        }
+      ]
+    },
+    {
+      "id": "brand-pack-a",
+      "parent": "html-pack",
       "readOnly": false,
       "paragraphStyles": [
         {
@@ -97,10 +138,9 @@ To support serialization in the document store, we propose the following schema 
         },
         {
           "id": "brand-heading",
-          "name": "Heading 1",
+          "name": "h1",
           "fontSize": 20,
-          "fontWeight": "bold",
-          "parent": "root-default"
+          "parent": "html-h1"
         }
       ]
     }
