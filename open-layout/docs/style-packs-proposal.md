@@ -66,9 +66,10 @@ Before implementing this design, several architectural and behavioral edge cases
     *   The **Root Style Pack** and the **HTML Element Style Pack** live globally in the application runtime as read-only presets.
     *   **All other style packs** live strictly within documents. They are serialized directly inside the document JSON model. This ensures that when a document is saved and loaded via the [document-store](file:///home/martino/git/scribus/open-layout/document-store/), its specific style inheritance configurations are self-contained and fully preserved.
 
-### Ambiguity 3: Unlinked Styles & Default Fallbacks
-*   **Problem**: If a user creates a new paragraph style `"Sidebar Body"` in a child pack and does *not* assign a parent style, what does it inherit from?
-*   **Recommendation**: Every custom style must fall back to the **Root Paragraph Style** (Garamond 10) if no explicit parent style is specified. This ensures that every style resolves to a valid font family and size.
+### Architectural Boundary: Inheritance Tree Root (Null Parent)
+*   **Decision**:
+    *   **Mandatory Parent**: All paragraph and character styles must have a parent reference.
+    *   **Root Fallback**: The **Root Paragraph Style** (Garamond 10pt) in the root style pack acts as the "null" parent (the absolute root of the inheritance tree). Any style that does not inherit from another custom style must explicitly set its parent reference to this root style.
 
 ### Ambiguity 4: Character Styles Integration
 *   **Problem**: How do character style runs (inline overrides) interact with Style Packs?
