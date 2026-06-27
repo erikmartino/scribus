@@ -50,6 +50,11 @@ Paragraph styles within a pack can inherit properties from a parent style (usual
 [ Child Para Style (A) ] ──────── (Name: "Normal", Font Size: 12)
 ```
 
+### D. Guiding Principle: Partial Schema Override
+A core guiding principle of this architecture is **Partial Schema Override**:
+*   **Property Subsets**: Styles must not duplicate properties defined by their parents. Child styles are serialized containing *only* the specific keys that have been explicitly overridden.
+*   **Dynamic Propagation**: Any property not locally defined in a child style is resolved dynamically at runtime by walking up the inheritance tree. This guarantees that updating a parent style's properties (e.g. changing the font size of `[default]`) instantly propagates to all descendants that have not explicitly overridden that property.
+
 ---
 
 ## 2. Ambiguities & Clarifications Required
@@ -178,7 +183,7 @@ To support serialization in the document store, we propose the following schema 
 
 4.  **Property Synchronization (Partial Serialization)**:
     *   *Risk*: If child styles are serialized as fully populated objects, updating a parent style's properties will fail to propagate to the child style.
-    *   *Mitigation*: Child styles must be serialized using *partial schemas* (only recording properties that have been explicitly overridden). Non-overridden keys will be resolved dynamically at runtime by traversing the inheritance path.
+    *   *Mitigation*: Addressed by the **Partial Schema Override** guiding principle. Child styles only serialize overridden properties, ensuring clean property synchronization from parent styles at runtime.
 
 5.  **Shaping Cache Invalidation**:
     *   *Risk*: Swapping or editing parent style properties changes font parameters, which requires re-evaluating glyph layout.
