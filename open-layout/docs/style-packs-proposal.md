@@ -55,12 +55,11 @@ Paragraph styles within a pack can inherit properties from a parent style (usual
 
 Before implementing this design, several architectural and behavioral edge cases must be clarified:
 
-### Ambiguity 1: Scope of Shadows (Name vs. ID Matching)
-*   **Problem**: If `Child Style Pack A` defines a paragraph style named `"Normal"`, it hides the parent pack's style named `"Normal"`.
-*   **Question**: Does the child style automatically inherit from the hidden parent style?
-    *   *Option A (Implicit Inheritance)*: Yes, if the names match, the child style inherits properties from the parent style unless overridden.
-    *   *Option B (Explicit Linking)*: No, inheritance is determined strictly by a parent ID reference (e.g. `parent: "root-normal-id"`). Shadowing only affects what is visible when querying the list of available styles.
-*   **Recommendation**: **Option B**. Explicit ID references are far more robust for serialization and avoid circular loops or name-collision bugs when styles are renamed.
+### Architectural Boundary: Shadowing vs. Style Inheritance
+*   **Decision**:
+    *   **Shadowing (Name-Based)**: If a child style pack defines a style with the same name as a style in the parent pack, the parent style is hidden (shadowed) from the child pack's namespace.
+    *   **Inheritance (ID-Based)**: Shadowing does not dictate inheritance. A shadowed parent style is often, but not necessarily, the parent of the child style that shadows it.
+    *   **Resolution**: Inheritance is determined strictly by explicit ID reference (e.g. `parent: "root-default"`). This ensures robust serialization and allows a child style to inherit from a completely different parent style (or have no parent) despite shadowing another style by name.
 
 ### Architectural Boundary: Global vs. Document-Bound Style Packs
 *   **Decision**:
