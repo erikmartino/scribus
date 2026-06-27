@@ -37,6 +37,19 @@ export class SelectionService extends EventTarget {
   }
 
   /**
+   * Set selection to a list of items.
+   */
+  selectMany(items) {
+    if (!items || items.length === 0) {
+      this.clear();
+      return;
+    }
+    this._items = [...items];
+    this._primary = items[items.length - 1] || null;
+    this._dispatchChange('replace');
+  }
+
+  /**
    * Add an item to the existing selection.
    */
   add(item) {

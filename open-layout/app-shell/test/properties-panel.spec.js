@@ -52,4 +52,31 @@ test.describe('Properties Panel (sanity)', () => {
     await page.locator('.layer-item').first().click();
     expect(await page.locator('.selectable.selected').count()).toBe(1);
   });
+
+  test('Layers panel supports multiselect and styles selected items', async ({ page }) => {
+    const layersTab = page.locator('.panel-tab').filter({ hasText: 'Layers' });
+    await layersTab.click();
+
+    const items = page.locator('.layer-item');
+    await items.nth(0).click();
+
+    await expect(items.nth(0)).toHaveClass(/primary-selected/);
+    await expect(items.nth(0)).toHaveClass(/selected/);
+
+    // Ctrl+Click second item
+    const isMac = process.platform === 'darwin';
+    const modifier = isMac ? 'Meta' : 'Control';
+    await page.keyboard.down(modifier);
+    await items.nth(1).click();
+    await page.keyboard.up(modifier);
+
+    // Both should be selected, second is primary-selected
+    await expect(items.nth(0)).toHaveClass(/selected/);
+    await expect(items.nth(0)).not.toHaveClass(/primary-selected/);
+    await expect(items.nth(1)).toHaveClass(/selected/);
+    await expect(items.nth(1)).toHaveClass(/primary-selected/);
+
+    // Check canvas has 2 selected shapes
+    expect(await page.locator('.selectable.selected').count()).toBe(2);
+  });
 });
