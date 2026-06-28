@@ -7,6 +7,15 @@ const DOC_PATH = 'alice/moby-dick';
 const ABSOLUTE_DOC_DIR = path.join(STORE_DIR, DOC_PATH);
 
 test.describe('Generate Moby-Dick Spreads and PDF', () => {
+  test.beforeEach(({ page }) => {
+    page.on('console', msg => {
+      console.log(`BROWSER [${msg.type()}]: ${msg.text()}`);
+    });
+    page.on('pageerror', err => {
+      console.error(`BROWSER [error]: ${err.message}`);
+    });
+  });
+
   test('should generate enough spreads and export PDF', async ({ page }) => {
     // Allow up to 4 minutes for this large book layout & rendering task
     test.setTimeout(240000);
