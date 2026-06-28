@@ -226,6 +226,21 @@ export function sliceStory(story, paragraphStyles, lastParaIndex, lastCharIndex)
  * @returns {Promise<LayoutDocResult>}
  */
 export async function layoutDocument(engine, docPath, opts = {}) {
+  // Pre-load styleMap and assetMeta to prevent redundant network fetches
+  const { loadParagraphStyles, loadAssets } = await import('../../document-store/lib/document-store.js');
+  const styleMap = await loadParagraphStyles(docPath);
+  const assetMeta = await loadAssets(docPath);
+
+  // Initialize a story cache for reuse across spreads
+  const storyCache = new Map();
+
+  const layoutOpts = {
+    ...opts,
+    styleMap,
+    assetMeta,
+    storyCache
+  };
+
   // Discover spread IDs
   const lsRes = await fetch(`/store/${docPath}/spreads?ls`);
   let spreadIds;
@@ -251,7 +266,7 @@ export async function layoutDocument(engine, docPath, opts = {}) {
     const spreadId = spreadIds[i];
     
     // Pass currentOffsets to _layoutSpread
-    const { spreadPages, nextOffsets } = await _layoutSpread(engine, docPath, spreadId, currentOffsets, opts);
+    const { spreadPages, nextOffsets } = await _layoutSpread(engine, docPath, spreadId, currentOffsets, layoutOpts);
     allPages.push(...spreadPages);
 
     // If there is a next spread, save nextOffsets as its flowAnchors
@@ -289,21 +304,24 @@ async function _layoutSpread(engine, docPath, spreadId, inheritedOffsets = {}, o
   const lineHeight = opts.lineHeight ?? DEFAULT_LAYOUT.lineHeight;
 
   const spreadJson = await loadSpread(docPath, spreadId);
-  const styleMap = await loadParagraphStyles(docPath);
+  const styleMap = opts.styleMap || await loadParagraphStyles(docPath);
 
   // Load flowAnchors from spreadJson if present, fallback to inheritedOffsets
   const startOffsets = { ...inheritedOffsets, ...(spreadJson.flowAnchors || {}) };
   console.log(`[layoutSpread] ${spreadId} loaded start offsets:`, JSON.stringify(startOffsets));
 
   // Load asset metadata
-  let assetMeta = {};
-  try {
-    const aggRes = await fetch(`/store/${docPath}/assets.aggregate.json`);
-    if (aggRes.ok) {
-      const arr = await aggRes.json();
-      for (const m of arr) if (m.id) assetMeta[m.id] = m;
-    }
-  } catch { /* assets are optional */ }
+  let assetMeta = opts.assetMeta;
+  if (!assetMeta) {
+    assetMeta = {};
+    try {
+      const aggRes = await fetch(`/store/${docPath}/assets.aggregate.json`);
+      if (aggRes.ok) {
+        const arr = await aggRes.json();
+        for (const m of arr) if (m.id) assetMeta[m.id] = m;
+      }
+    } catch { /* assets are optional */ }
+  }
 
   // Deduplicate frames by ID (to handle malformed JSON seed files with duplicate frames)
   const seenFrameIds = new Set();
@@ -358,8 +376,15 @@ async function _layoutSpread(engine, docPath, spreadId, inheritedOffsets = {}, o
       .filter(Boolean);
     if (storyBoxList.length === 0) continue;
 
-    const { story, paragraphStyles } = await import('../../document-store/lib/document-store.js')
-      .then(m => m.loadStoryFromStore(docPath, storyRef, { baseFontSize: fontSize, styleMap }));
+    let storyData = opts.storyCache?.get(storyRef);
+    if (!storyData) {
+      storyData = await import('../../document-store/lib/document-store.js')
+        .then(m => m.loadStoryFromStore(docPath, storyRef, { baseFontSize: fontSize, styleMap }));
+      if (opts.storyCache) {
+        opts.storyCache.set(storyRef, storyData);
+      }
+    }
+    const { story, paragraphStyles } = storyData;
 
     // Apply offset slice
     const offset = startOffsets[storyRef] || { paragraphIndex: 0, charOffset: 0 };
