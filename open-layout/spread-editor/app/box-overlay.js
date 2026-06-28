@@ -262,7 +262,7 @@ function _drawOutputPort(parent, box, filled, project) {
   const tri = document.createElementNS(SVG_NS, 'polygon');
   tri.setAttribute('points', points);
   tri.setAttribute('fill', filled ? '#7b9fc4' : 'none');
-  tri.setAttribute('stroke', '#7b9fc4');
+  tri.setAttribute('stroke', filled ? '#7b9fc4' : '#d44');
   tri.setAttribute('stroke-width', '1');
   tri.setAttribute('data-port', 'output');
   tri.setAttribute('data-port-box', box.id);
@@ -322,12 +322,12 @@ function _drawLinkModeOverlay(layer, boxes, stories, linkMode, project, projectS
   if (!linkMode || !stories) return;
 
   const sourceStory = stories.find(s => s.boxIds.includes(linkMode.sourceBoxId));
-  if (!sourceStory) return;
+  const sourceStoryId = sourceStory ? sourceStory.id : linkMode.sourceStoryId;
 
-  const sourceBoxIds = new Set(sourceStory.boxIds);
+  const sourceBoxIds = sourceStory ? new Set(sourceStory.boxIds) : new Set();
   const targetBoxIds = new Set();
   for (const story of stories) {
-    if (story.boxIds.includes(linkMode.sourceBoxId)) continue;
+    if (sourceStoryId && story.id === sourceStoryId) continue;
     for (const id of story.boxIds) targetBoxIds.add(id);
   }
 

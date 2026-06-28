@@ -17,6 +17,9 @@ import {
   uploadImageAsset,
   putJson,
   updateDocTimestamp,
+  loadStoryFromStore,
+  loadParagraphStyles,
+  serializeStory,
 } from '../../document-store/lib/document-store.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
@@ -459,9 +462,13 @@ export class SpreadEditorApp {
     }
   }
 
-  /** Enter link mode — waiting for the user to click a target frame. */
   _enterLinkMode(sourceBoxId) {
-    this._linkSource = { sourceBoxId };
+    const story = this._findStoryForBox(sourceBoxId);
+    this._linkSource = {
+      sourceBoxId,
+      sourceStoryId: story ? story.id : null,
+      sourceSpreadId: this._activeSpreadId
+    };
     this.mode = 'link';
     this.shell?.setMode('link');
     this.update({ full: false });
@@ -481,34 +488,107 @@ export class SpreadEditorApp {
    * (appended as additional paragraphs).
    */
   _linkBoxes(targetBoxId) {
-    const sourceStory = this._findStoryForBox(this._linkSource.sourceBoxId);
+    const sourceBoxId = this._linkSource.sourceBoxId;
+    const sourceStoryId = this._linkSource.sourceStoryId;
+    const sourceSpreadId = this._linkSource.sourceSpreadId;
+
     const targetStory = this._findStoryForBox(targetBoxId);
-    if (!sourceStory || !targetStory || sourceStory === targetStory) {
+    if (!targetStory) {
       this._exitLinkMode();
       return;
     }
 
-    this.submitAction('Link Text Frames', () => {
-      // Append target story's box IDs to source story's chain
-      sourceStory.boxIds = [...sourceStory.boxIds, ...targetStory.boxIds];
+    const targetText = targetStory.editor.story
+      .map(p => p.map(r => r.text).join('')).join('');
 
-      // Merge the target story's text into the source story.
-      // If the target story is empty (single paragraph with empty text),
-      // don't add extra content.
-      const targetText = targetStory.editor.story
-        .map(p => p.map(r => r.text).join('')).join('');
-      if (targetText.length > 0) {
-        sourceStory.editor.insertStory(
-          targetStory.editor.story,
-          targetStory.editor.paragraphStyles,
-        );
+    if (sourceSpreadId === this._activeSpreadId) {
+      const sourceStory = this._findStoryForBox(sourceBoxId);
+      if (!sourceStory || sourceStory === targetStory) {
+        this._exitLinkMode();
+        return;
       }
 
-      // Remove the target story
+      this.submitAction('Link Text Frames', () => {
+        // Append target story's box IDs to source story's chain
+        sourceStory.boxIds = [...sourceStory.boxIds, ...targetStory.boxIds];
+
+        // Merge the target story's text into the source story.
+        // If the target story is empty (single paragraph with empty text),
+        // don't add extra content.
+        if (targetText.length > 0) {
+          sourceStory.editor.insertStory(
+            targetStory.editor.story,
+            targetStory.editor.paragraphStyles,
+          );
+        }
+
+        // Remove the target story
+        this._stories = this._stories.filter(s => s !== targetStory);
+
+        this._linkSource = null;
+        this.setMode('object');
+      });
+      return;
+    }
+
+    // CROSS-SPREAD LINKING!
+    this.submitAction('Link Text Frames Across Spreads', async () => {
+      let sourceStoryEntry = this._stories.find(s => s.id === sourceStoryId);
+
+      if (sourceStoryEntry) {
+        // Source story is already loaded on this active spread
+        sourceStoryEntry.boxIds = [...sourceStoryEntry.boxIds, targetBoxId];
+        if (targetText.length > 0) {
+          sourceStoryEntry.editor.insertStory(
+            targetStory.editor.story,
+            targetStory.editor.paragraphStyles
+          );
+        }
+      } else {
+        // Source story is NOT loaded on this spread. Load it from store, update it, and add to _stories.
+        const styleMap = await loadParagraphStyles(this._docPath);
+        const { story: sourceStoryText, paragraphStyles: sourceParagraphStyles } = await loadStoryFromStore(
+          this._docPath,
+          sourceStoryId,
+          { baseFontSize: this._fontSize, styleMap }
+        );
+
+        // Ensure at least one paragraph
+        if (sourceStoryText.length === 0) {
+          sourceStoryText.push([{ text: '', style: cloneStyle() }]);
+          sourceParagraphStyles.push(cloneParagraphStyle({ fontSize: this._fontSize }));
+        }
+
+        const sourceEditor = new EditorState(sourceStoryText, sourceParagraphStyles);
+        if (targetText.length > 0) {
+          sourceEditor.insertStory(
+            targetStory.editor.story,
+            targetStory.editor.paragraphStyles
+          );
+        }
+
+        sourceStoryEntry = {
+          id: sourceStoryId,
+          editor: sourceEditor,
+          boxIds: [targetBoxId],
+          lineMap: []
+        };
+        this._stories.push(sourceStoryEntry);
+      }
+
+      // Remove the old target story from active stories
       this._stories = this._stories.filter(s => s !== targetStory);
+
+      // Save the updated source story file immediately to store
+      const storyJson = serializeStory(sourceStoryId, sourceStoryEntry.editor);
+      await putJson(`/store/${this._docPath}/stories/${sourceStoryId}.json`, storyJson);
+
+      // Force a save of the active spread and active stories to commit the changes
+      await this._save();
 
       this._linkSource = null;
       this.setMode('object');
+      await this.update();
     });
   }
 
@@ -835,7 +915,7 @@ export class SpreadEditorApp {
     const action = {
       label,
       execute: async () => {
-        fn();
+        await fn();
         await this.update();
       },
       undo: async () => {
@@ -1699,6 +1779,8 @@ export class SpreadEditorApp {
       }
     }
 
+    const prevLinkMode = this.mode === 'link' ? { ...this._linkSource } : null;
+
     this._activeSpreadId = spreadId;
     this.selectedBoxId = null;
     this.cursor = null;
@@ -1710,6 +1792,14 @@ export class SpreadEditorApp {
     this.setMode('object');
 
     await this._loadFromStore();
+
+    if (prevLinkMode) {
+      this._linkSource = prevLinkMode;
+      this.mode = 'link';
+      this.shell?.setMode('link');
+      this.selectedBoxId = null; // Do not auto-select box in link mode
+    }
+
     this._pagesPanelTimestamp = Date.now();
     await this.update();
     this.setStatus('Ready - spread editor active.', 'ok');

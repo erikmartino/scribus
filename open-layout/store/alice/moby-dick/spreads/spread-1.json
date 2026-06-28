@@ -1,0 +1,33 @@
+{
+  "id": "spread-1",
+  "pages": [
+    {
+      "index": 0,
+      "label": "1"
+    },
+    {
+      "index": 1,
+      "label": "2"
+    }
+  ],
+  "frames": [
+    {
+      "id": "p1-c1",
+      "type": "text",
+      "x": 50,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    },
+    {
+      "id": "p2-c1",
+      "type": "text",
+      "x": 645.28,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    }
+  ]
+}

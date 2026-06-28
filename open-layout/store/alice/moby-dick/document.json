@@ -1,0 +1,17 @@
+{
+  "format": "open-layout/v1",
+  "title": "Moby-Dick; Or, The Whale",
+  "created": "2026-06-28T10:45:28.833Z",
+  "modified": "2026-06-28T10:45:28.834Z",
+  "defaultUnits": "mm",
+  "pageSize": {
+    "width": 210,
+    "height": 297
+  },
+  "bleed": {
+    "top": 3,
+    "right": 3,
+    "bottom": 3,
+    "left": 3
+  }
+}
