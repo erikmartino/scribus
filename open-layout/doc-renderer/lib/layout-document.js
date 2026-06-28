@@ -307,17 +307,26 @@ export async function layoutDocument(engine, docPath, opts = {}) {
       const newAnchorsStr = JSON.stringify(nextOffsets || {});
       
       if (oldAnchorsStr !== newAnchorsStr) {
-        console.log(`[layoutDocument] Updating ${nextSpreadId} flowAnchors in store:`, newAnchorsStr);
-        nextSpreadJson.flowAnchors = nextOffsets;
-        await fetch(`/store/${docPath}/spreads/${nextSpreadId}.json`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nextSpreadJson)
-        });
-        
+        // Update in-memory cache starting offsets for next spread
+        if (!layoutCache[nextSpreadId]) {
+          layoutCache[nextSpreadId] = {};
+        }
+        layoutCache[nextSpreadId].startOffsets = { ...nextOffsets };
+        delete layoutCache[nextSpreadId].nextOffsets; // Force recalculation of its next offsets later
+
         // Invalidate downstream cache entries
         for (let k = i + 1; k < spreadIds.length; k++) {
           delete layoutCache[spreadIds[k]];
+        }
+
+        if (opts.isSave) {
+          console.log(`[layoutDocument] Updating ${nextSpreadId} flowAnchors in store:`, newAnchorsStr);
+          nextSpreadJson.flowAnchors = nextOffsets;
+          await fetch(`/store/${docPath}/spreads/${nextSpreadId}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(nextSpreadJson)
+          });
         }
       }
     }
