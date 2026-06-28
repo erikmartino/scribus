@@ -1302,6 +1302,14 @@ export class SpreadEditorApp {
       if (this.cursor) this.cursor.destroy();
       if (this._textInteraction) this._textInteraction.destroy();
     });
+
+    window.addEventListener('popstate', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const pageParam = params.get('page');
+      if (pageParam) {
+        await this.navigateToPage(pageParam);
+      }
+    });
   }
   /**
    * Draw spread decoration (pasteboard, pages, spine) into the content SVG.

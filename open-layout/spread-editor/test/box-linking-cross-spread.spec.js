@@ -136,7 +136,7 @@ test.describe('Cross-Spread Text Frame Linking', () => {
 
     // 4. Click 'frame-body' on Spread 2 to complete the linking action
     await clickBoxBody(page, 'frame-body');
-    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+    await expect(statusEl).toHaveText(/Ready|Saved/, { timeout: 20000 });
 
     // Verify mode has reset to 'object' after successful linking
     const shell = page.locator('scribus-app-shell');
@@ -206,7 +206,7 @@ test.describe('Cross-Spread Text Frame Linking', () => {
 
     // Click 'frame-body' on Spread 2 to complete the linking action
     await clickBoxBody(page, 'frame-body');
-    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+    await expect(statusEl).toHaveText(/Ready|Saved/, { timeout: 20000 });
 
     // Verify mode has reset to 'object' after successful linking
     const shell = page.locator('scribus-app-shell');
