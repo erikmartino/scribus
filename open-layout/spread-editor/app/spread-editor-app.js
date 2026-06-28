@@ -339,7 +339,7 @@ export class SpreadEditorApp {
   }
 
   async _loadFromStore() {
-    this._pagesPanelContainer = null;
+    this._clearPagesPanel();
     this._assetsPanelContainer = null;
     return loadFromStore(this);
   }
@@ -862,7 +862,7 @@ export class SpreadEditorApp {
   async _save() {
     const res = await saveSpread(this);
     this._pagesPanelTimestamp = Date.now();
-    this._pagesPanelContainer = null;
+    this._clearPagesPanel();
     return res;
   }
 
@@ -2089,7 +2089,7 @@ export class SpreadEditorApp {
     await updateDocTimestamp(this._docPath);
 
     // Force pages panel rebuild on next update
-    this._pagesPanelContainer = null;
+    this._clearPagesPanel();
 
     // Switch spread if we deleted the active one
     if (spreadId === this._activeSpreadId) {
@@ -2263,6 +2263,16 @@ export class SpreadEditorApp {
       const isActive = spreadId === this._activeSpreadId;
       card.classList.toggle('active', isActive);
     });
+  }
+
+  _clearPagesPanel() {
+    if (this._pagesPanelContainer) {
+      const grid = this._pagesPanelContainer.querySelector('.pages-grid');
+      if (grid) {
+        this._pagesPanelScrollTop = grid.scrollTop;
+      }
+    }
+    this._pagesPanelContainer = null;
   }
 
   _buildPagesPanel() {
@@ -2612,6 +2622,12 @@ export class SpreadEditorApp {
 
     countBadge.textContent = `${spreadsCount} Spreads`;
     container.appendChild(grid);
+
+    if (this._pagesPanelScrollTop !== undefined) {
+      setTimeout(() => {
+        grid.scrollTop = this._pagesPanelScrollTop;
+      }, 0);
+    }
 
     // Footer with Add Spread button
     const footer = document.createElement('div');
