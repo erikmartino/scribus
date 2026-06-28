@@ -29,7 +29,7 @@ import { AbstractItem } from '../../app-shell/lib/document-model.js';
 import { TextTools } from '../../app-shell/lib/text-tools.js';
 import { getTextPropertyDescriptors } from '../../app-shell/lib/text-property-descriptors.js';
 import { registerTextCommands } from '../../app-shell/lib/text-commands.js';
-import { createLayoutEngine } from '../../doc-renderer/lib/layout-document.js';
+import { createLayoutEngine, sliceStory } from '../../doc-renderer/lib/layout-document.js';
 import { decorateSpreadForEditor, getImagePlacement, emptyImagePlaceholder } from '../../doc-renderer/lib/svg-renderer.js';
 
 import {
@@ -1392,33 +1392,38 @@ export class SpreadEditorApp {
           continue;
         }
 
-        const paragraphLayoutStyles = buildParagraphLayoutStyles(
-          this._fontSize, storyEntry.editor.paragraphStyles);
+        const offset = (this.flowAnchors && this.flowAnchors[storyEntry.id]) || { paragraphIndex: 0, charOffset: 0 };
+        const { slicedStory, slicedStyles, sliceStartOffset } = sliceStory(
+          storyEntry.editor.story,
+          storyEntry.editor.paragraphStyles,
+          offset.paragraphIndex,
+          offset.charOffset
+        );
 
+        const paragraphLayoutStyles = buildParagraphLayoutStyles(
+          this._fontSize, slicedStyles);
+
+        let result;
         if (!baseSvg) {
           // First story: render and attach to container
-          const result = await this.engine.renderToContainer(
+          result = await this.engine.renderToContainer(
             this.container,
-            storyEntry.editor.story,
+            slicedStory,
             storyBoxes,
             this._fontSize,
             this._lineHeight,
             paragraphLayoutStyles,
           );
           baseSvg = result.svg;
-          storyEntry.lineMap = result.lineMap;
-          storyEntry.overflow = result.overflow || false;
         } else {
           // Additional stories: render off-screen, transplant content
-          const result = await this.engine.renderStory(
-            storyEntry.editor.story,
+          result = await this.engine.renderStory(
+            slicedStory,
             storyBoxes,
             this._fontSize,
             this._lineHeight,
             paragraphLayoutStyles,
           );
-          storyEntry.lineMap = result.lineMap;
-          storyEntry.overflow = result.overflow || false;
 
           // Transplant all child elements from the secondary SVG into
           // the base SVG. Skip box background <rect>s (the overlay draws those).
@@ -1427,6 +1432,18 @@ export class SpreadEditorApp {
             baseSvg.appendChild(child);
           }
         }
+
+        storyEntry.lineMap = result.lineMap.map(entry => {
+          const isFirstSlicedPara = entry.paraIndex === offset.paragraphIndex;
+          return {
+            ...entry,
+            positions: entry.positions.map(pos => ({
+              ...pos,
+              charPos: isFirstSlicedPara ? pos.charPos + sliceStartOffset : pos.charPos
+            }))
+          };
+        });
+        storyEntry.overflow = result.overflow || false;
       }
 
       svg = baseSvg || this._svg;

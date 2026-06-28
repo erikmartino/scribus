@@ -154,7 +154,7 @@ export async function createLayoutEngine() {
  * @param {number}       [opts.lineHeight]
  * @returns {Promise<LayoutDocResult>}
  */
-function sliceStory(story, paragraphStyles, lastParaIndex, lastCharIndex) {
+export function sliceStory(story, paragraphStyles, lastParaIndex, lastCharIndex) {
   const slicedStory = [];
   const slicedStyles = [];
   let sliceStartOffset = 0;

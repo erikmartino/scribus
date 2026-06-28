@@ -152,4 +152,85 @@ test.describe('Cross-Spread Text Frame Linking', () => {
     // It should now point to 'story-title' (the source story) instead of 'story-body'
     expect(frameBody.storyRef).toBe('story-title');
   });
+
+  test('should support propagating text flow offsets correctly across spreads after linking', async ({ page }) => {
+    // 1. Append a very long paragraph to story-title.json to guarantee overflow
+    const storyPath = path.join(testDocDir, 'stories/story-title.json');
+    const storyJson = JSON.parse(fs.readFileSync(storyPath, 'utf8'));
+    storyJson.paragraphs.push({
+      styleRef: 'body',
+      runs: [
+        { text: 'A long continuation paragraph that will overflow frame-intro on Spread 1 and must flow into frame-body on Spread 2. '.repeat(100) }
+      ],
+      fontSize: 12,
+      fontFamily: 'EB Garamond',
+      lineHeight: 1.4
+    });
+    fs.writeFileSync(storyPath, JSON.stringify(storyJson, null, 2), 'utf8');
+
+    // 2. Open spread editor with active document on Spread 1
+    await page.goto(`/spread-editor/index.html?doc=${USER}/${testDocSlug}`);
+    await page.waitForSelector('scribus-app-shell:defined');
+    const statusEl = page.locator('#status');
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+
+    // Open Pages panel
+    const pagesTab = page.locator('[data-panel-id="pages"]');
+    await expect(pagesTab).toBeVisible();
+    await pagesTab.click();
+
+    // Verify Spread 1 card is active
+    const spread1Card = page.locator('[data-page-index="1"]');
+    await expect(spread1Card).toBeVisible();
+    await expect(spread1Card).toHaveClass(/active/);
+
+    // 3. Click the overflow port on 'frame-intro' on Spread 1 to enter Link Mode
+    // (Since it overflows, it will have an overflow port instead of an output port)
+    await clickPort(page, 'frame-intro', 'overflow');
+    await page.waitForTimeout(300);
+
+    const mode = await page.evaluate(() => {
+      const shell = document.querySelector('scribus-app-shell');
+      return shell?.getAttribute('data-mode');
+    });
+    expect(mode).toBe('link');
+
+    // 4. Switch to Spread 2 by clicking the card
+    const spread2Card = page.locator('[data-page-index="3"]');
+    await expect(spread2Card).toBeVisible();
+    await spread2Card.click();
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+
+    // Verify Spread 2 is now active
+    await expect(spread2Card).toHaveClass(/active/);
+
+    // Click 'frame-body' on Spread 2 to complete the linking action
+    await clickBoxBody(page, 'frame-body');
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+
+    // Verify mode has reset to 'object' after successful linking
+    const shell = page.locator('scribus-app-shell');
+    await expect(shell).toHaveAttribute('data-mode', 'object', { timeout: 15000 });
+
+    // 5. Verify flowAnchors correctness on the backend
+    const spread2JsonPath = path.join(testDocDir, 'spreads/spread-2.json');
+    const spread2Json = JSON.parse(fs.readFileSync(spread2JsonPath, 'utf8'));
+    expect(spread2Json.flowAnchors).toBeDefined();
+    expect(spread2Json.flowAnchors['story-title']).toBeDefined();
+    const anchor = spread2Json.flowAnchors['story-title'];
+    expect(anchor.paragraphIndex).toBeGreaterThanOrEqual(0);
+
+    // 6. Switch back to Spread 2 in the editor to verify UI rendering of sliced text
+    // Switch to Spread 1, then back to Spread 2 to trigger full reload
+    await spread1Card.click();
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+    await spread2Card.click();
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 20000 });
+
+    const textContent = await page.locator('#svg-container').textContent();
+    const cleanText = textContent.replace(/\s+/g, '');
+    // The text on Spread 2 should contain the overflow text and NOT the beginning of story-title
+    expect(cleanText).not.toContain('Thisquarter');
+    expect(cleanText).toContain('continuationparagraph');
+  });
 });

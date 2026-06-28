@@ -15,6 +15,7 @@ import {
 } from '../lib/story-editor-core.js';
 import { SvgRenderer, getImagePlacement, emptyImagePlaceholder } from '../../doc-renderer/lib/svg-renderer.js';
 import { buildParagraphLayoutStyles } from '../../story-editor/lib/layout-engine.js';
+import { sliceStory, layoutDocument } from '../../doc-renderer/lib/layout-document.js';
 
 
 export async function loadAllSpreadsMetadata(app) {
@@ -110,6 +111,8 @@ export async function loadFromStore(app) {
   // 1. Load the spread definition
   const spreadJson = await loadSpread(app._docPath, app._activeSpreadId);
   
+  app.flowAnchors = spreadJson.flowAnchors || {};
+
   // Save pages configuration for serialization
   app._activeSpreadPages = spreadJson.pages || [
     { index: 0, label: '1' },
@@ -365,11 +368,19 @@ export async function saveSpread(app) {
 
             if (storyBoxes.length === 0) continue;
 
+            const offset = (app.flowAnchors && app.flowAnchors[storyEntry.id]) || { paragraphIndex: 0, charOffset: 0 };
+            const { slicedStory, slicedStyles } = sliceStory(
+              storyEntry.editor.story,
+              storyEntry.editor.paragraphStyles,
+              offset.paragraphIndex,
+              offset.charOffset
+            );
+
             const paragraphLayoutStyles = buildParagraphLayoutStyles(
-              app._fontSize, storyEntry.editor.paragraphStyles);
+              app._fontSize, slicedStyles);
 
             const shaped = app.engine.shapeParagraphs(
-              storyEntry.editor.story, app._fontSize, paragraphLayoutStyles);
+              slicedStory, app._fontSize, paragraphLayoutStyles);
 
             const { boxResults } = app.engine.flowIntoBoxes(
               shaped, storyBoxes, app._fontSize, app._lineHeight);
@@ -518,6 +529,14 @@ export async function saveSpread(app) {
       throw new Error(`${failed.length} file(s) failed to save`);
     }
 
+    if (app.engine) {
+      try {
+        await layoutDocument(app.engine, app._docPath);
+      } catch (layoutErr) {
+        console.warn('Failed to propagate flow offsets across spreads:', layoutErr);
+      }
+    }
+
     app.setStatus('Saved.', 'ok');
   } catch (err) {
     app.setStatus(`Save failed: ${err.message}`, 'error');
@@ -573,6 +592,7 @@ export function serializeSpread(app) {
       { index: 0, label: '1' },
       { index: 1, label: '2' },
     ],
+    flowAnchors: app.flowAnchors || {},
     frames,
   };
 }
