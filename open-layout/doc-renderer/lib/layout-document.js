@@ -154,6 +154,77 @@ export async function createLayoutEngine() {
  * @param {number}       [opts.lineHeight]
  * @returns {Promise<LayoutDocResult>}
  */
+function sliceStory(story, paragraphStyles, lastParaIndex, lastCharIndex) {
+  const slicedStory = [];
+  const slicedStyles = [];
+  let sliceStartOffset = 0;
+
+  for (let pi = lastParaIndex; pi < story.length; pi++) {
+    const origRuns = story[pi];
+    if (pi === lastParaIndex) {
+      sliceStartOffset = lastCharIndex;
+      let accumulatedLen = 0;
+      const newRuns = [];
+
+      for (const run of origRuns) {
+        const runLen = run.text.length;
+        if (accumulatedLen + runLen <= lastCharIndex) {
+          accumulatedLen += runLen;
+          continue;
+        }
+
+        if (accumulatedLen < lastCharIndex && accumulatedLen + runLen > lastCharIndex) {
+          const startIdx = lastCharIndex - accumulatedLen;
+          newRuns.push({
+            text: run.text.substring(startIdx),
+            style: { ...run.style }
+          });
+          accumulatedLen += runLen;
+          continue;
+        }
+
+        newRuns.push({
+          text: run.text,
+          style: { ...run.style }
+        });
+        accumulatedLen += runLen;
+      }
+
+      if (newRuns.length > 0) {
+        newRuns.origParaIndex = pi;
+        slicedStory.push(newRuns);
+        slicedStyles.push(paragraphStyles[pi]);
+      }
+    } else {
+      const newRuns = origRuns.map(r => ({ ...r }));
+      newRuns.origParaIndex = pi;
+      slicedStory.push(newRuns);
+      slicedStyles.push(paragraphStyles[pi]);
+    }
+  }
+
+  // Ensure at least one paragraph to avoid engine crashes
+  if (slicedStory.length === 0) {
+    const dummy = [{ text: '', style: {} }];
+    dummy.origParaIndex = story.length - 1;
+    slicedStory.push(dummy);
+    slicedStyles.push(paragraphStyles[paragraphStyles.length - 1] || {});
+  }
+
+  return { slicedStory, slicedStyles, sliceStartOffset };
+}
+
+/**
+ * Compute layout for all pages in a document without creating any DOM nodes.
+ * Returns plain JS objects suitable for PDF generation.
+ *
+ * @param {LayoutEngine} engine
+ * @param {string}       docPath  — e.g. "demo/typography-sampler"
+ * @param {object}       [opts]
+ * @param {number}       [opts.fontSize]
+ * @param {number}       [opts.lineHeight]
+ * @returns {Promise<LayoutDocResult>}
+ */
 export async function layoutDocument(engine, docPath, opts = {}) {
   // Discover spread IDs
   const lsRes = await fetch(`/store/${docPath}/spreads?ls`);
@@ -172,9 +243,38 @@ export async function layoutDocument(engine, docPath, opts = {}) {
   const allPages = [];
   const fontFamily = engine.defaultFamily || 'EB Garamond';
 
-  for (const spreadId of spreadIds) {
-    const spreadPages = await _layoutSpread(engine, docPath, spreadId, opts);
+  // Keep track of active story offsets
+  // storyRef -> { paragraphIndex, charOffset }
+  const currentOffsets = {};
+
+  for (let i = 0; i < spreadIds.length; i++) {
+    const spreadId = spreadIds[i];
+    
+    // Pass currentOffsets to _layoutSpread
+    const { spreadPages, nextOffsets } = await _layoutSpread(engine, docPath, spreadId, currentOffsets, opts);
     allPages.push(...spreadPages);
+
+    // If there is a next spread, save nextOffsets as its flowAnchors
+    if (i < spreadIds.length - 1) {
+      const nextSpreadId = spreadIds[i + 1];
+      const nextSpreadJson = await loadSpread(docPath, nextSpreadId);
+      
+      const oldAnchorsStr = JSON.stringify(nextSpreadJson.flowAnchors || {});
+      const newAnchorsStr = JSON.stringify(nextOffsets || {});
+      
+      if (oldAnchorsStr !== newAnchorsStr) {
+        console.log(`[layoutDocument] Updating ${nextSpreadId} flowAnchors in store:`, newAnchorsStr);
+        nextSpreadJson.flowAnchors = nextOffsets;
+        await fetch(`/store/${docPath}/spreads/${nextSpreadId}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(nextSpreadJson)
+        });
+      }
+    }
+
+    // Update currentOffsets for next spread
+    Object.assign(currentOffsets, nextOffsets);
   }
 
   return { pages: allPages, fontFamily };
@@ -184,12 +284,16 @@ export async function layoutDocument(engine, docPath, opts = {}) {
  * Compute layout for a single spread, returning per-page layout data.
  * @private
  */
-async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
+async function _layoutSpread(engine, docPath, spreadId, inheritedOffsets = {}, opts = {}) {
   const fontSize = opts.fontSize ?? DEFAULT_LAYOUT.fontSize;
   const lineHeight = opts.lineHeight ?? DEFAULT_LAYOUT.lineHeight;
 
   const spreadJson = await loadSpread(docPath, spreadId);
   const styleMap = await loadParagraphStyles(docPath);
+
+  // Load flowAnchors from spreadJson if present, fallback to inheritedOffsets
+  const startOffsets = { ...inheritedOffsets, ...(spreadJson.flowAnchors || {}) };
+  console.log(`[layoutSpread] ${spreadId} loaded start offsets:`, JSON.stringify(startOffsets));
 
   // Load asset metadata
   let assetMeta = {};
@@ -245,9 +349,8 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
   }
 
   // Shape + flow each story — collect boxResults (no SVG rendered)
-  // boxResults: { box, lines }[]
-  // We accumulate all box results keyed by box id.
   const boxLineMap = new Map(); // boxId -> { box, lines }
+  const nextOffsets = {};
 
   for (const [storyRef, boxIds] of storyBoxMap.entries()) {
     const storyBoxList = boxIds
@@ -258,15 +361,53 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
     const { story, paragraphStyles } = await import('../../document-store/lib/document-store.js')
       .then(m => m.loadStoryFromStore(docPath, storyRef, { baseFontSize: fontSize, styleMap }));
 
-    const layoutStyles = buildParagraphLayoutStyles(fontSize, paragraphStyles);
+    // Apply offset slice
+    const offset = startOffsets[storyRef] || { paragraphIndex: 0, charOffset: 0 };
+    const { slicedStory, slicedStyles, sliceStartOffset } = sliceStory(story, paragraphStyles, offset.paragraphIndex, offset.charOffset);
 
-    await engine.ensureFonts(story, layoutStyles);
-    const shaped = engine.shapeParagraphs(story, fontSize, layoutStyles);
-    const { boxResults } = engine.flowIntoBoxes(shaped, storyBoxList, fontSize, lineHeight);
+    const layoutStyles = buildParagraphLayoutStyles(fontSize, slicedStyles);
+
+    await engine.ensureFonts(slicedStory, layoutStyles);
+    const shaped = engine.shapeParagraphs(slicedStory, fontSize, layoutStyles);
+    const { boxResults, overflow } = engine.flowIntoBoxes(shaped, storyBoxList, fontSize, lineHeight);
 
     const resolved = engine.resolveLayout(boxResults, fontSize, lineHeight);
     for (const resolvedBox of resolved.textBoxes) {
       boxLineMap.set(resolvedBox.box.id ?? JSON.stringify(resolvedBox.box), resolvedBox);
+    }
+
+    // Determine nextOffset if overflow is true
+    if (overflow && boxResults.length > 0) {
+      let lastBoxWithLines = null;
+      for (let bi = boxResults.length - 1; bi >= 0; bi--) {
+        if (boxResults[bi].lines.length > 0) {
+          lastBoxWithLines = boxResults[bi];
+          break;
+        }
+      }
+      
+      if (lastBoxWithLines) {
+        const lastLine = lastBoxWithLines.lines[lastBoxWithLines.lines.length - 1];
+        const slicedPara = slicedStory[lastLine.paraIndex];
+        const origParaIndex = slicedPara.origParaIndex;
+        
+        let origCharOffset = lastLine.endChar;
+        if (lastLine.paraIndex === 0) {
+          origCharOffset += sliceStartOffset;
+        }
+        
+        if (lastLine.isLastInPara) {
+          nextOffsets[storyRef] = {
+            paragraphIndex: origParaIndex + 1,
+            charOffset: 0
+          };
+        } else {
+          nextOffsets[storyRef] = {
+            paragraphIndex: origParaIndex,
+            charOffset: origCharOffset
+          };
+        }
+      }
     }
   }
 
@@ -275,7 +416,7 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
   const pageWidth = DEFAULT_LAYOUT.pageWidth;
   const pageHeight = DEFAULT_LAYOUT.pageHeight;
 
-  return spreadPages.map((page, i) => {
+  const pages = spreadPages.map((page, i) => {
     const pageIndex = page.index ?? i;
     const pageX = pageIndex * pageWidth;
     const pageRect = { x: pageX, y: 0, width: pageWidth, height: pageHeight };
@@ -340,6 +481,9 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
       frames: pageFrames,
     };
   });
+
+  console.log(`[layoutSpread] ${spreadId} calculated next offsets:`, JSON.stringify(nextOffsets));
+  return { spreadPages: pages, nextOffsets };
 }
 
 /** Does a box overlap a page rect? */
