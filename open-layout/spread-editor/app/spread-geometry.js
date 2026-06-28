@@ -5,6 +5,10 @@ export function computeSpreadLayout({
   colsPerPage,
   colGap,
   pasteboardPad = 140,
+  pagesConfig = [
+    { index: 0, label: '1' },
+    { index: 1, label: '2' }
+  ],
 }) {
   const textWidth = Math.max(20, pageWidth - margin * 2);
   const textHeight = Math.max(20, pageHeight - margin * 2);
@@ -14,16 +18,23 @@ export function computeSpreadLayout({
 
   const leftPageX = 0;
   const rightPageX = pageWidth;
-  const pages = [leftPageX, rightPageX];
 
   const boxes = [];
   const pageRects = [];
 
-  for (const pageX of pages) {
-    pageRects.push({ x: pageX, y: 0, width: pageWidth, height: pageHeight });
+  pagesConfig.forEach((pageConf) => {
+    const pageX = pageConf.index === 0 ? leftPageX : rightPageX;
+    pageRects.push({
+      x: pageX,
+      y: 0,
+      width: pageWidth,
+      height: pageHeight,
+      index: pageConf.index,
+      label: pageConf.label
+    });
     for (let ci = 0; ci < cols; ci++) {
       boxes.push({
-        id: `p${pageX === 0 ? 1 : 2}-c${ci + 1}`,
+        id: `p${pageConf.index === 0 ? 1 : 2}-c${ci + 1}`,
         x: pageX + margin + ci * (colWidth + colGap),
         y: margin,
         width: colWidth,
@@ -32,7 +43,7 @@ export function computeSpreadLayout({
         minHeight: 60,
       });
     }
-  }
+  });
 
   const spreadRect = { x: 0, y: 0, width: pageWidth * 2, height: pageHeight };
   const pasteboardRect = {

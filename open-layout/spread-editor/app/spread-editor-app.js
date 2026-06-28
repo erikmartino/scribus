@@ -15,6 +15,8 @@ import {
   extFromMime,
   assetNameFromFilename,
   uploadImageAsset,
+  putJson,
+  updateDocTimestamp,
 } from '../../document-store/lib/document-store.js';
 import { computeSpreadLayout } from './spread-geometry.js';
 import { createBoxesFromDefaults, clampBoxesToBounds } from './box-model.js';
@@ -119,6 +121,10 @@ export class SpreadEditorApp {
     this._spreadsMetadata = {};
     this._pagesPanelTimestamp = Date.now();
     this._pagesPanelContainer = null;
+    this._activeSpreadPages = [
+      { index: 0, label: '1' },
+      { index: 1, label: '2' }
+    ];
   }
 
   /** Active editor — returns the EditorState of the currently active story. */
@@ -1244,6 +1250,7 @@ export class SpreadEditorApp {
       pasteboardPad: gutter,
       colsPerPage: 2,
       colGap,
+      pagesConfig: this._activeSpreadPages,
     });
     this.currentSpread = spread;
 
@@ -1700,11 +1707,297 @@ export class SpreadEditorApp {
       this._textInteraction = null;
     }
 
+    this.setMode('object');
+
     await this._loadFromStore();
     this._pagesPanelTimestamp = Date.now();
     await this.update();
     this.setStatus('Ready - spread editor active.', 'ok');
     this.shell?.updatePanels();
+  }
+
+  async recalculatePageNumbers() {
+    let currentGlobalPageIndex = 0;
+    const puts = [];
+    for (const spreadId of this._spreadsList) {
+      try {
+        const spreadJson = await loadSpread(this._docPath, spreadId);
+        const updatedPages = (spreadJson.pages || []).map((page, idx) => {
+          const nextIndex = currentGlobalPageIndex + idx;
+          return {
+            index: page.index !== undefined ? page.index : idx,
+            label: String(nextIndex + 1)
+          };
+        });
+        spreadJson.pages = updatedPages;
+        this._spreadsMetadata[spreadId] = { pages: updatedPages };
+        
+        if (spreadId === this._activeSpreadId) {
+          this._activeSpreadPages = updatedPages;
+        }
+        
+        puts.push(putJson(`/store/${this._docPath}/spreads/${spreadId}.json`, spreadJson));
+        currentGlobalPageIndex += updatedPages.length;
+      } catch (err) {
+        console.error(`Failed to load/update pages for spread ${spreadId}:`, err);
+      }
+    }
+    await Promise.all(puts);
+  }
+
+  promptSpreadConfiguration() {
+    return new Promise((resolve) => {
+      const dialog = document.createElement('scribus-dialog');
+      dialog.setAttribute('heading', 'New Spread Configuration');
+      
+      const body = document.createElement('div');
+      body.style.display = 'flex';
+      body.style.flexDirection = 'column';
+      body.style.gap = '12px';
+      body.style.padding = '8px 0';
+      body.style.color = '#e1e1e6';
+      body.style.fontSize = '0.85rem';
+      
+      const label = document.createElement('label');
+      label.textContent = 'Choose the spread layout:';
+      
+      const select = document.createElement('select');
+      select.style.background = '#1e1e20';
+      select.style.border = '1px solid #2e2e32';
+      select.style.color = '#e1e1e6';
+      select.style.padding = '8px';
+      select.style.borderRadius = '6px';
+      select.style.fontSize = '0.85rem';
+      select.style.outline = 'none';
+      select.style.cursor = 'pointer';
+      
+      const opt1 = document.createElement('option');
+      opt1.value = 'facing';
+      opt1.textContent = '2 Pages (Facing)';
+      select.appendChild(opt1);
+      
+      const opt2 = document.createElement('option');
+      opt2.value = 'left';
+      opt2.textContent = '1 Page (Left Page Only)';
+      select.appendChild(opt2);
+      
+      const opt3 = document.createElement('option');
+      opt3.value = 'right';
+      opt3.textContent = '1 Page (Right Page Only)';
+      select.appendChild(opt3);
+      
+      body.appendChild(label);
+      body.appendChild(select);
+      dialog.appendChild(body);
+      
+      const actions = document.createElement('div');
+      actions.setAttribute('slot', 'actions');
+      actions.style.display = 'flex';
+      actions.style.gap = '8px';
+      
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.background = 'transparent';
+      cancelBtn.style.color = '#a1a1aa';
+      cancelBtn.style.border = '1px solid #2e2e32';
+      cancelBtn.style.padding = '6px 14px';
+      cancelBtn.style.borderRadius = '6px';
+      cancelBtn.style.cursor = 'pointer';
+      cancelBtn.style.fontSize = '0.85rem';
+      
+      const okBtn = document.createElement('button');
+      okBtn.textContent = 'Create';
+      okBtn.style.background = 'var(--accent, #bb86fc)';
+      okBtn.style.color = '#121214';
+      okBtn.style.border = 'none';
+      okBtn.style.padding = '6px 14px';
+      okBtn.style.borderRadius = '6px';
+      okBtn.style.fontWeight = '600';
+      okBtn.style.cursor = 'pointer';
+      okBtn.style.fontSize = '0.85rem';
+      
+      actions.appendChild(cancelBtn);
+      actions.appendChild(okBtn);
+      dialog.appendChild(actions);
+      
+      document.body.appendChild(dialog);
+      dialog.show();
+      
+      let resolved = false;
+      const cleanUp = () => {
+        if (dialog.parentNode) {
+          document.body.removeChild(dialog);
+        }
+      };
+
+      cancelBtn.addEventListener('click', () => {
+        resolved = true;
+        dialog.close();
+        cleanUp();
+        resolve(null);
+      });
+      
+      okBtn.addEventListener('click', () => {
+        resolved = true;
+        const val = select.value;
+        dialog.close();
+        cleanUp();
+        resolve(val);
+      });
+      
+      dialog.addEventListener('close', () => {
+        cleanUp();
+        if (!resolved) {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  async addSpread() {
+    if (!this._docPath) return;
+
+    // Prompt user for spread configuration
+    const configType = await this.promptSpreadConfiguration();
+    if (!configType) return; // User cancelled
+    
+    // Determine the next spread ID
+    let maxNum = 0;
+    if (this._spreadsList) {
+      this._spreadsList.forEach(id => {
+        const m = id.match(/spread-(\d+)/);
+        if (m) {
+          const val = parseInt(m[1], 10);
+          if (val > maxNum) maxNum = val;
+        }
+      });
+    }
+    const newSpreadId = `spread-${maxNum + 1}`;
+    
+    // Auto-save the current spread first
+    if (!this._saving) {
+      try {
+        await this._save();
+      } catch (err) {
+        console.error('Auto-save failed before adding spread:', err);
+      }
+    }
+
+    // Build pages list based on configuration type
+    let pages = [];
+    if (configType === 'facing') {
+      pages = [
+        { index: 0, label: '?' },
+        { index: 1, label: '?' }
+      ];
+    } else if (configType === 'left') {
+      pages = [
+        { index: 0, label: '?' }
+      ];
+    } else if (configType === 'right') {
+      pages = [
+        { index: 1, label: '?' }
+      ];
+    }
+
+    const newSpreadJson = {
+      pages,
+      frames: []
+    };
+
+    // Save the new spread JSON to the store
+    await putJson(`/store/${this._docPath}/spreads/${newSpreadId}.json`, newSpreadJson);
+    await updateDocTimestamp(this._docPath);
+
+    // Update local cached state
+    if (!this._spreadsList) {
+      this._spreadsList = [];
+    }
+    this._spreadsList.push(newSpreadId);
+    this._spreadsMetadata[newSpreadId] = { pages: newSpreadJson.pages };
+
+    // Recalculate page numbers for all spreads sequentially
+    await this.recalculatePageNumbers();
+
+    // Find the global page index of the first page of the new spread
+    let firstPageIndex = 1;
+    if (this._spreadsList) {
+      for (const spreadId of this._spreadsList) {
+        if (spreadId === newSpreadId) break;
+        const pgs = this._spreadsMetadata[spreadId]?.pages || [];
+        firstPageIndex += pgs.length;
+      }
+    }
+
+    // Update the URL parameter first so selectSpread/loadFromStore picks it up
+    const params = new URLSearchParams(window.location.search);
+    params.set('page', String(firstPageIndex));
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, '', newUrl);
+
+    // Load and select the new spread
+    this._activeSpreadId = null; // force reload
+    await this.selectSpread(newSpreadId);
+    this.jumpToPage(firstPageIndex);
+  }
+
+  async deleteSpread(spreadId) {
+    if (!this._docPath) return;
+    if (!this._spreadsList || this._spreadsList.length <= 1) {
+      this.setStatus('Cannot delete the last remaining spread.', 'error');
+      return;
+    }
+
+    const idx = this._spreadsList.indexOf(spreadId);
+    if (idx === -1) return;
+
+    // Find the next spread to switch to
+    let nextActiveSpreadId = null;
+    if (idx > 0) {
+      nextActiveSpreadId = this._spreadsList[idx - 1];
+    } else {
+      nextActiveSpreadId = this._spreadsList[1];
+    }
+
+    // Hit the store DELETE endpoint for both the JSON and the preview JPG
+    await Promise.all([
+      fetch(`/store/${this._docPath}/spreads/${spreadId}.json`, { method: 'DELETE' }),
+      fetch(`/store/${this._docPath}/spreads/${spreadId}.jpg`, { method: 'DELETE' }).catch(() => {}),
+    ]);
+
+    // Remove from local list and cache
+    this._spreadsList.splice(idx, 1);
+    delete this._spreadsMetadata[spreadId];
+
+    // Recalculate page numbers for the remaining spreads
+    await this.recalculatePageNumbers();
+    await updateDocTimestamp(this._docPath);
+
+    // Force pages panel rebuild on next update
+    this._pagesPanelContainer = null;
+
+    // Switch spread if we deleted the active one
+    if (spreadId === this._activeSpreadId) {
+      let firstPageIndex = 1;
+      if (this._spreadsList) {
+        for (const id of this._spreadsList) {
+          if (id === nextActiveSpreadId) break;
+          const pgs = this._spreadsMetadata[id]?.pages || [];
+          firstPageIndex += pgs.length;
+        }
+      }
+      const params = new URLSearchParams(window.location.search);
+      params.set('page', String(firstPageIndex));
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', newUrl);
+
+      this._activeSpreadId = null; // force reload
+      await this.selectSpread(nextActiveSpreadId);
+      this.jumpToPage(firstPageIndex);
+    } else {
+      this._pagesPanelTimestamp = Date.now();
+      this.shell?.updatePanels();
+    }
   }
 
   jumpToPage(pageParam) {
@@ -1789,6 +2082,12 @@ export class SpreadEditorApp {
     }
 
     if (!targetPage) return;
+
+    // Update query parameter FIRST so selectSpread/loadFromStore loads the correct spread
+    const params = new URLSearchParams(window.location.search);
+    params.set('page', String(totalIndex));
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, '', newUrl);
 
     if (targetSpreadId !== this._activeSpreadId) {
       this.setStatus(`Loading ${targetSpreadId}...`);
@@ -2010,6 +2309,60 @@ export class SpreadEditorApp {
         text-overflow: ellipsis;
         max-width: 100%;
       }
+      .spread-delete-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #ef4444;
+        border-radius: 4px;
+        width: 24px;
+        height: 24px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s;
+        z-index: 10;
+      }
+      .page-card:hover .spread-delete-btn {
+        display: flex;
+      }
+      .spread-delete-btn:hover {
+        background: #ef4444;
+        color: #ffffff;
+      }
+      .pages-footer {
+        display: flex;
+        justify-content: center;
+        padding-top: 12px;
+        border-top: 1px solid var(--border, #2e2e32);
+        margin-top: auto;
+        flex-shrink: 0;
+      }
+      .add-spread-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: var(--accent, #bb86fc);
+        color: #121214;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+        width: 100%;
+      }
+      .add-spread-btn:hover {
+        background: #d6b4fc;
+      }
+      .add-spread-btn:active {
+        transform: scale(0.98);
+      }
     `;
     container.appendChild(style);
 
@@ -2051,10 +2404,36 @@ export class SpreadEditorApp {
         const firstPageIndex = totalPagesCount + 1;
         const spreadName = spreadId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+        const startIdx = totalPagesCount + 1;
+        const endIdx = totalPagesCount + pages.length;
+        const numParam = parseInt(activePageParam, 10);
+        const isActive = !isNaN(numParam)
+          ? (numParam >= startIdx && numParam <= endIdx)
+          : pages.some(p => p.label === String(activePageParam));
+
         const card = document.createElement('div');
-        card.className = 'page-card';
+        card.className = `page-card${isActive ? ' active' : ''}`;
         card.dataset.pageIndex = firstPageIndex;
         card.dataset.spreadId = spreadId;
+
+        // Delete button
+        if (this._spreadsList.length > 1) {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'spread-delete-btn';
+          deleteBtn.title = `Delete ${spreadName}`;
+          deleteBtn.innerHTML = `
+            <svg style="width: 14px; height: 14px; fill: currentColor;" viewBox="0 0 24 24">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          `;
+          deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`Are you sure you want to delete ${spreadName}?`)) {
+              this.deleteSpread(spreadId);
+            }
+          });
+          card.appendChild(deleteBtn);
+        }
 
         // Thumbnail Container
         const thumbContainer = document.createElement('div');
@@ -2106,11 +2485,9 @@ export class SpreadEditorApp {
         card.appendChild(spreadInfo);
 
         card.addEventListener('click', async () => {
-          if (!card.classList.contains('active')) {
-            grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            await this.navigateToPage(firstPageIndex);
-          }
+          grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+          await this.navigateToPage(firstPageIndex);
         });
 
         grid.appendChild(card);
@@ -2120,6 +2497,25 @@ export class SpreadEditorApp {
 
     countBadge.textContent = `${spreadsCount} Spreads`;
     container.appendChild(grid);
+
+    // Footer with Add Spread button
+    const footer = document.createElement('div');
+    footer.className = 'pages-footer';
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-spread-btn';
+    addBtn.innerHTML = `
+      <svg style="width: 14px; height: 14px; fill: currentColor;" viewBox="0 0 24 24">
+        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+      </svg>
+      Add Spread
+    `;
+    addBtn.addEventListener('click', () => {
+      this.addSpread();
+    });
+    footer.appendChild(addBtn);
+    container.appendChild(footer);
+
     return container;
   }
 

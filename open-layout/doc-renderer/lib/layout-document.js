@@ -201,12 +201,23 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
     }
   } catch { /* assets are optional */ }
 
+  // Deduplicate frames by ID (to handle malformed JSON seed files with duplicate frames)
+  const seenFrameIds = new Set();
+  const uniqueFrames = [];
+  for (const frame of (spreadJson.frames || [])) {
+    if (frame.id) {
+      if (seenFrameIds.has(frame.id)) continue;
+      seenFrameIds.add(frame.id);
+    }
+    uniqueFrames.push(frame);
+  }
+
   // Parse frames
   const textBoxes = [];
   const imageBoxes = [];
   const storyBoxMap = new Map();
 
-  for (const frame of (spreadJson.frames || [])) {
+  for (const frame of uniqueFrames) {
     if (frame.type === 'image') {
       let imgWidth = null;
       let imgHeight = null;
@@ -265,15 +276,16 @@ async function _layoutSpread(engine, docPath, spreadId, opts = {}) {
   const pageHeight = DEFAULT_LAYOUT.pageHeight;
 
   return spreadPages.map((page, i) => {
-    const pageX = i * pageWidth;
+    const pageIndex = page.index ?? i;
+    const pageX = pageIndex * pageWidth;
     const pageRect = { x: pageX, y: 0, width: pageWidth, height: pageHeight };
 
-    // Interleaved frames for this page, preserving spreadJson.frames order
+    // Interleaved frames for this page, preserving uniqueFrames order
     const pageFrames = [];
     const pageTextBoxes = [];
     const pageImageBoxes = [];
 
-    for (const frame of (spreadJson.frames || [])) {
+    for (const frame of uniqueFrames) {
       if (!_overlapsPage(frame, pageRect)) continue;
 
       if (frame.type === 'image') {

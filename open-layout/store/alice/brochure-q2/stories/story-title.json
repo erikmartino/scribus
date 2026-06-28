@@ -36,7 +36,10 @@
             "fontFamily": "Fascinate Inline"
           }
         }
-      ]
+      ],
+      "fontSize": 28,
+      "fontFamily": "EB Garamond",
+      "lineHeight": 1.2
     },
     {
       "styleRef": "body",
@@ -65,7 +68,10 @@
           "text": " at its core.Introducing the Q2 Lineup",
           "style": {}
         }
-      ]
+      ],
+      "fontSize": 12,
+      "fontFamily": "EB Garamond",
+      "lineHeight": 1.4
     }
   ]
 }

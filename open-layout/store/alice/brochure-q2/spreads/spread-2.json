@@ -10,8 +10,8 @@
     {
       "id": "frame-body",
       "type": "text",
-      "x": 55,
-      "y": 52.5,
+      "x": 650.19,
+      "y": 319.09,
       "width": 221,
       "height": 315,
       "storyRef": "story-body"
@@ -19,8 +19,8 @@
     {
       "id": "frame-sidebar",
       "type": "text",
-      "x": 285,
-      "y": 57.5,
+      "x": 839.88,
+      "y": 149.86,
       "width": 284,
       "height": 320.5,
       "storyRef": "story-sidebar"

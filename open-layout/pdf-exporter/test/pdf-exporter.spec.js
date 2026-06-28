@@ -19,6 +19,14 @@ test.describe('PDF Exporter', () => {
       console.error(`BROWSER [error]: ${err.message}`);
       consoleErrors.push(err.message);
     });
+    page.on('requestfailed', request => {
+      console.log(`FAILED REQUEST: ${request.url()} - ${request.failure()?.errorText || 'Unknown'}`);
+    });
+    page.on('response', response => {
+      if (!response.ok()) {
+        console.log(`FAILED RESPONSE: ${response.url()} - ${response.status()}`);
+      }
+    });
   });
 
   test('page loads and initialises the layout engine', async ({ page }) => {
@@ -109,4 +117,61 @@ test.describe('PDF Exporter', () => {
     );
     expect(fatalErrors, `console errors: ${fatalErrors.join('; ')}`).toHaveLength(0);
   });
+
+  test('exporting a multispread document produces correct page count and page content', async ({ page }) => {
+    await page.goto('/pdf-exporter/?doc=alice/brochure-q2');
+    await expect(page.locator('#btn-export')).toBeEnabled({ timeout: 30_000 });
+
+    // Mock showSaveFilePicker to capture the PDF stream chunks
+    await page.evaluate(() => {
+      window.__pdfChunks = [];
+      window.showSaveFilePicker = async () => ({
+        createWritable: async () => {
+          const chunks = window.__pdfChunks;
+          return new WritableStream({
+            write(chunk) { chunks.push(chunk); },
+            close() { window.__pdfDone = true; },
+          });
+        },
+      });
+    });
+
+    await page.locator('#btn-export').click();
+
+    // Wait for export to complete (status says "Done")
+    await expect(page.locator('#status')).toContainText('Done', { timeout: 60_000 });
+
+    // Collect all PDF bytes as a latin1 (binary-safe ASCII) string
+    const pdfText = await page.evaluate(() => {
+      const chunks = window.__pdfChunks;
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return new TextDecoder('latin1').decode(out);
+    });
+
+    // Verify first 8 bytes
+    expect(pdfText.startsWith('%PDF-1.4')).toBe(true);
+
+    // Verify page count (number of "/Type /Page" instances, excluding "/Type /Pages")
+    const pageMatches = pdfText.match(/\/Type\s*\/Page\b/g);
+    const pageCount = pageMatches ? pageMatches.length : 0;
+    expect(pageCount).toBe(3);
+
+    // Extract all Tj text strings and join them to reconstruct the document text
+    const tjText = [...pdfText.matchAll(/\(([^)]*)\)\s*Tj/g)].map(m => m[1]).join('');
+    const cleanText = tjText.replace(/\s+/g, '').replace(/-/g, '');
+
+    // Verify that the correct content from different stories is present in the PDF
+    expect(cleanText).toContain('excitedtosharethreenewproducts');
+    expect(cleanText).toContain('License:GPL');
+
+    // No fatal browser console errors during export
+    const fatalErrors = consoleErrors.filter(e =>
+      !e.includes('[pdf-writer]') && !e.includes('404')
+    );
+    expect(fatalErrors, `console errors: ${fatalErrors.join('; ')}`).toHaveLength(0);
+  });
 });
+
