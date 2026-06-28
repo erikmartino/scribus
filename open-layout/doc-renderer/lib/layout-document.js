@@ -300,6 +300,7 @@ export async function layoutDocument(engine, docPath, opts = {}) {
  * @private
  */
 async function _layoutSpread(engine, docPath, spreadId, inheritedOffsets = {}, opts = {}) {
+  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const fontSize = opts.fontSize ?? DEFAULT_LAYOUT.fontSize;
   const lineHeight = opts.lineHeight ?? DEFAULT_LAYOUT.lineHeight;
 
@@ -507,7 +508,9 @@ async function _layoutSpread(engine, docPath, spreadId, inheritedOffsets = {}, o
     };
   });
 
-  console.log(`[layoutSpread] ${spreadId} calculated next offsets:`, JSON.stringify(nextOffsets));
+  const endTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const duration = endTime - startTime;
+  console.log(`[layoutSpread] ${spreadId} calculated next offsets in ${duration.toFixed(2)}ms:`, JSON.stringify(nextOffsets));
   return { spreadPages: pages, nextOffsets };
 }
 

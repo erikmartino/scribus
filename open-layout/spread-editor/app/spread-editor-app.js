@@ -1320,6 +1320,7 @@ export class SpreadEditorApp {
   }
 
   async update(options = { full: true }) {
+    const startTime = performance.now();
     const isFull = options.full !== false;
 
     // Hardcoded A4 geometry in points
@@ -1534,6 +1535,9 @@ export class SpreadEditorApp {
     // Rebuild ribbon so controls (font size, line height, bold/italic)
     // reflect the current paragraph's style after cursor movement.
     this.shell?.requestUpdate();
+
+    const duration = performance.now() - startTime;
+    console.log(`[spread-editor] Active spread layout and render took ${duration.toFixed(2)}ms`);
   }
 
   _initSelectionSync(shell) {
