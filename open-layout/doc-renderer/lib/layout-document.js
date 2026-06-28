@@ -249,8 +249,13 @@ export async function layoutDocument(engine, docPath, opts = {}) {
     spreadIds = entries
       .map(e => (typeof e === 'string' ? e : e.name))
       .filter(name => name && name.endsWith('.json'))
-      .map(name => name.replace(/\.json$/, ''))
-      .sort();
+      .map(name => name.replace(/\.json$/, ''));
+    spreadIds.sort((a, b) => {
+      const numA = parseInt(a.replace(/[^\d]/g, ''), 10);
+      const numB = parseInt(b.replace(/[^\d]/g, ''), 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    });
   } else {
     spreadIds = ['spread-1'];
   }
