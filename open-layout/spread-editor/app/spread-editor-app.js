@@ -2029,6 +2029,7 @@ export class SpreadEditorApp {
     await updateDocTimestamp(this._docPath);
 
     // Update local cached state
+    this._layoutCache = null;
     if (!this._spreadsList) {
       this._spreadsList = [];
     }
@@ -2094,6 +2095,7 @@ export class SpreadEditorApp {
 
     // Force pages panel rebuild on next update
     this._clearPagesPanel();
+    this._layoutCache = null;
 
     // Switch spread if we deleted the active one
     if (spreadId === this._activeSpreadId) {

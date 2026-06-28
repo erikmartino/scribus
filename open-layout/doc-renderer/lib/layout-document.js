@@ -262,14 +262,43 @@ export async function layoutDocument(engine, docPath, opts = {}) {
   // storyRef -> { paragraphIndex, charOffset }
   const currentOffsets = {};
 
-  for (let i = 0; i < spreadIds.length; i++) {
+  const activeSpreadId = opts.activeSpreadId;
+  const layoutCache = opts.layoutCache || {};
+  const activeIdx = activeSpreadId ? spreadIds.indexOf(activeSpreadId) : -1;
+  const maxIdx = activeIdx !== -1 ? activeIdx : spreadIds.length - 1;
+
+  for (let i = 0; i <= maxIdx; i++) {
     const spreadId = spreadIds[i];
     
-    // Pass currentOffsets to _layoutSpread
-    const { spreadPages, nextOffsets } = await _layoutSpread(engine, docPath, spreadId, currentOffsets, layoutOpts);
+    // Check cache
+    const cached = layoutCache[spreadId];
+    const startOffsetsMatch = cached && JSON.stringify(cached.startOffsets) === JSON.stringify(currentOffsets);
+    
+    let spreadPages, nextOffsets;
+    
+    if (startOffsetsMatch) {
+      // Cache Hit!
+      console.log(`[layoutDocument] Cache hit for ${spreadId}, skipping layout.`);
+      spreadPages = cached.pages || [];
+      nextOffsets = cached.nextOffsets || {};
+    } else {
+      // Cache Miss!
+      console.log(`[layoutDocument] Cache miss for ${spreadId}, running layout.`);
+      const res = await _layoutSpread(engine, docPath, spreadId, currentOffsets, layoutOpts);
+      spreadPages = res.spreadPages;
+      nextOffsets = res.nextOffsets;
+      
+      // Store in cache
+      layoutCache[spreadId] = {
+        startOffsets: { ...currentOffsets },
+        nextOffsets: { ...nextOffsets },
+        pages: spreadPages
+      };
+    }
+    
     allPages.push(...spreadPages);
 
-    // If there is a next spread, save nextOffsets as its flowAnchors
+    // If there is a next spread, save nextOffsets as its flowAnchors in the store
     if (i < spreadIds.length - 1) {
       const nextSpreadId = spreadIds[i + 1];
       const nextSpreadJson = await loadSpread(docPath, nextSpreadId);
@@ -285,6 +314,11 @@ export async function layoutDocument(engine, docPath, opts = {}) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(nextSpreadJson)
         });
+        
+        // Invalidate downstream cache entries
+        for (let k = i + 1; k < spreadIds.length; k++) {
+          delete layoutCache[spreadIds[k]];
+        }
       }
     }
 

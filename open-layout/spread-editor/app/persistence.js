@@ -22,10 +22,21 @@ export async function loadAllSpreadsMetadata(app) {
   if (!app._spreadsList || app._spreadsList.length === 0) return;
   
   app._spreadsMetadata = {};
+  if (!app._layoutCache) {
+    app._layoutCache = {};
+  }
+  
   const promises = app._spreadsList.map(async (spreadId) => {
     try {
       const spreadJson = await loadSpread(app._docPath, spreadId);
       app._spreadsMetadata[spreadId] = {
+        pages: spreadJson.pages || []
+      };
+      
+      // Pre-populate layout cache with the saved flowAnchors/startOffsets
+      app._layoutCache[spreadId] = {
+        startOffsets: spreadJson.flowAnchors || {},
+        nextOffsets: {}, // Linked in the next step
         pages: spreadJson.pages || []
       };
     } catch (err) {
@@ -34,6 +45,17 @@ export async function loadAllSpreadsMetadata(app) {
     }
   });
   await Promise.all(promises);
+
+  // Link pre-populated nextOffsets to the next spread's startOffsets
+  for (let i = 0; i < app._spreadsList.length; i++) {
+    const spreadId = app._spreadsList[i];
+    const nextSpreadId = i < app._spreadsList.length - 1 ? app._spreadsList[i + 1] : null;
+    if (app._layoutCache[spreadId]) {
+      app._layoutCache[spreadId].nextOffsets = nextSpreadId && app._layoutCache[nextSpreadId]
+        ? { ...app._layoutCache[nextSpreadId].startOffsets }
+        : {};
+    }
+  }
 }
 
 export async function loadFromStore(app) {
@@ -111,7 +133,24 @@ export async function loadFromStore(app) {
   // 1. Load the spread definition
   const spreadJson = await loadSpread(app._docPath, app._activeSpreadId);
   
-  app.flowAnchors = spreadJson.flowAnchors || {};
+  if (!app._layoutCache) {
+    app._layoutCache = {};
+  }
+
+  if (app.engine) {
+    try {
+      await layoutDocument(app.engine, app._docPath, {
+        activeSpreadId: app._activeSpreadId,
+        layoutCache: app._layoutCache
+      });
+      app.flowAnchors = app._layoutCache[app._activeSpreadId]?.startOffsets || {};
+    } catch (layoutErr) {
+      console.warn('Failed to calculate layout offsets for loaded spread:', layoutErr);
+      app.flowAnchors = spreadJson.flowAnchors || {};
+    }
+  } else {
+    app.flowAnchors = spreadJson.flowAnchors || {};
+  }
 
   // Save pages configuration for serialization
   app._activeSpreadPages = spreadJson.pages || [
@@ -529,9 +568,21 @@ export async function saveSpread(app) {
       throw new Error(`${failed.length} file(s) failed to save`);
     }
 
+    if (app._layoutCache && app._activeSpreadId && app._spreadsList) {
+      const activeIdx = app._spreadsList.indexOf(app._activeSpreadId);
+      if (activeIdx !== -1) {
+        for (let k = activeIdx; k < app._spreadsList.length; k++) {
+          delete app._layoutCache[app._spreadsList[k]];
+        }
+      }
+    }
+
     if (app.engine) {
       try {
-        await layoutDocument(app.engine, app._docPath);
+        await layoutDocument(app.engine, app._docPath, {
+          activeSpreadId: app._activeSpreadId,
+          layoutCache: app._layoutCache
+        });
       } catch (layoutErr) {
         console.warn('Failed to propagate flow offsets across spreads:', layoutErr);
       }
