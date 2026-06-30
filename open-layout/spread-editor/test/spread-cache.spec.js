@@ -52,4 +52,41 @@ test.describe('Spread Loading Cache Verification', () => {
 
     expect(duplicateLoads).toBe(0);
   });
+
+  test('should not scroll the page sidepanel to the top when clicking a spread card', async ({ page }) => {
+    test.setTimeout(90000);
+    // Open spread editor with Moby Dick
+    await page.goto('/spread-editor/index.html?doc=alice/moby-dick&page=1');
+    await page.waitForSelector('scribus-app-shell:defined');
+    const statusEl = page.locator('#status');
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 30000 });
+
+    // Open Pages panel
+    const pagesTab = page.locator('[data-panel-id="pages"]');
+    await pagesTab.click();
+
+    // Scroll pages panel down to make spread-30 card visible/interactable
+    const pagesGrid = page.locator('.pages-grid');
+    await expect(pagesGrid).toBeVisible();
+
+    const spread30Card = page.locator('[data-spread-id="spread-30"]');
+    // Scroll the card into view inside the pages-grid container
+    await spread30Card.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    
+    // Get scroll position before click
+    const scrollTopBefore = await pagesGrid.evaluate(el => el.scrollTop);
+    expect(scrollTopBefore).toBeGreaterThan(100);
+
+    // Click spread-30
+    await spread30Card.click();
+    await expect(statusEl).toHaveText(/Ready/, { timeout: 30000 });
+
+    // Wait short time to ensure scroll layout transitions finish
+    await page.waitForTimeout(500);
+
+    // Verify scrollTop is not reset to 0 (meaning it did not scroll to the top)
+    const scrollTopAfter = await pagesGrid.evaluate(el => el.scrollTop);
+    console.log(`ScrollTop before: ${scrollTopBefore}, after click: ${scrollTopAfter}`);
+    expect(scrollTopAfter).toBeGreaterThan(100);
+  });
 });

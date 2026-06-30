@@ -125,6 +125,7 @@ export class SpreadEditorApp {
     this._pagesPanelTimestamp = Date.now();
     this._pagesPanelContainer = null;
     this._lastScrolledActiveSpreadId = null;
+    this._isPagesPanelClick = false;
     this._activeSpreadPages = [
       { index: 0, label: '1' },
       { index: 1, label: '2' }
@@ -2269,7 +2270,7 @@ export class SpreadEditorApp {
       const spreadId = card.dataset.spreadId;
       const isActive = spreadId === this._activeSpreadId;
       card.classList.toggle('active', isActive);
-      if (isActive && (this._activeSpreadId !== this._lastScrolledActiveSpreadId || this._pagesPanelScrollTop === undefined)) {
+      if (isActive && !this._isPagesPanelClick && (this._activeSpreadId !== this._lastScrolledActiveSpreadId || this._pagesPanelScrollTop === undefined)) {
         this._lastScrolledActiveSpreadId = this._activeSpreadId;
         this._pagesPanelScrollTop = 0;
         setTimeout(() => {
@@ -2624,9 +2625,14 @@ export class SpreadEditorApp {
         card.appendChild(spreadInfo);
 
         card.addEventListener('click', async () => {
+          this._isPagesPanelClick = true;
           grid.querySelectorAll('.page-card').forEach(c => c.classList.remove('active'));
           card.classList.add('active');
-          await this.navigateToPage(firstPageIndex);
+          try {
+            await this.navigateToPage(firstPageIndex);
+          } finally {
+            this._isPagesPanelClick = false;
+          }
         });
 
         grid.appendChild(card);
