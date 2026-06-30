@@ -1,1 +1,57 @@
-{"id":"spread-178","pages":[{"index":0,"label":"355"},{"index":1,"label":"356"}],"frames":[{"id":"p355-c1","type":"text","x":50,"y":50,"width":495.28,"height":741.89,"storyRef":"story-main"},{"id":"p356-c1","type":"text","x":645.28,"y":50,"width":495.28,"height":741.89,"storyRef":"story-main"}],"flowAnchors":{}}
+{
+  "id": "spread-178",
+  "pages": [
+    {
+      "index": 0,
+      "label": "355"
+    },
+    {
+      "index": 1,
+      "label": "356"
+    }
+  ],
+  "flowAnchors": {
+    "story-main": {
+      "paragraphIndex": 2912,
+      "charOffset": 238
+    }
+  },
+  "frames": [
+    {
+      "id": "p355-c1",
+      "type": "text",
+      "x": 50,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    },
+    {
+      "id": "p356-c1",
+      "type": "text",
+      "x": 645.28,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    },
+    {
+      "id": "p355-c1",
+      "type": "text",
+      "x": 50,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    },
+    {
+      "id": "p356-c1",
+      "type": "text",
+      "x": 645.28,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    }
+  ]
+}

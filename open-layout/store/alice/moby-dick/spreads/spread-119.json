@@ -1,1 +1,39 @@
-{"id":"spread-119","pages":[{"index":0,"label":"237"},{"index":1,"label":"238"}],"frames":[{"id":"p237-c1","type":"text","x":50,"y":50,"width":495.28,"height":741.89,"storyRef":"story-main"},{"id":"p238-c1","type":"text","x":645.28,"y":50,"width":495.28,"height":741.89,"storyRef":"story-main"}],"flowAnchors":{"story-main":{"paragraphIndex":2387,"charOffset":764}}}
+{
+  "id": "spread-119",
+  "pages": [
+    {
+      "index": 0,
+      "label": "237"
+    },
+    {
+      "index": 1,
+      "label": "238"
+    }
+  ],
+  "flowAnchors": {
+    "story-main": {
+      "paragraphIndex": 2387,
+      "charOffset": 764
+    }
+  },
+  "frames": [
+    {
+      "id": "p237-c1",
+      "type": "text",
+      "x": 50,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    },
+    {
+      "id": "p238-c1",
+      "type": "text",
+      "x": 645.28,
+      "y": 50,
+      "width": 495.28,
+      "height": 741.89,
+      "storyRef": "story-main"
+    }
+  ]
+}

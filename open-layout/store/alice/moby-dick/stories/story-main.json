@@ -243,7 +243,43 @@
       "styleRef": "body",
       "runs": [
         {
-          "text": "  CHAPTER 10. A Bosom Friend.  ",
+          "text": "  HAPTER 10. A Bosom Friend. ",
+          "style": {}
+        }
+      ],
+      "fontSize": 11,
+      "fontFamily": "EB Garamond",
+      "lineHeight": 1.4
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        {
+          "text": "",
+          "style": {}
+        }
+      ],
+      "fontSize": 11,
+      "fontFamily": "EB Garamond",
+      "lineHeight": 1.4
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        {
+          "text": " ",
+          "style": {}
+        }
+      ],
+      "fontSize": 11,
+      "fontFamily": "EB Garamond",
+      "lineHeight": 1.4
+    },
+    {
+      "styleRef": "body",
+      "runs": [
+        {
+          "text": "",
           "style": {}
         }
       ],
