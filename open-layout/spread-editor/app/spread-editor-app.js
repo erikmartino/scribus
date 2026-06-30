@@ -124,6 +124,7 @@ export class SpreadEditorApp {
     this._spreadsMetadata = {};
     this._pagesPanelTimestamp = Date.now();
     this._pagesPanelContainer = null;
+    this._lastScrolledActiveSpreadId = null;
     this._activeSpreadPages = [
       { index: 0, label: '1' },
       { index: 1, label: '2' }
@@ -2268,6 +2269,13 @@ export class SpreadEditorApp {
       const spreadId = card.dataset.spreadId;
       const isActive = spreadId === this._activeSpreadId;
       card.classList.toggle('active', isActive);
+      if (isActive && (this._activeSpreadId !== this._lastScrolledActiveSpreadId || this._pagesPanelScrollTop === undefined)) {
+        this._lastScrolledActiveSpreadId = this._activeSpreadId;
+        this._pagesPanelScrollTop = 0;
+        setTimeout(() => {
+          card.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+        }, 50);
+      }
     });
   }
 
