@@ -341,7 +341,6 @@ export class SpreadEditorApp {
   }
 
   async _loadFromStore() {
-    this._clearPagesPanel();
     this._assetsPanelContainer = null;
     return loadFromStore(this);
   }
@@ -864,7 +863,7 @@ export class SpreadEditorApp {
   async _save() {
     const res = await saveSpread(this);
     this._pagesPanelTimestamp = Date.now();
-    this._clearPagesPanel();
+    this._refreshPagesPanelThumbnails();
     return res;
   }
 
@@ -2032,6 +2031,7 @@ export class SpreadEditorApp {
 
     // Update local cached state
     this._layoutCache = null;
+    this._clearPagesPanel();
     if (!this._spreadsList) {
       this._spreadsList = [];
     }
@@ -2276,6 +2276,18 @@ export class SpreadEditorApp {
         setTimeout(() => {
           card.scrollIntoView({ block: 'nearest', behavior: 'auto' });
         }, 50);
+      }
+    });
+  }
+
+  _refreshPagesPanelThumbnails() {
+    if (!this._pagesPanelContainer) return;
+    const imgs = this._pagesPanelContainer.querySelectorAll('.spread-thumbnail-img');
+    imgs.forEach(img => {
+      const card = img.closest('.page-card');
+      if (card) {
+        const spreadId = card.dataset.spreadId;
+        img.src = `/store/${this._docPath}/spreads/${spreadId}.jpg?t=${this._pagesPanelTimestamp}`;
       }
     });
   }
