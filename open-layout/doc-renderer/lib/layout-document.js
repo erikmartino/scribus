@@ -225,20 +225,31 @@ export function sliceStory(story, paragraphStyles, lastParaIndex, lastCharIndex)
  * @param {number}       [opts.lineHeight]
  * @returns {Promise<LayoutDocResult>}
  */
+async function getCachedSpread(docPath, spreadId, spreadCache) {
+  if (spreadCache.has(spreadId)) {
+    return spreadCache.get(spreadId);
+  }
+  const promise = loadSpread(docPath, spreadId);
+  spreadCache.set(spreadId, promise);
+  return promise;
+}
+
 export async function layoutDocument(engine, docPath, opts = {}) {
   // Pre-load styleMap and assetMeta to prevent redundant network fetches
   const { loadParagraphStyles, loadAssets } = await import('../../document-store/lib/document-store.js');
   const styleMap = await loadParagraphStyles(docPath);
   const assetMeta = await loadAssets(docPath);
 
-  // Initialize a story cache for reuse across spreads
+  // Initialize a story cache and spread cache for reuse across spreads
   const storyCache = new Map();
+  const spreadCache = new Map();
 
   const layoutOpts = {
     ...opts,
     styleMap,
     assetMeta,
-    storyCache
+    storyCache,
+    spreadCache
   };
 
   // Discover spread IDs
@@ -306,12 +317,12 @@ export async function layoutDocument(engine, docPath, opts = {}) {
     // If there is a next spread, save nextOffsets as its flowAnchors in the store
     if (i < spreadIds.length - 1) {
       const nextSpreadId = spreadIds[i + 1];
-      const nextSpreadJson = await loadSpread(docPath, nextSpreadId);
       
-      const oldAnchorsStr = JSON.stringify(nextSpreadJson.flowAnchors || {});
+      const cachedNextStartOffsets = layoutCache[nextSpreadId]?.startOffsets || {};
+      const cachedNextStartOffsetsStr = JSON.stringify(cachedNextStartOffsets);
       const newAnchorsStr = JSON.stringify(nextOffsets || {});
       
-      if (oldAnchorsStr !== newAnchorsStr) {
+      if (cachedNextStartOffsetsStr !== newAnchorsStr) {
         // Update in-memory cache starting offsets for next spread
         if (!layoutCache[nextSpreadId]) {
           layoutCache[nextSpreadId] = {};
@@ -325,6 +336,7 @@ export async function layoutDocument(engine, docPath, opts = {}) {
         }
 
         if (opts.isSave) {
+          const nextSpreadJson = await getCachedSpread(docPath, nextSpreadId, spreadCache);
           console.log(`[layoutDocument] Updating ${nextSpreadId} flowAnchors in store:`, newAnchorsStr);
           nextSpreadJson.flowAnchors = nextOffsets;
           await fetch(`/store/${docPath}/spreads/${nextSpreadId}.json`, {
@@ -352,7 +364,9 @@ async function _layoutSpread(engine, docPath, spreadId, inheritedOffsets = {}, o
   const fontSize = opts.fontSize ?? DEFAULT_LAYOUT.fontSize;
   const lineHeight = opts.lineHeight ?? DEFAULT_LAYOUT.lineHeight;
 
-  const spreadJson = await loadSpread(docPath, spreadId);
+  const spreadJson = opts.spreadCache
+    ? await getCachedSpread(docPath, spreadId, opts.spreadCache)
+    : await loadSpread(docPath, spreadId);
   const styleMap = opts.styleMap || await loadParagraphStyles(docPath);
 
   // Load flowAnchors from spreadJson if present, fallback to inheritedOffsets

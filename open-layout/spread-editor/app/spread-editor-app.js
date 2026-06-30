@@ -119,7 +119,7 @@ export class SpreadEditorApp {
     this._saving = false;
     this._assets = {};
 
-    this._activeSpreadId = 'spread-1';
+    this._activeSpreadId = null;
     this._spreadsList = null;
     this._spreadsMetadata = {};
     this._pagesPanelTimestamp = Date.now();
@@ -1537,7 +1537,7 @@ export class SpreadEditorApp {
     this.shell?.requestUpdate();
 
     const duration = performance.now() - startTime;
-    console.log(`[spread-editor] Active spread layout and render took ${duration.toFixed(2)}ms`);
+    console.log(`[spread-editor] Active spread "${this._activeSpreadId}" layout and render took ${duration.toFixed(2)}ms. Flow anchors: ${JSON.stringify(this.flowAnchors)}`);
   }
 
   _initSelectionSync(shell) {
